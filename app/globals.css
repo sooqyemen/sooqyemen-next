@@ -1,0 +1,116 @@
+:root {
+  --primary: #2563eb;
+  --primary-dark: #1e40af;
+  --bg-color: #f8fafc;
+  --card-bg: #ffffff;
+  --text-main: #1e293b;
+  --text-muted: #64748b;
+  --border: #e2e8f0;
+  --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --radius: 16px;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Cairo', system-ui, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  padding-bottom: 80px; /* مساحة للنافبار السفلي في الجوال */
+}
+
+a { text-decoration: none; color: inherit; }
+
+/* حاوية الصفحة */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+/* البطاقات */
+.card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+}
+
+/* الشبكة */
+.grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+/* الأزرار */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  background: #f1f5f9;
+  color: var(--text-main);
+  transition: all 0.2s;
+  font-size: 14px;
+}
+
+.btn:active { transform: scale(0.96); }
+
+.btnPrimary {
+  background: var(--primary);
+  color: white;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
+}
+
+.btnPrimary:hover { background: var(--primary-dark); }
+
+/* المدخلات */
+.input {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-family: inherit;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.input:focus { border-color: var(--primary); }
+
+/* نصوص وعناصر مساعدة */
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.col { display: flex; flexDirection: column; gap: 8px; }
+.muted { color: var(--text-muted); }
+.badge {
+  background: #f1f5f9;
+  color: var(--text-muted);
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* تحسينات الجوال */
+@media (max-width: 768px) {
+  .hide-on-mobile { display: none !important; }
+  .grid { grid-template-columns: 1fr; } /* بطاقة واحدة في السطر للجوال */
+  .container { padding: 12px; }
+}
+
+
