@@ -2,10 +2,9 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { useAuth } from '@/lib/useAuth';
 
-const ADMINS = ['mansouralbarout@gmail.com']; // بريد الأدمن (داخلي فقط)
+const ADMINS = ['mansouralbarout@gmail.com']; // بريد الأدمن داخلي فقط
 
 export default function Header() {
   const { user, signInWithGoogle, signOut } = useAuth();
@@ -32,22 +31,25 @@ export default function Header() {
       >
         {/* الشعار + اسم الموقع */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {/* الشعار من ملف الصورة */}
+          {/* الشعار من الصورة (حجم مضبوط) */}
           <div
             style={{
-              width: 40,
-              height: 40,
-              borderRadius: 12,
+              width: 38,          // عرض الشعار
+              height: 38,         // ارتفاع الشعار
+              borderRadius: 10,
               overflow: 'hidden',
+              background: '#e5e7eb',
             }}
           >
-            <Image
-              src="/logo.png"      // تأكد أن اسم الملف في public هو logo.png
+            <img
+              src="/logo.png"     // تأكد أن الملف في public/logo.png
               alt="شعار سوق اليمن"
-              width={40}
-              height={40}
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              priority
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain', // يحتفظ بشكل الشعار بدون قص
+                display: 'block',
+              }}
             />
           </div>
 
