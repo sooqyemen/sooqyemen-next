@@ -1,17 +1,30 @@
 // app/admin/page.js
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Header from '@/components/Header';
 import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import Link from 'next/link';
 
-const ADMIN_EMAIL = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'mansouralbarout@gmail.com').toLowerCase();
+// نسمح لأكثر من بريد أدمن مع بقاء البريد الأول أساسياً
+const RAW_ENV_ADMIN = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+
+// هنا حطيت البريدين: الأول + بريدك الثاني
+const STATIC_ADMINS = [
+  'mansouralbarout@gmail.com',
+  'aboramez965@gmail.com'
+];
+
+const ADMIN_EMAILS = [
+  RAW_ENV_ADMIN,
+  ...STATIC_ADMINS,
+].filter(Boolean).map(e => String(e).toLowerCase());
 
 export default function AdminPage() {
   const { user, loading } = useAuth();
-  const isAdmin = !!user?.email && String(user.email).toLowerCase() === ADMIN_EMAIL;
+  const userEmail = user?.email ? String(user.email).toLowerCase() : null;
+  const isAdmin = !!userEmail && ADMIN_EMAILS.includes(userEmail);
 
   const [listings, setListings] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -110,7 +123,19 @@ export default function AdminPage() {
 
         {!loading && !isAdmin ? (
           <div className="card" style={{ marginTop: 12 }}>
-            هذه الصفحة للأدمن فقط. تأكد أن بريدك يطابق: <b>{ADMIN_EMAIL}</b>
+            <div>هذه الصفحة للأدمن فقط.</div>
+            <div style={{ marginTop: 4, fontSize: 13 }}>
+              البريد الذي دخلت به الآن:
+              <b> {user?.email || 'غير مسجل / غير معروف'} </b>
+            </div>
+            <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
+              يجب أن يطابق أحد بريد الإدمن التالي:
+            </div>
+            <ul className="muted" style={{ fontSize: 12 }}>
+              {ADMIN_EMAILS.map(e => (
+                <li key={e}>{e}</li>
+              ))}
+            </ul>
           </div>
         ) : null}
 
@@ -207,7 +232,6 @@ export default function AdminPage() {
                         <Link className="btn" href={`/listing/${l.id}`}>
                           فتح
                         </Link>
-                        {/* رابط تعديل الإعلان من لوحة التحكم */}
                         <Link className="btn" href={`/admin/edit-listing/${l.id}`}>
                           تعديل
                         </Link>
