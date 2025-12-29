@@ -9,7 +9,7 @@ const ICONS = {
   jobs: '💼',
   solar: '🔋',
   furniture: '🛋️',
-  animals: '🐑',
+  yemeni_products: '🧺',
 };
 
 function getIcon(slug) {
@@ -17,36 +17,35 @@ function getIcon(slug) {
 }
 
 export default function CategoryBar({ categories = [], active, onChange }) {
-  // تثبيت زر "الكل" في البداية
   const items = [{ slug: 'all', name: 'الكل' }, ...categories];
 
   return (
     <div
-      className="category-bar"
+      className="row"
       style={{
-        display: 'flex',
-        gap: 8,
         overflowX: 'auto',
-        paddingBottom: 4,
+        paddingBottom: 6,
+        flexWrap: 'nowrap',
       }}
     >
       {items.map((cat) => {
         const isActive = active === cat.slug;
-
         return (
           <button
             key={cat.slug}
             type="button"
             onClick={() => onChange(cat.slug)}
-            className={isActive ? 'badge badge-active' : 'badge'}
+            className={'btn ' + (isActive ? 'btnPrimary' : '')}
             style={{
               whiteSpace: 'nowrap',
-              border: 'none',
-              cursor: 'pointer',
+              flexShrink: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
             }}
           >
-            <span style={{ marginLeft: 4 }}>{getIcon(cat.slug)}</span>
-            {cat.name}
+            <span>{getIcon(cat.slug)}</span>
+            <span>{cat.name}</span>
           </button>
         );
       })}
