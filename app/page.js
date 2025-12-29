@@ -9,7 +9,7 @@ import { db } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import { registerSiteVisit } from '@/lib/analytics';
 
-// الأقسام الافتراضية (في حال ما رجعت من Firestore)
+// الأقسام الافتراضية (في حال لم ترجع من Firestore)
 const DEFAULT_CATEGORIES = [
   { slug: 'cars',          name: 'سيارات' },
   { slug: 'real_estate',   name: 'عقارات' },
@@ -35,21 +35,20 @@ export default function HomePage() {
   // تسجيل زيارة للموقع
   useEffect(() => {
     registerSiteVisit(user).catch(() => {});
-  }, [user?.uid]);
+  }, [user && user.uid]);
 
-  // جلب الأقسام من Firestore (مع fallback للأقسام الافتراضية)
+  // جلب الأقسام من Firestore
   useEffect(() => {
     const unsubscribe = db
       .collection('categories')
       .orderBy('order', 'asc')
       .onSnapshot(
         (snap) => {
-          const arr = snap
-            .docs
+          const arr = snap.docs
             .map((d) => ({ id: d.id, ...d.data() }))
             .filter((c) => c.active !== false);
 
-          if (arr.length) {
+          if (arr.length > 0) {
             setCategories(arr.map((c) => ({ slug: c.slug, name: c.name })));
           } else {
             setCategories(DEFAULT_CATEGORIES);
@@ -57,7 +56,7 @@ export default function HomePage() {
         },
         () => {
           setCategories(DEFAULT_CATEGORIES);
-        },
+        }
       );
 
     return () => unsubscribe();
@@ -77,10 +76,9 @@ export default function HomePage() {
     return () => unsubscribe();
   }, []);
 
-  const catMap = useMemo(
-    () => new Map(categories.map((c) => [c.slug, c.name])),
-    [categories],
-  );
+  const catMap = useMemo(() => {
+    return new Map(categories.map((c) => [c.slug, c.name]));
+  }, [categories]);
 
   // فلترة الإعلانات حسب القسم والبحث
   const filtered = useMemo(() => {
@@ -137,7 +135,7 @@ export default function HomePage() {
             />
           </div>
 
-          {/* شريط الأقسام مع الأيقونات */}
+          {/* شريط الأقسام */}
           <div style={{ marginTop: 10 }}>
             <CategoryBar
               categories={categories}
