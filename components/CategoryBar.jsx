@@ -1,21 +1,15 @@
 // components/CategoryBar.jsx
 'use client';
 
-import React from 'react';
-
 const ICONS = {
-  all: '🌓',
+  all: '📋',
   cars: '🚗',
   real_estate: '🏠',
   phones: '📱',
   jobs: '💼',
-  solar: '☀️',
+  solar: '🔋',
   furniture: '🛋️',
-  animals: '🐄',
-  electronics: '💻',
-  bikes: '🏍️',
-  yemeni_goods: '🧺',
-  services: '🛠️',
+  animals: '🐑',
 };
 
 function getIcon(slug) {
@@ -23,17 +17,17 @@ function getIcon(slug) {
 }
 
 export default function CategoryBar({ categories = [], active, onChange }) {
-  // نضيف "الكل" في البداية
+  // تثبيت زر "الكل" في البداية
   const items = [{ slug: 'all', name: 'الكل' }, ...categories];
 
   return (
     <div
+      className="category-bar"
       style={{
         display: 'flex',
         gap: 8,
         overflowX: 'auto',
         paddingBottom: 4,
-        WebkitOverflowScrolling: 'touch',
       }}
     >
       {items.map((cat) => {
@@ -44,26 +38,15 @@ export default function CategoryBar({ categories = [], active, onChange }) {
             key={cat.slug}
             type="button"
             onClick={() => onChange(cat.slug)}
+            className={isActive ? 'badge badge-active' : 'badge'}
             style={{
-              flexShrink: 0,
-              borderRadius: 999,
-              border: 'none',
-              padding: '6px 12px',
-              fontSize: 13,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              cursor: 'pointer',
-              backgroundColor: isActive ? '#2563eb' : '#f3f4f6',
-              color: isActive ? '#ffffff' : '#111827',
-              boxShadow: isActive
-                ? '0 4px 10px rgba(37, 99, 235, 0.35)'
-                : 'none',
               whiteSpace: 'nowrap',
+              border: 'none',
+              cursor: 'pointer',
             }}
           >
-            <span style={{ fontSize: 15 }}>{getIcon(cat.slug)}</span>
-            <span>{cat.name}</span>
+            <span style={{ marginLeft: 4 }}>{getIcon(cat.slug)}</span>
+            {cat.name}
           </button>
         );
       })}
