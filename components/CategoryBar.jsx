@@ -1,6 +1,8 @@
 // components/CategoryBar.jsx
 'use client';
 
+import React from 'react';
+
 const ICONS = {
   all: '🌓',
   cars: '🚗',
@@ -20,8 +22,8 @@ function getIcon(slug) {
   return ICONS[slug] || '📌';
 }
 
-export default function CategoryBar({ categories, active, onChange }) {
-  // نضيف زر "الكل" في البداية
+export default function CategoryBar({ categories = [], active, onChange }) {
+  // نضيف "الكل" في البداية
   const items = [{ slug: 'all', name: 'الكل' }, ...categories];
 
   return (
@@ -36,6 +38,7 @@ export default function CategoryBar({ categories, active, onChange }) {
     >
       {items.map((cat) => {
         const isActive = active === cat.slug;
+
         return (
           <button
             key={cat.slug}
