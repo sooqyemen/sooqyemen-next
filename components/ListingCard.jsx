@@ -10,15 +10,12 @@ export default function ListingCard({ listing }) {
     listing.image ||
     null;
 
-  // المدينة (إن وجدت)
   const city = listing.city || listing.region || '';
 
-  // وصف مختصر
   const rawDesc = String(listing.description || '');
   const shortDesc =
     rawDesc.length > 80 ? rawDesc.slice(0, 80) + '…' : rawDesc;
 
-  // اختيار أفضل قيمة للسعر
   const priceYER =
     listing.priceYER ??
     listing.currentBidYER ??
@@ -99,7 +96,7 @@ export default function ListingCard({ listing }) {
           </div>
         </div>
 
-        {/* وصف مختصر (اختياري) */}
+        {/* وصف مختصر */}
         {shortDesc ? (
           <p
             className="muted"
