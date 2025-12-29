@@ -101,7 +101,14 @@ export default function Header() {
             </button>
           ) : (
             <>
-              <span className="badge" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <span
+                className="badge"
+                style={{
+                  maxWidth: 160,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
                 {user.email}
               </span>
               <button
