@@ -16,6 +16,58 @@ const ADMIN_EMAILS = [RAW_ENV_ADMIN, ...STATIC_ADMINS]
   .filter(Boolean)
   .map((e) => String(e).toLowerCase());
 
+// مكون اللوجو الجديد
+const YemenMarketLogo = ({ size = 36 }) => {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 36 36"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {/* الخلفية - مربع أزرق داكن بزوايا دائرية */}
+      <rect width="36" height="36" rx="10" fill="#1E3A8A" />
+      
+      {/* شكل المتجر/الحقيبة - الجسم الأبيض */}
+      <path
+        d="M23 25H13C11.8954 25 11 24.1046 11 23V17C11 15.8954 11.8954 15 13 15H23C24.1046 15 25 15.8954 25 17V23C25 24.1046 24.1046 25 23 25Z"
+        fill="white"
+      />
+      
+      {/* المقبض الأصفر الذهبي - قوس بارز */}
+      <path
+        d="M18 13C21.3137 13 24 15.6863 24 19C24 22.3137 21.3137 25 18 25C14.6863 25 12 22.3137 12 19C12 15.6863 14.6863 13 18 13Z"
+        stroke="#FBBF24"
+        strokeWidth="4"
+        strokeLinecap="round"
+        fill="none"
+      />
+      
+      {/* الأشرطة الملونة (العلم اليمني) داخل الجسم الأبيض */}
+      {/* الشريط الأحمر */}
+      <rect x="13" y="17" width="10" height="2" fill="#CE1126" />
+      {/* الشريط الأبيض */}
+      <rect x="13" y="19" width="10" height="2" fill="white" />
+      {/* الشريط الأسود */}
+      <rect x="13" y="21" width="10" height="2" fill="#000000" />
+      
+      {/* حرف "ي" في الجزء السفلي */}
+      <path
+        d="M20 24C20 24 19 25 18 25C17 25 16 24 16 24C15 23 16 22 17 22C18 22 19 23 20 24Z"
+        fill="#1E3A8A"
+      />
+      <path
+        d="M17 22C17 22 17 20 18 20C19 20 19 22 19 22"
+        stroke="#1E3A8A"
+        strokeWidth="2"
+        strokeLinecap="round"
+        fill="none"
+      />
+    </svg>
+  );
+};
+
 export default function Header() {
   const { user, loading, logout } = useAuth();
   const [scrolled, setScrolled] = useState(false);
@@ -82,31 +134,18 @@ export default function Header() {
           gap: 12,
         }}
       >
-        {/* شعار الموقع */}
+        {/* شعار الموقع مع اللوجو الجديد */}
         <Link 
           href="/" 
           className="row" 
           style={{ 
-            gap: 8, 
+            gap: 12, 
             alignItems: 'center',
             textDecoration: 'none',
             color: 'inherit'
           }}
         >
-          <div style={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            width: 36,
-            height: 36,
-            borderRadius: 8,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 'bold',
-            color: 'white',
-            fontSize: 18
-          }}>
-            س
-          </div>
+          <YemenMarketLogo size={36} />
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontWeight: 900, fontSize: 18, lineHeight: 1.2 }}>
               سوق اليمن
