@@ -7,11 +7,23 @@ import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import Link from 'next/link';
 
+// يمكن إضافة بريد أدمن من متغير البيئة في Vercel (اختياري)
+const RAW_ENV_ADMIN = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+
+// قائمة الإيميلات المسموح لها بالدخول كأدمن
+const STATIC_ADMINS = [
+  'mansouralbarout@gmail.com',
+  'aboramez965@gmail.com', // ← إذا ما تريده أدمن احذف هذا السطر
+];
+
+const ADMIN_EMAILS = [RAW_ENV_ADMIN, ...STATIC_ADMINS]
+  .filter(Boolean)
+  .map((e) => String(e).toLowerCase());
+
 export default function AdminPage() {
   const { user, loading } = useAuth();
-
-  // 👈 مؤقتاً: أي مستخدم مسجّل دخول يعتبر أدمن
-  const isAdmin = !!user?.uid;
+  const userEmail = user?.email ? String(user.email).toLowerCase() : null;
+  const isAdmin = !!userEmail && ADMIN_EMAILS.includes(userEmail);
 
   const [listings, setListings] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -55,12 +67,20 @@ export default function AdminPage() {
 
   // حذف إعلان
   const delListing = async (id) => {
+    if (!isAdmin) {
+      alert('ليست لديك صلاحية حذف الإعلانات');
+      return;
+    }
     if (!confirm('حذف الإعلان؟')) return;
     await db.collection('listings').doc(id).delete();
   };
 
   // حظر مستخدم
   const blockUser = async (uid) => {
+    if (!isAdmin) {
+      alert('ليست لديك صلاحية حظر المستخدمين');
+      return;
+    }
     if (!uid) return;
     if (!confirm('حظر هذا المستخدم؟')) return;
     await db
@@ -78,6 +98,10 @@ export default function AdminPage() {
 
   // إخفاء / إظهار إعلان
   const toggleListingHidden = async (listing) => {
+    if (!isAdmin) {
+      alert('ليست لديك صلاحية تعديل حالة الإعلانات');
+      return;
+    }
     if (!listing?.id) return;
     const newState = !listing.hidden;
     await db.collection('listings').doc(listing.id).update({
@@ -88,6 +112,10 @@ export default function AdminPage() {
 
   // إضافة قسم
   const addCategory = async () => {
+    if (!isAdmin) {
+      alert('ليست لديك صلاحية إضافة الأقسام');
+      return;
+    }
     const name = newCatName.trim();
     const slug = newCatSlug.trim();
     if (!name || !slug) return alert('اكتب الاسم والـ slug');
@@ -104,6 +132,10 @@ export default function AdminPage() {
 
   // تفعيل / إخفاء قسم
   const toggleCategory = async (c) => {
+    if (!isAdmin) {
+      alert('ليست لديك صلاحية تعديل الأقسام');
+      return;
+    }
     await db
       .collection('categories')
       .doc(c.id)
@@ -112,6 +144,10 @@ export default function AdminPage() {
 
   // حذف قسم
   const delCategory = async (c) => {
+    if (!isAdmin) {
+      alert('ليست لديك صلاحية حذف الأقسام');
+      return;
+    }
     if (!confirm('حذف القسم؟')) return;
     await db.collection('categories').doc(c.id).delete();
   };
@@ -133,9 +169,22 @@ export default function AdminPage() {
           </div>
         ) : null}
 
+        {/* رسالة للي مو أدمن */}
         {!loading && !isAdmin ? (
           <div className="card" style={{ marginTop: 12 }}>
-            هذه الصفحة للأعضاء المسجلين فقط، يرجى تسجيل الدخول أولاً.
+            <div>هذه الصفحة خاصة بمدير الموقع فقط.</div>
+            <div style={{ marginTop: 6, fontSize: 13 }}>
+              أنت مسجل كبريد:
+              <b> {user?.email || 'غير مسجل دخول'} </b>
+            </div>
+            <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+              يجب أن يكون البريد من ضمن قائمة المدراء التالية:
+            </div>
+            <ul className="muted" style={{ fontSize: 12 }}>
+              {ADMIN_EMAILS.map((e) => (
+                <li key={e}>{e}</li>
+              ))}
+            </ul>
           </div>
         ) : null}
 
@@ -217,7 +266,7 @@ export default function AdminPage() {
                 className="muted"
                 style={{ fontSize: 12, marginTop: 4 }}
               >
-                حذف / إخفاء / حظر مستخدم
+                حذف / تعديل / إخفاء إعلان أو حظر مستخدم
               </div>
 
               <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
@@ -262,8 +311,12 @@ export default function AdminPage() {
                         <Link className="btn" href={`/listing/${l.id}`}>
                           فتح
                         </Link>
-                        {/* لو حبيت تضيف صفحة تعديل لاحقاً */}
-                        {/* <Link className="btn" href={`/admin/edit-listing/${l.id}`}>تعديل</Link> */}
+                        <Link
+                          className="btn"
+                          href={`/admin/edit-listing/${l.id}`}
+                        >
+                          تعديل
+                        </Link>
                         <button
                           className="btn"
                           onClick={() => delListing(l.id)}
