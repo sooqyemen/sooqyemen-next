@@ -52,7 +52,7 @@ const YemenMarketLogo = ({ size = 36 }) => {
       {/* الشريط الأسود */}
       <rect x="13" y="21" width="10" height="2" fill="#000000" />
       
-      {/* حرف "ي" في الجزء السفلي */}
+      {/* شكل صغير تحت - لمسة ديزاين */}
       <path
         d="M20 24C20 24 19 25 18 25C17 25 16 24 16 24C15 23 16 22 17 22C18 22 19 23 20 24Z"
         fill="#1E3A8A"
@@ -69,7 +69,8 @@ const YemenMarketLogo = ({ size = 36 }) => {
 };
 
 export default function Header() {
-  const { user, loading, logout } = useAuth();
+  // هنا نأخذ loginWithGoogle/login أيضاً
+  const { user, loading, logout, loginWithGoogle, login } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   
@@ -84,6 +85,22 @@ export default function Header() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // ✅ دالة الدخول الجديدة (بدل /login)
+  const handleLogin = async () => {
+    try {
+      if (typeof loginWithGoogle === 'function') {
+        await loginWithGoogle();
+      } else if (typeof login === 'function') {
+        await login();
+      } else {
+        alert('لم يتم تعريف دالة تسجيل الدخول في useAuth.');
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      alert('حدث خطأ أثناء تسجيل الدخول');
+    }
+  };
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -299,16 +316,17 @@ export default function Header() {
               )}
             </button>
           ) : (
-            <Link 
-              className="btn" 
-              href="/login"
+            <button 
+              className="btn"
+              onClick={handleLogin}
               style={{
                 background: 'transparent',
                 border: '1px solid #e0e0e0',
                 padding: '8px 16px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6
+                gap: 6,
+                cursor: 'pointer'
               }}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -317,7 +335,7 @@ export default function Header() {
                 <line x1="15" y1="12" x2="3" y2="12"></line>
               </svg>
               دخول
-            </Link>
+            </button>
           )}
         </div>
       </div>
