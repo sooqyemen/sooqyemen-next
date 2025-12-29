@@ -16,7 +16,7 @@ const DEFAULT_CATEGORIES = [
   { slug: 'jobs', name: 'وظائف' },
   { slug: 'solar', name: 'طاقة شمسية' },
   { slug: 'furniture', name: 'أثاث' },
-  { slug: 'yemeni_products', name: 'منتجات يمنية' },
+  { slug: 'animals', name: 'مواشي وحيوانات' },
 ];
 
 export default function HomePage() {
@@ -26,66 +26,132 @@ export default function HomePage() {
   const [listings, setListings] = useState([]);
   const [q, setQ] = useState('');
 
+  // تسجيل زيارة للموقع (لتحليل عدد المشاهدات)
   useEffect(() => {
-    // سجل زيارة الموقع (حتى لو ما في تسجيل دخول)
-    registerSiteVisit(user).catch(()=>{});
+    registerSiteVisit(user).catch(() => {});
   }, [user?.uid]);
 
+  // جلب الأقسام من Firestore (مع fallback للأقسام الافتراضية)
   useEffect(() => {
-    const unsub = db.collection('categories').orderBy('order', 'asc').onSnapshot((snap) => {
-      const arr = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(c => c.active !== false);
-      if (arr.length) setCategories(arr.map(c => ({ slug: c.slug, name: c.name })));
-      else setCategories(DEFAULT_CATEGORIES);
-    }, () => setCategories(DEFAULT_CATEGORIES));
-    return () => unsub();
+    const unsubscribe = db
+      .collection('categories')
+      .orderBy('order', 'asc')
+      .onSnapshot(
+        (snap) => {
+          const arr = snap
+            .docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter((c) => c.active !== false);
+
+          if (arr.length) {
+            setCategories(arr.map((c) => ({ slug: c.slug, name: c.name })));
+          } else {
+            setCategories(DEFAULT_CATEGORIES);
+          }
+        },
+        () => {
+          setCategories(DEFAULT_CATEGORIES);
+        },
+      );
+
+    return () => unsubscribe();
   }, []);
 
+  // جلب الإعلانات الأحدث
   useEffect(() => {
-    let ref = db.collection('listings').orderBy('createdAt', 'desc').limit(60);
-    const unsub = ref.onSnapshot((snap) => {
-      const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setListings(arr);
-    });
-    return () => unsub();
+    const unsubscribe = db
+      .collection('listings')
+      .orderBy('createdAt', 'desc')
+      .limit(60)
+      .onSnapshot((snap) => {
+        const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setListings(arr);
+      });
+
+    return () => unsubscribe();
   }, []);
 
   const catMap = useMemo(() => {
-    const m = new Map(categories.map(c => [c.slug, c.name]));
-    return m;
+    return new Map(categories.map((c) => [c.slug, c.name]));
   }, [categories]);
 
+  // فلترة الإعلانات حسب القسم و البحث
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
+
     return listings
-      .filter(l => l.isActive !== false)
-      .filter(l => activeCat === 'all' ? true : (l.category === activeCat))
-      .filter(l => !qq ? true : String(l.title || '').toLowerCase().includes(qq) || String(l.description || '').toLowerCase().includes(qq))
-      .map(l => ({ ...l, categoryName: catMap.get(l.category) || l.category }));
+      .filter((l) => l.isActive !== false)
+      .filter((l) => (activeCat === 'all' ? true : l.category === activeCat))
+      .filter((l) => {
+        if (!qq) return true;
+
+        const title = String(l.title || '').toLowerCase();
+        const description = String(l.description || '').toLowerCase();
+        const city = String(l.city || '').toLowerCase();
+
+        return (
+          title.includes(qq) ||
+          description.includes(qq) ||
+          city.includes(qq)
+        );
+      })
+      .map((l) => ({
+        ...l,
+        categoryName: catMap.get(l.category) || l.category,
+      }));
   }, [listings, activeCat, q, catMap]);
 
   return (
     <>
       <Header />
-      <div className="container">
-        <div className="card" style={{ background:'#f8fafc' }}>
-          <div style={{ fontWeight:900, fontSize:20 }}>بيع واشتري كل شيء في اليمن</div>
-          <div className="muted" style={{ marginTop:4 }}>نسخة Next.js منظمة (خريطة + مزاد + 3 عملات + مشاهدات + دردشة)</div>
-          <div className="row" style={{ marginTop:12 }}>
-            <input className="input" value={q} onChange={(e)=>setQ(e.target.value)} placeholder="ابحث عن إعلان..." />
-          </div>
-          <div style={{ marginTop:10 }}>
-            <CategoryBar categories={categories} active={activeCat} onChange={setActiveCat} />
-          </div>
-        </div>
 
-        <div style={{ marginTop:14 }} className="grid">
+      <main className="container">
+        {/* قسم البطل (Hero) */}
+        <section className="card" style={{ background: '#f8fafc' }}>
+          <h1 style={{ fontWeight: 900, fontSize: 20, margin: 0 }}>
+            سوق اليمن – بيع وشراء كل شيء في اليمن
+          </h1>
+          <p
+            className="muted"
+            style={{ marginTop: 4, marginBottom: 0, fontSize: 14 }}
+          >
+            منصة إعلانات مبوبة لبيع وشراء العقارات، السيارات، الجوالات،
+            الطاقة الشمسية، الوظائف، الأثاث والمزيد في جميع محافظات اليمن.
+          </p>
+
+          {/* مربع البحث */}
+          <div className="row" style={{ marginTop: 12 }}>
+            <input
+              className="input"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="ابحث باسم المنتج، المدينة، القسم..."
+            />
+          </div>
+
+          {/* شريط الأقسام */}
+          <div style={{ marginTop: 10 }}>
+            <CategoryBar
+              categories={categories}
+              active={activeCat}
+              onChange={setActiveCat}
+            />
+          </div>
+        </section>
+
+        {/* قائمة الإعلانات */}
+        <section style={{ marginTop: 14 }} aria-label="قائمة الإعلانات">
           {filtered.length === 0 ? (
             <div className="card muted">لا توجد إعلانات حالياً</div>
-          ) : filtered.map(l => (
-            <ListingCard key={l.id} listing={l} />
-          ))}
-        </div>
-      </div>
+          ) : (
+            <div className="grid">
+              {filtered.map((l) => (
+                <ListingCard key={l.id} listing={l} />
+              ))}
+            </div>
+          )}
+        </section>
+      </main>
     </>
   );
 }
