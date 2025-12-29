@@ -9,19 +9,14 @@ import { db } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import { registerSiteVisit } from '@/lib/analytics';
 
-// الأقسام الافتراضية (في حال لم ترجع من Firestore)
 const DEFAULT_CATEGORIES = [
-  { slug: 'cars',          name: 'سيارات' },
-  { slug: 'real_estate',   name: 'عقارات' },
-  { slug: 'phones',        name: 'جوالات' },
-  { slug: 'jobs',          name: 'وظائف' },
-  { slug: 'solar',         name: 'طاقة شمسية' },
-  { slug: 'furniture',     name: 'أثاث' },
-  { slug: 'animals',       name: 'مواشي وحيوانات' },
-  { slug: 'electronics',   name: 'إلكترونيات' },
-  { slug: 'bikes',         name: 'دراجات' },
-  { slug: 'yemeni_goods',  name: 'منتجات يمنية' },
-  { slug: 'services',      name: 'خدمات' },
+  { slug: 'cars',        name: 'سيارات' },
+  { slug: 'real_estate', name: 'عقارات' },
+  { slug: 'phones',      name: 'جوالات' },
+  { slug: 'jobs',        name: 'وظائف' },
+  { slug: 'solar',       name: 'طاقة شمسية' },
+  { slug: 'furniture',   name: 'أثاث' },
+  { slug: 'yemeni_products', name: 'منتجات يمنية' },
 ];
 
 export default function HomePage() {
@@ -32,23 +27,24 @@ export default function HomePage() {
   const [listings, setListings] = useState([]);
   const [q, setQ] = useState('');
 
-  // تسجيل زيارة للموقع
+  // تسجيل زيارة للموقع (عداد المشاهدات)
   useEffect(() => {
     registerSiteVisit(user).catch(() => {});
-  }, [user && user.uid]);
+  }, [user?.uid]);
 
-  // جلب الأقسام من Firestore
+  // جلب الأقسام من Firestore + استخدام الافتراضي كـ fallback
   useEffect(() => {
     const unsubscribe = db
       .collection('categories')
       .orderBy('order', 'asc')
       .onSnapshot(
         (snap) => {
-          const arr = snap.docs
+          const arr = snap
+            .docs
             .map((d) => ({ id: d.id, ...d.data() }))
             .filter((c) => c.active !== false);
 
-          if (arr.length > 0) {
+          if (arr.length) {
             setCategories(arr.map((c) => ({ slug: c.slug, name: c.name })));
           } else {
             setCategories(DEFAULT_CATEGORIES);
@@ -56,13 +52,13 @@ export default function HomePage() {
         },
         () => {
           setCategories(DEFAULT_CATEGORIES);
-        }
+        },
       );
 
     return () => unsubscribe();
   }, []);
 
-  // جلب الإعلانات الأحدث
+  // جلب أحدث الإعلانات
   useEffect(() => {
     const unsubscribe = db
       .collection('listings')
@@ -76,6 +72,7 @@ export default function HomePage() {
     return () => unsubscribe();
   }, []);
 
+  // خريطة لتحويل slug إلى اسم القسم
   const catMap = useMemo(() => {
     return new Map(categories.map((c) => [c.slug, c.name]));
   }, [categories]);
@@ -116,13 +113,12 @@ export default function HomePage() {
           <h1 style={{ fontWeight: 900, fontSize: 20, margin: 0 }}>
             سوق اليمن – بيع وشراء كل شيء في اليمن
           </h1>
-
           <p
             className="muted"
             style={{ marginTop: 4, marginBottom: 0, fontSize: 14 }}
           >
             منصة إعلانات مبوبة لبيع وشراء العقارات، السيارات، الجوالات،
-            الطاقة الشمسية، الوظائف، الأثاث والمزيد في جميع محافظات اليمن.
+            الطاقة الشمسية، الوظائف، الأثاث والمنتجات اليمنية في جميع المحافظات.
           </p>
 
           {/* مربع البحث */}
