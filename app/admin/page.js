@@ -1,142 +1,73 @@
 // app/admin/page.js
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import Header from '@/components/Header';
-import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
-import Link from 'next/link';
 
-const ADMIN_EMAIL = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'mansouralbarout@gmail.com').toLowerCase();
+const ADMINS = ['mansouralbarout@gmail.com']; // نفس البريد، للاستخدام الداخلي فقط
 
 export default function AdminPage() {
-  const { user, loading } = useAuth();
-  const isAdmin = !!user?.email && String(user.email).toLowerCase() === ADMIN_EMAIL;
+  const { user, signInWithGoogle } = useAuth();
 
-  const [listings, setListings] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [newCatName, setNewCatName] = useState('');
-  const [newCatSlug, setNewCatSlug] = useState('');
+  // لم يسجل الدخول
+  if (!user) {
+    return (
+      <main className="container" style={{ paddingTop: 24 }}>
+        <h1 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
+          لوحة الإدارة
+        </h1>
+        <p className="muted" style={{ marginBottom: 16 }}>
+          يجب تسجيل الدخول أولاً للوصول إلى لوحة الإدارة.
+        </p>
+        <button
+          type="button"
+          onClick={signInWithGoogle}
+          className="btn btn-primary"
+          style={{
+            padding: '8px 16px',
+            borderRadius: 999,
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          تسجيل الدخول باستخدام Google
+        </button>
+      </main>
+    );
+  }
 
-  useEffect(() => {
-    if (!isAdmin) return;
-    const unsub = db.collection('listings').orderBy('createdAt', 'desc').limit(80).onSnapshot((snap) => {
-      setListings(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    return () => unsub();
-  }, [isAdmin]);
+  const isAdmin = ADMINS.includes(user.email || '');
 
-  useEffect(() => {
-    if (!isAdmin) return;
-    const unsub = db.collection('categories').orderBy('order', 'asc').onSnapshot((snap) => {
-      setCategories(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    return () => unsub();
-  }, [isAdmin]);
+  // ليس أدمن
+  if (!isAdmin) {
+    return (
+      <main className="container" style={{ paddingTop: 24 }}>
+        <h1 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
+          لوحة الإدارة
+        </h1>
+        <p className="muted">
+          هذه الصفحة خاصة بالإدارة فقط، ولا يمكن الوصول إليها من الحساب
+          الحالي.
+        </p>
+      </main>
+    );
+  }
 
-  const delListing = async (id) => {
-    if (!confirm('حذف الإعلان؟')) return;
-    await db.collection('listings').doc(id).delete();
-  };
-
-  const blockUser = async (uid) => {
-    if (!uid) return;
-    if (!confirm('حظر هذا المستخدم؟')) return;
-    await db.collection('blocked_users').doc(uid).set({
-      uid,
-      blockedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
-    alert('تم الحظر');
-  };
-
-  const addCategory = async () => {
-    const name = newCatName.trim();
-    const slug = newCatSlug.trim();
-    if (!name || !slug) return alert('اكتب الاسم والـ slug');
-    await db.collection('categories').add({
-      name,
-      slug,
-      active: true,
-      order: Date.now(),
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    setNewCatName('');
-    setNewCatSlug('');
-  };
-
-  const toggleCategory = async (c) => {
-    await db.collection('categories').doc(c.id).update({ active: !(c.active !== false) });
-  };
-
-  const delCategory = async (c) => {
-    if (!confirm('حذف القسم؟')) return;
-    await db.collection('categories').doc(c.id).delete();
-  };
-
+  // هنا تضع محتوى لوحة الإدارة الحقيقي
   return (
-    <>
-      <Header />
-      <div className="container">
-        <div className="row" style={{ justifyContent:'space-between' }}>
-          <Link className="btn" href="/">← رجوع</Link>
-          <span className="badge">لوحة الإدارة</span>
-        </div>
+    <main className="container" style={{ paddingTop: 24 }}>
+      <h1 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
+        لوحة الإدارة
+      </h1>
+      <p className="muted" style={{ marginBottom: 16 }}>
+        مرحباً بك في لوحة إدارة سوق اليمن.
+      </p>
 
-        {loading ? <div className="card muted" style={{ marginTop:12 }}>جاري التحميل...</div> : null}
-
-        {!loading && !isAdmin ? (
-          <div className="card" style={{ marginTop:12 }}>
-            هذه الصفحة للأدمن فقط. تأكد أن بريدك يطابق: <b>{ADMIN_EMAIL}</b>
-          </div>
-        ) : null}
-
-        {isAdmin ? (
-          <div className="grid" style={{ gridTemplateColumns:'1fr 1fr', marginTop:12 }}>
-            <div className="card">
-              <div style={{ fontWeight:900 }}>الأقسام</div>
-              <div className="row" style={{ marginTop:10 }}>
-                <input className="input" value={newCatName} onChange={(e)=>setNewCatName(e.target.value)} placeholder="اسم القسم" />
-                <input className="input" value={newCatSlug} onChange={(e)=>setNewCatSlug(e.target.value)} placeholder="slug مثال: solar" />
-                <button className="btn btnPrimary" onClick={addCategory}>إضافة</button>
-              </div>
-
-              <div style={{ marginTop:10, display:'grid', gap:8 }}>
-                {categories.length === 0 ? <div className="muted">لا توجد أقسام بعد</div> : categories.map(c => (
-                  <div key={c.id} className="row" style={{ justifyContent:'space-between' }}>
-                    <div>
-                      <div style={{ fontWeight:800 }}>{c.name} <span className="muted">({c.slug})</span></div>
-                      <div className="muted" style={{ fontSize:12 }}>{(c.active !== false) ? 'نشط' : 'مخفي'}</div>
-                    </div>
-                    <div className="row">
-                      <button className="btn" onClick={()=>toggleCategory(c)}>{(c.active !== false) ? 'إخفاء' : 'تفعيل'}</button>
-                      <button className="btn" onClick={()=>delCategory(c)}>حذف</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="card">
-              <div style={{ fontWeight:900 }}>آخر الإعلانات</div>
-              <div className="muted" style={{ fontSize:12, marginTop:4 }}>حذف إعلان أو حظر مستخدم</div>
-
-              <div style={{ marginTop:10, display:'grid', gap:10 }}>
-                {listings.length === 0 ? <div className="muted">لا توجد إعلانات</div> : listings.map(l => (
-                  <div key={l.id} className="card" style={{ padding:10 }}>
-                    <div style={{ fontWeight:800 }}>{l.title || 'بدون عنوان'}</div>
-                    <div className="muted" style={{ fontSize:12 }}>المستخدم: {l.userEmail || l.userId}</div>
-                    <div className="row" style={{ marginTop:8 }}>
-                      <Link className="btn" href={`/listing/${l.id}`}>فتح</Link>
-                      <button className="btn" onClick={()=>delListing(l.id)}>حذف</button>
-                      <button className="btn" onClick={()=>blockUser(l.userId)}>حظر المستخدم</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : null}
+      {/* ضع أدوات الإدارة هنا: إدارة الإعلانات، الأقسام، المستخدمين، إلخ */}
+      <div className="card">
+        <p className="muted" style={{ margin: 0 }}>
+          يمكنك لاحقاً إضافة جداول لإدارة الإعلانات والأقسام من هنا.
+        </p>
       </div>
-    </>
+    </main>
   );
 }
