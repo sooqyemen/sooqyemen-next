@@ -6,6 +6,20 @@ import Header from '@/components/Header';
 import Price from '@/components/Price';
 import { db } from '@/lib/firebaseClient';
 
+// إعداد الأقسام (مثل حراج)
+const CATEGORY_CONFIG = [
+  { key: 'all', label: 'الكل', icon: '📋' },
+  { key: 'cars', label: 'سيارات', icon: '🚗' },
+  { key: 'real_estate', label: 'عقارات', icon: '🏡' },
+  { key: 'phones', label: 'جوالات', icon: '📱' },
+  { key: 'electronics', label: 'أجهزة', icon: '💻' },
+  { key: 'solar', label: 'طاقة شمسية', icon: '☀️' },
+  { key: 'furniture', label: 'أثاث', icon: '🛋️' },
+  { key: 'animals', label: 'حيوانات وطيور', icon: '🐑' },
+  { key: 'jobs', label: 'وظائف', icon: '💼' },
+  { key: 'services', label: 'خدمات', icon: '🛠️' },
+];
+
 // كرت إعلان في الصفحة الرئيسية
 function HomeListingCard({ listing }) {
   const img =
@@ -93,8 +107,9 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
   const [search, setSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
-  // ✅ جلب الإعلانات من Firestore وربط مباشر مع القاعدة
+  // ✅ جلب الإعلانات من Firestore
   useEffect(() => {
     try {
       const unsubscribe = db
@@ -125,26 +140,39 @@ export default function HomePage() {
     }
   }, []);
 
-  // 🔍 فلترة بسيطة بالعنوان / المدينة / القسم
+  // 🔍 فلترة حسب البحث + القسم
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return listings;
 
     return listings.filter((l) => {
+      const cat = (l.category || '').toLowerCase();
+
+      // فلترة القسم
+      if (selectedCategory !== 'all' && cat !== selectedCategory) {
+        return false;
+      }
+
+      // فلترة البحث
+      if (!q) return true;
+
       const title = (l.title || '').toLowerCase();
       const city = (l.city || '').toLowerCase();
-      const cat = (l.category || '').toLowerCase();
+      const loc = (l.locationLabel || '').toLowerCase();
+
       return (
-        title.includes(q) || city.includes(q) || cat.includes(q)
+        title.includes(q) ||
+        city.includes(q) ||
+        loc.includes(q) ||
+        cat.includes(q)
       );
     });
-  }, [search, listings]);
+  }, [search, listings, selectedCategory]);
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
       <Header />
 
-      {/* هيرو بسيط مع بحث */}
+      {/* الهيرو مع البحث */}
       <section
         style={{
           background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -231,8 +259,47 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* محتوى الصفحة */}
       <div className="container" style={{ padding: '24px 0 40px' }}>
+        {/* 🔷 شريط الأقسام مثل حراج */}
+        <div
+          className="row"
+          style={{
+            gap: 8,
+            marginBottom: 16,
+            overflowX: 'auto',
+            paddingBottom: 4,
+          }}
+        >
+          {CATEGORY_CONFIG.map((cat) => {
+            const active = selectedCategory === cat.key;
+            return (
+              <button
+                key={cat.key}
+                onClick={() => setSelectedCategory(cat.key)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  whiteSpace: 'nowrap',
+                  borderRadius: 999,
+                  border: active
+                    ? '1px solid rgba(79,70,229,0.5)'
+                    : '1px solid #e5e7eb',
+                  background: active ? 'rgba(79,70,229,0.08)' : 'white',
+                  color: active ? '#4f46e5' : '#4b5563',
+                  padding: '6px 14px',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                <span>{cat.icon}</span>
+                <span>{cat.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* حالة التحميل / الأخطاء */}
         {loading && (
           <div className="card" style={{ textAlign: 'center' }}>
             جاري تحميل الإعلانات...
@@ -254,6 +321,7 @@ export default function HomePage() {
           </div>
         )}
 
+        {/* شبكة الإعلانات */}
         {!loading && !err && filtered.length > 0 && (
           <>
             <div
