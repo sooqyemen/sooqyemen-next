@@ -7,13 +7,12 @@ import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import Link from 'next/link';
 
-// يمكن إضافة بريد أدمن من متغير البيئة في Vercel (اختياري)
+// إعداد إيميلات الأدمن
 const RAW_ENV_ADMIN = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
 
-// قائمة الإيميلات المسموح لها بالدخول كأدمن
 const STATIC_ADMINS = [
   'mansouralbarout@gmail.com',
-  'aboramez965@gmail.com', // ← إذا ما تريده أدمن احذف هذا السطر
+  'aboramez965@gmail.com', // احذف هذا السطر لو ما تريده أدمن
 ];
 
 const ADMIN_EMAILS = [RAW_ENV_ADMIN, ...STATIC_ADMINS]
@@ -309,14 +308,14 @@ export default function AdminPage() {
                         }}
                       >
                         <Link className="btn" href={`/listing/${l.id}`}>
-                          فتح
+                          عرض
                         </Link>
-                        <Link
-                          className="btn"
-                          href={`/admin/edit-listing/${l.id}`}
-                        >
+
+                        {/* تعديل يفتح صفحة edit المشتركة */}
+                        <Link className="btn" href={`/edit-listing/${l.id}`}>
                           تعديل
                         </Link>
+
                         <button
                           className="btn"
                           onClick={() => delListing(l.id)}
