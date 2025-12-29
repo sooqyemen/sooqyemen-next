@@ -7,70 +7,76 @@ import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import Link from 'next/link';
 
-// نسمح لأكثر من بريد أدمن مع بقاء البريد الأول أساسياً
-const RAW_ENV_ADMIN = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-
-// هنا حطيت البريدين: الأول + بريدك الثاني
-const STATIC_ADMINS = [
-  'mansouralbarout@gmail.com',
-  'aboramez965@gmail.com'
-];
-
-const ADMIN_EMAILS = [
-  RAW_ENV_ADMIN,
-  ...STATIC_ADMINS,
-].filter(Boolean).map(e => String(e).toLowerCase());
-
 export default function AdminPage() {
   const { user, loading } = useAuth();
-  const userEmail = user?.email ? String(user.email).toLowerCase() : null;
-  const isAdmin = !!userEmail && ADMIN_EMAILS.includes(userEmail);
+
+  // 👈 مؤقتاً: أي مستخدم مسجّل دخول يعتبر أدمن
+  const isAdmin = !!user?.uid;
 
   const [listings, setListings] = useState([]);
   const [categories, setCategories] = useState([]);
   const [newCatName, setNewCatName] = useState('');
   const [newCatSlug, setNewCatSlug] = useState('');
 
+  // جلب الإعلانات
   useEffect(() => {
     if (!isAdmin) return;
-    const unsub = db.collection('listings')
+    const unsub = db
+      .collection('listings')
       .orderBy('createdAt', 'desc')
       .limit(80)
-      .onSnapshot((snap) => {
-        setListings(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
+      .onSnapshot(
+        (snap) => {
+          setListings(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        },
+        (err) => {
+          console.error('listings error:', err);
+        }
+      );
     return () => unsub();
   }, [isAdmin]);
 
+  // جلب الأقسام
   useEffect(() => {
     if (!isAdmin) return;
-    const unsub = db.collection('categories')
+    const unsub = db
+      .collection('categories')
       .orderBy('order', 'asc')
-      .onSnapshot((snap) => {
-        setCategories(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
+      .onSnapshot(
+        (snap) => {
+          setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        },
+        (err) => {
+          console.error('categories error:', err);
+        }
+      );
     return () => unsub();
   }, [isAdmin]);
 
+  // حذف إعلان
   const delListing = async (id) => {
     if (!confirm('حذف الإعلان؟')) return;
     await db.collection('listings').doc(id).delete();
   };
 
+  // حظر مستخدم
   const blockUser = async (uid) => {
     if (!uid) return;
     if (!confirm('حظر هذا المستخدم؟')) return;
-    await db.collection('blocked_users').doc(uid).set(
-      {
-        uid,
-        blockedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+    await db
+      .collection('blocked_users')
+      .doc(uid)
+      .set(
+        {
+          uid,
+          blockedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
     alert('تم حظر المستخدم');
   };
 
-  // إخفاء / إظهار الإعلان
+  // إخفاء / إظهار إعلان
   const toggleListingHidden = async (listing) => {
     if (!listing?.id) return;
     const newState = !listing.hidden;
@@ -80,6 +86,7 @@ export default function AdminPage() {
     alert(newState ? 'تم إخفاء الإعلان' : 'تم إظهار الإعلان');
   };
 
+  // إضافة قسم
   const addCategory = async () => {
     const name = newCatName.trim();
     const slug = newCatSlug.trim();
@@ -95,12 +102,15 @@ export default function AdminPage() {
     setNewCatSlug('');
   };
 
+  // تفعيل / إخفاء قسم
   const toggleCategory = async (c) => {
-    await db.collection('categories').doc(c.id).update({
-      active: !(c.active !== false),
-    });
+    await db
+      .collection('categories')
+      .doc(c.id)
+      .update({ active: !(c.active !== false) });
   };
 
+  // حذف قسم
   const delCategory = async (c) => {
     if (!confirm('حذف القسم؟')) return;
     await db.collection('categories').doc(c.id).delete();
@@ -111,7 +121,9 @@ export default function AdminPage() {
       <Header />
       <div className="container">
         <div className="row" style={{ justifyContent: 'space-between' }}>
-          <Link className="btn" href="/">← رجوع</Link>
+          <Link className="btn" href="/">
+            ← رجوع
+          </Link>
           <span className="badge">لوحة الإدارة</span>
         </div>
 
@@ -123,19 +135,7 @@ export default function AdminPage() {
 
         {!loading && !isAdmin ? (
           <div className="card" style={{ marginTop: 12 }}>
-            <div>هذه الصفحة للأدمن فقط.</div>
-            <div style={{ marginTop: 4, fontSize: 13 }}>
-              البريد الذي دخلت به الآن:
-              <b> {user?.email || 'غير مسجل / غير معروف'} </b>
-            </div>
-            <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
-              يجب أن يطابق أحد بريد الإدمن التالي:
-            </div>
-            <ul className="muted" style={{ fontSize: 12 }}>
-              {ADMIN_EMAILS.map(e => (
-                <li key={e}>{e}</li>
-              ))}
-            </ul>
+            هذه الصفحة للأعضاء المسجلين فقط، يرجى تسجيل الدخول أولاً.
           </div>
         ) : null}
 
@@ -147,7 +147,10 @@ export default function AdminPage() {
             {/* إدارة الأقسام */}
             <div className="card">
               <div style={{ fontWeight: 900 }}>الأقسام</div>
-              <div className="row" style={{ marginTop: 10, gap: 6, flexWrap: 'wrap' }}>
+              <div
+                className="row"
+                style={{ marginTop: 10, gap: 6, flexWrap: 'wrap' }}
+              >
                 <input
                   className="input"
                   value={newCatName}
@@ -173,21 +176,31 @@ export default function AdminPage() {
                     <div
                       key={c.id}
                       className="row"
-                      style={{ justifyContent: 'space-between', alignItems: 'center' }}
+                      style={{
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
                     >
                       <div>
                         <div style={{ fontWeight: 800 }}>
-                          {c.name} <span className="muted">({c.slug})</span>
+                          {c.name}{' '}
+                          <span className="muted">({c.slug})</span>
                         </div>
                         <div className="muted" style={{ fontSize: 12 }}>
                           {c.active !== false ? 'نشط' : 'مخفي'}
                         </div>
                       </div>
                       <div className="row" style={{ gap: 6 }}>
-                        <button className="btn" onClick={() => toggleCategory(c)}>
+                        <button
+                          className="btn"
+                          onClick={() => toggleCategory(c)}
+                        >
                           {c.active !== false ? 'إخفاء' : 'تفعيل'}
                         </button>
-                        <button className="btn" onClick={() => delCategory(c)}>
+                        <button
+                          className="btn"
+                          onClick={() => delCategory(c)}
+                        >
                           حذف
                         </button>
                       </div>
@@ -200,8 +213,11 @@ export default function AdminPage() {
             {/* إدارة الإعلانات */}
             <div className="card">
               <div style={{ fontWeight: 900 }}>آخر الإعلانات</div>
-              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                حذف / تعديل / إخفاء إعلان أو حظر مستخدم
+              <div
+                className="muted"
+                style={{ fontSize: 12, marginTop: 4 }}
+              >
+                حذف / إخفاء / حظر مستخدم
               </div>
 
               <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
@@ -209,7 +225,11 @@ export default function AdminPage() {
                   <div className="muted">لا توجد إعلانات</div>
                 ) : (
                   listings.map((l) => (
-                    <div key={l.id} className="card" style={{ padding: 10 }}>
+                    <div
+                      key={l.id}
+                      className="card"
+                      style={{ padding: 10 }}
+                    >
                       <div style={{ fontWeight: 800 }}>
                         {l.title || 'بدون عنوان'}
                         {l.hidden ? (
@@ -225,23 +245,41 @@ export default function AdminPage() {
                           </span>
                         ) : null}
                       </div>
-                      <div className="muted" style={{ fontSize: 12 }}>
+                      <div
+                        className="muted"
+                        style={{ fontSize: 12 }}
+                      >
                         المستخدم: {l.userEmail || l.userId || 'غير معروف'}
                       </div>
-                      <div className="row" style={{ marginTop: 8, flexWrap: 'wrap', gap: 6 }}>
+                      <div
+                        className="row"
+                        style={{
+                          marginTop: 8,
+                          flexWrap: 'wrap',
+                          gap: 6,
+                        }}
+                      >
                         <Link className="btn" href={`/listing/${l.id}`}>
                           فتح
                         </Link>
-                        <Link className="btn" href={`/admin/edit-listing/${l.id}`}>
-                          تعديل
-                        </Link>
-                        <button className="btn" onClick={() => delListing(l.id)}>
+                        {/* لو حبيت تضيف صفحة تعديل لاحقاً */}
+                        {/* <Link className="btn" href={`/admin/edit-listing/${l.id}`}>تعديل</Link> */}
+                        <button
+                          className="btn"
+                          onClick={() => delListing(l.id)}
+                        >
                           حذف
                         </button>
-                        <button className="btn" onClick={() => blockUser(l.userId)}>
+                        <button
+                          className="btn"
+                          onClick={() => blockUser(l.userId)}
+                        >
                           حظر المستخدم
                         </button>
-                        <button className="btn" onClick={() => toggleListingHidden(l)}>
+                        <button
+                          className="btn"
+                          onClick={() => toggleListingHidden(l)}
+                        >
                           {l.hidden ? 'إظهار' : 'إخفاء'}
                         </button>
                       </div>
