@@ -9,24 +9,30 @@ import { db } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import { registerSiteVisit } from '@/lib/analytics';
 
+// الأقسام الافتراضية (في حال ما رجعت من Firestore)
 const DEFAULT_CATEGORIES = [
-  { slug: 'cars', name: 'سيارات' },
-  { slug: 'real_estate', name: 'عقارات' },
-  { slug: 'phones', name: 'جوالات' },
-  { slug: 'jobs', name: 'وظائف' },
-  { slug: 'solar', name: 'طاقة شمسية' },
-  { slug: 'furniture', name: 'أثاث' },
-  { slug: 'animals', name: 'مواشي وحيوانات' },
+  { slug: 'cars',          name: 'سيارات' },
+  { slug: 'real_estate',   name: 'عقارات' },
+  { slug: 'phones',        name: 'جوالات' },
+  { slug: 'jobs',          name: 'وظائف' },
+  { slug: 'solar',         name: 'طاقة شمسية' },
+  { slug: 'furniture',     name: 'أثاث' },
+  { slug: 'animals',       name: 'مواشي وحيوانات' },
+  { slug: 'electronics',   name: 'إلكترونيات' },
+  { slug: 'bikes',         name: 'دراجات' },
+  { slug: 'yemeni_goods',  name: 'منتجات يمنية' },
+  { slug: 'services',      name: 'خدمات' },
 ];
 
 export default function HomePage() {
   const { user } = useAuth();
+
   const [activeCat, setActiveCat] = useState('all');
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [listings, setListings] = useState([]);
   const [q, setQ] = useState('');
 
-  // تسجيل زيارة للموقع (لتحليل عدد المشاهدات)
+  // تسجيل زيارة للموقع
   useEffect(() => {
     registerSiteVisit(user).catch(() => {});
   }, [user?.uid]);
@@ -71,11 +77,12 @@ export default function HomePage() {
     return () => unsubscribe();
   }, []);
 
-  const catMap = useMemo(() => {
-    return new Map(categories.map((c) => [c.slug, c.name]));
-  }, [categories]);
+  const catMap = useMemo(
+    () => new Map(categories.map((c) => [c.slug, c.name])),
+    [categories],
+  );
 
-  // فلترة الإعلانات حسب القسم و البحث
+  // فلترة الإعلانات حسب القسم والبحث
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
 
@@ -111,6 +118,7 @@ export default function HomePage() {
           <h1 style={{ fontWeight: 900, fontSize: 20, margin: 0 }}>
             سوق اليمن – بيع وشراء كل شيء في اليمن
           </h1>
+
           <p
             className="muted"
             style={{ marginTop: 4, marginBottom: 0, fontSize: 14 }}
@@ -129,7 +137,7 @@ export default function HomePage() {
             />
           </div>
 
-          {/* شريط الأقسام */}
+          {/* شريط الأقسام مع الأيقونات */}
           <div style={{ marginTop: 10 }}>
             <CategoryBar
               categories={categories}
