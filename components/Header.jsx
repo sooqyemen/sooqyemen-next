@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/useAuth';
 import { useEffect, useState } from 'react';
 
-// الإيميلات المسموح لها بلوحة الإدارة
+// إيميلات المدراء
 const RAW_ENV_ADMIN = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
 const STATIC_ADMINS = [
   'mansouralbarout@gmail.com',
@@ -15,7 +15,7 @@ const ADMIN_EMAILS = [RAW_ENV_ADMIN, ...STATIC_ADMINS]
   .filter(Boolean)
   .map((e) => String(e).toLowerCase());
 
-// لوجو سوق اليمن (مطابق للصورة تقريبًا)
+// لوجو سوق اليمن (نفس الفكرة من الصورة)
 const YemenMarketLogo = ({ size = 40 }) => (
   <svg
     width={size}
@@ -54,7 +54,7 @@ const YemenMarketLogo = ({ size = 40 }) => (
       strokeLinecap="round"
     />
 
-    {/* ألوان العلم اليمني */}
+    {/* أشرطة العلم اليمني */}
     <rect x="150" y="200" width="212" height="40" fill="#CE1126" />
     <rect x="150" y="240" width="212" height="36" fill="#FFFFFF" />
     <rect x="150" y="276" width="212" height="40" fill="#000000" />
@@ -86,10 +86,8 @@ const YemenMarketLogo = ({ size = 40 }) => (
 );
 
 export default function Header() {
-  const { user, loading, login, logout } = useAuth();
+  const { user, loading, logout } = useAuth();
   const [scrolled, setScrolled] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const email = user?.email ? String(user.email).toLowerCase() : null;
   const isAdmin = !!email && ADMIN_EMAILS.includes(email);
@@ -100,38 +98,10 @@ export default function Header() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const handleLogin = async () => {
-    try {
-      if (typeof login === 'function') {
-        await login();
-      } else {
-        // لو ما فيه login في الهوك افتح صفحة /login
-        window.location.href = '/login';
-      }
-      setMenuOpen(false);
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleLogout = async () => {
-    if (!logout) return;
-    setIsLoggingOut(true);
-    try {
-      await logout();
-      setMenuOpen(false);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsLoggingOut(false);
-    }
-  };
-
-  // حالة التحميل
   if (loading) {
     return (
       <header className="header-shell">
-        <div className="container header-bar">
+        <div className="container header-row">
           <div className="skeleton" style={{ width: 140, height: 30 }} />
         </div>
         <style jsx>{`
@@ -141,7 +111,7 @@ export default function Header() {
             z-index: 1000;
             background: #ffffff;
           }
-          .header-bar {
+          .header-row {
             display: flex;
             justify-content: center;
             padding: 10px 0;
@@ -170,167 +140,110 @@ export default function Header() {
     );
   }
 
+  const handleLogout = async () => {
+    if (!logout) return;
+    try {
+      await logout();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   return (
-    <>
-      {/* الهيدر الأساسي */}
-      <header
-        className="header"
-        style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 1000,
-          backgroundColor: scrolled ? 'rgba(255,255,255,0.97)' : '#ffffff',
-          backdropFilter: scrolled ? 'blur(10px)' : 'none',
-          boxShadow: scrolled ? '0 2px 8px rgba(15,23,42,0.08)' : 'none',
-          transition: 'all 0.25s ease',
-        }}
-      >
-        <div className="container header-bar">
-          {/* زر القائمة للجوال */}
-          <button
-            className="icon-btn mobile-only"
-            onClick={() => setMenuOpen(true)}
-            aria-label="القائمة"
-          >
-            <span className="icon-lines" />
-          </button>
-
-          {/* الشعار + الاسم في المنتصف */}
-          <Link href="/" className="logo-wrap">
-            <YemenMarketLogo size={40} />
-            <div className="logo-text">
-              <span className="logo-title">سوق اليمن</span>
-              <span className="logo-sub">بيع وشراء كل شيء في اليمن</span>
-            </div>
-          </Link>
-
-          {/* زر أضف إعلاناً (يظهر في الديسكتوب فقط) */}
-          <div className="right-slot">
-            <Link href="/add" className="add-btn">
-              <span className="add-plus">+</span>
-              <span className="add-label">أضف إعلاناً</span>
-            </Link>
+    <header
+      className="header"
+      style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 1000,
+        backgroundColor: scrolled ? 'rgba(255,255,255,0.97)' : '#ffffff',
+        backdropFilter: scrolled ? 'blur(10px)' : 'none',
+        boxShadow: scrolled ? '0 2px 8px rgba(15,23,42,0.08)' : 'none',
+        transition: 'all 0.25s ease',
+      }}
+    >
+      <div className="container header-row">
+        {/* الشعار + الاسم */}
+        <Link href="/" className="brand">
+          <YemenMarketLogo size={40} />
+          <div className="brand-text">
+            <span className="brand-title">سوق اليمن</span>
+            <span className="brand-sub">بيع وشراء كل شيء في اليمن</span>
           </div>
+        </Link>
+
+        {/* أزرار الديسكتوب */}
+        <div className="actions desktop-actions">
+          {user && (
+            <span className="chip">
+              {user.email.split('@')[0]}
+            </span>
+          )}
+
+          {user && (
+            <Link href="/my-listings" className="btn ghost">
+              إعلاناتي
+            </Link>
+          )}
+
+          {isAdmin && (
+            <Link href="/admin" className="btn ghost danger">
+              لوحة الإدارة
+            </Link>
+          )}
+
+          {user ? (
+            <button onClick={handleLogout} className="btn ghost">
+              خروج
+            </button>
+          ) : (
+            <Link href="/login" className="btn ghost">
+              دخول
+            </Link>
+          )}
+
+          <Link href="/add" className="btn primary">
+            + أضف إعلاناً
+          </Link>
         </div>
 
-        {/* صف ثاني للديسكتوب (روابط إضافية) */}
-        <div className="desktop-only secondary-row">
-          <div className="container secondary-inner">
-            {user && (
-              <span className="user-chip">👤 {user.email.split('@')[0]}</span>
-            )}
-
-            <div className="secondary-links">
-              {user && (
-                <Link href="/my-listings" className="sec-link">
-                  إعلاناتي
-                </Link>
-              )}
+        {/* أزرار الجوال (تحت الشعار) */}
+        <div className="actions mobile-actions">
+          {user ? (
+            <>
+              <Link href="/add" className="btn primary small">
+                + أضف إعلاناً
+              </Link>
+              <Link href="/my-listings" className="btn ghost small">
+                إعلاناتي
+              </Link>
               {isAdmin && (
-                <Link href="/admin" className="sec-link sec-admin">
+                <Link href="/admin" className="btn ghost small">
                   لوحة الإدارة
                 </Link>
               )}
-              {user ? (
-                <button
-                  onClick={handleLogout}
-                  className="sec-link as-btn"
-                  disabled={isLoggingOut}
-                >
-                  {isLoggingOut ? 'جاري الخروج…' : 'خروج'}
-                </button>
-              ) : (
-                <button onClick={handleLogin} className="sec-link as-btn">
-                  دخول
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* القائمة الجانبية للجوال */}
-      {menuOpen && (
-        <>
-          <div
-            className="menu-backdrop"
-            onClick={() => setMenuOpen(false)}
-          />
-          <aside className="side-menu">
-            <div className="side-header">
-              <div>
-                <div className="side-title">القائمة</div>
-                {user ? (
-                  <div className="side-user">👤 {user.email}</div>
-                ) : (
-                  <div className="side-user muted">زائر · لم تقم بتسجيل الدخول</div>
-                )}
-              </div>
               <button
-                className="icon-btn"
-                onClick={() => setMenuOpen(false)}
-                aria-label="إغلاق"
+                onClick={handleLogout}
+                className="btn ghost small"
               >
-                ✕
+                خروج
               </button>
-            </div>
-
-            <div className="side-section">
-              <Link
-                href="/add"
-                className="side-item"
-                onClick={() => setMenuOpen(false)}
-              >
-                <span>➕</span>
-                <span>أضف إعلاناً</span>
+            </>
+          ) : (
+            <>
+              <Link href="/login" className="btn ghost small">
+                دخول
               </Link>
-
-              {user && (
-                <Link
-                  href="/my-listings"
-                  className="side-item"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  <span>📋</span>
-                  <span>إعلاناتي</span>
-                </Link>
-              )}
-
-              {isAdmin && (
-                <Link
-                  href="/admin"
-                  className="side-item"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  <span>🛡️</span>
-                  <span>لوحة الإدارة</span>
-                </Link>
-              )}
-            </div>
-
-            <div className="side-section">
-              {user ? (
-                <button
-                  className="side-item as-btn"
-                  onClick={handleLogout}
-                  disabled={isLoggingOut}
-                >
-                  <span>🚪</span>
-                  <span>{isLoggingOut ? 'جاري الخروج…' : 'تسجيل الخروج'}</span>
-                </button>
-              ) : (
-                <button className="side-item as-btn" onClick={handleLogin}>
-                  <span>🔑</span>
-                  <span>تسجيل الدخول عبر جوجل</span>
-                </button>
-              )}
-            </div>
-          </aside>
-        </>
-      )}
+              <Link href="/add" className="btn primary small">
+                + أضف إعلاناً
+              </Link>
+            </>
+          )}
+        </div>
+      </div>
 
       <style jsx>{`
-        .header-bar {
+        .header-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -338,245 +251,111 @@ export default function Header() {
           gap: 12px;
         }
 
-        .logo-wrap {
+        .brand {
           display: flex;
           align-items: center;
           gap: 8px;
           text-decoration: none;
           color: inherit;
         }
-        .logo-text {
+        .brand-text {
           display: flex;
           flex-direction: column;
         }
-        .logo-title {
+        .brand-title {
           font-weight: 900;
           font-size: 18px;
           line-height: 1.2;
         }
-        .logo-sub {
+        .brand-sub {
           font-size: 11px;
           color: #64748b;
           line-height: 1.2;
         }
 
-        .right-slot {
+        .actions {
           display: flex;
           align-items: center;
+          gap: 8px;
         }
 
-        .add-btn {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
+        .desktop-actions {
+          display: flex;
+        }
+
+        .mobile-actions {
+          display: none;
+        }
+
+        .btn {
+          border-radius: 999px;
           padding: 7px 14px;
-          border-radius: 999px;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: #ffffff;
-          text-decoration: none;
           font-size: 13px;
-          font-weight: 600;
-          box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
-          border: none;
-          white-space: nowrap;
-        }
-        .add-plus {
-          font-size: 16px;
-          line-height: 1;
-        }
-        .add-label {
-          line-height: 1;
-        }
-
-        .icon-btn {
-          border: none;
-          background: #f1f5f9;
-          border-radius: 999px;
-          width: 34px;
-          height: 34px;
+          border: 1px solid #e2e8f0;
+          background: #ffffff;
+          cursor: pointer;
+          text-decoration: none;
+          color: #111827;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          cursor: pointer;
+          white-space: nowrap;
         }
 
-        .icon-lines {
-          width: 16px;
-          height: 2px;
-          border-radius: 4px;
-          background: #0f172a;
-          position: relative;
-        }
-        .icon-lines::before,
-        .icon-lines::after {
-          content: '';
-          position: absolute;
-          left: 0;
-          right: 0;
-          height: 2px;
-          border-radius: 4px;
-          background: #0f172a;
-        }
-        .icon-lines::before {
-          top: -5px;
-        }
-        .icon-lines::after {
-          top: 5px;
+        .btn.small {
+          padding: 5px 10px;
+          font-size: 12px;
         }
 
-        .secondary-row {
-          border-top: 1px solid #e2e8f0;
-          border-bottom: 1px solid #e2e8f0;
-          background: #f9fafb;
+        .btn.ghost {
+          background: #ffffff;
         }
-        .secondary-inner {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 6px 0;
-          gap: 12px;
+
+        .btn.primary {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border: none;
+          color: #ffffff;
+          font-weight: 600;
+          box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
         }
-        .user-chip {
-          font-size: 13px;
+
+        .btn.danger {
+          border-color: #fecaca;
+          color: #b91c1c;
+        }
+
+        .chip {
           padding: 4px 10px;
           border-radius: 999px;
           background: #e5e7eb;
-          color: #111827;
-        }
-        .secondary-links {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-        .sec-link {
-          font-size: 13px;
-          color: #4b5563;
-          text-decoration: none;
-          padding: 4px 8px;
-          border-radius: 999px;
-        }
-        .sec-link:hover {
-          background: #e5e7eb;
-        }
-        .sec-admin {
-          color: #b91c1c;
-        }
-        .as-btn {
-          border: none;
-          background: transparent;
-          cursor: pointer;
-        }
-
-        .menu-backdrop {
-          position: fixed;
-          inset: 0;
-          background: rgba(15, 23, 42, 0.45);
-          z-index: 999;
-        }
-        .side-menu {
-          position: fixed;
-          inset-block: 0;
-          inset-inline-end: 0;
-          width: 78%;
-          max-width: 340px;
-          background: #ffffff;
-          z-index: 1000;
-          box-shadow: -4px 0 16px rgba(15, 23, 42, 0.25);
-          display: flex;
-          flex-direction: column;
-          padding: 14px 14px 18px;
-        }
-        .side-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 12px;
-        }
-        .side-title {
-          font-weight: 800;
-          font-size: 17px;
-        }
-        .side-user {
           font-size: 12px;
-          margin-top: 2px;
-        }
-        .muted {
-          color: #9ca3af;
         }
 
-        .side-section {
-          border-top: 1px solid #e5e7eb;
-          margin-top: 10px;
-          padding-top: 10px;
-        }
-        .side-item {
-          width: 100%;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 9px 4px;
-          font-size: 14px;
-          text-decoration: none;
-          color: #111827;
-          border-radius: 8px;
-        }
-        .side-item span:first-child {
-          width: 22px;
-          text-align: center;
-        }
-        .side-item:hover {
-          background: #f3f4f6;
-        }
-        .side-item.as-btn {
-          border: none;
-          background: transparent;
-          text-align: start;
-          cursor: pointer;
-        }
-
-        .mobile-only {
-          display: none;
-        }
-        .desktop-only {
-          display: block;
-        }
-
-        /* ضبط الجوال: الشعار في المنتصف و زر القائمة في اليمين */
         @media (max-width: 768px) {
-          .header-bar {
+          .header-row {
+            flex-direction: column;
+            align-items: center;
             justify-content: center;
-            position: relative;
-            padding: 8px 0;
+            padding: 8px 0 10px;
+            gap: 6px;
           }
 
-          .logo-wrap {
-            margin-inline: 0;
+          .brand {
+            justify-content: center;
           }
 
-          .mobile-only {
-            display: inline-flex;
-            position: absolute;
-            inset-inline-end: 12px;
-            top: 50%;
-            transform: translateY(-50%);
-          }
-
-          .right-slot {
+          .desktop-actions {
             display: none;
           }
 
-          .logo-title {
-            font-size: 16px;
-          }
-          .logo-sub {
-            font-size: 10px;
-          }
-
-          .desktop-only {
-            display: none;
+          .mobile-actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 6px;
           }
         }
       `}</style>
-    </>
+    </header>
   );
 }
