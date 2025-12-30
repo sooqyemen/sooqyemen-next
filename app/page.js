@@ -14,12 +14,12 @@ const CATEGORY_CONFIG = [
   { key: 'cars', label: 'سيارات', icon: '🚗' },
   { key: 'real_estate', label: 'عقارات', icon: '🏡' },
   { key: 'phones', label: 'جوالات', icon: '📱' },
-  { key: 'electronics', label: 'إلكترونيات', icon: '💻' },          // إلكترونيات عامة
-  { key: 'motorcycles', label: 'دراجات نارية', icon: '🏍️' },      // دراجات نارية
-  { key: 'heavy_equipment', label: 'معدات ثقيلة', icon: '🚜' },    // معدات ثقيلة
+  { key: 'electronics', label: 'إلكترونيات', icon: '💻' },
+  { key: 'motorcycles', label: 'دراجات نارية', icon: '🏍️' },
+  { key: 'heavy_equipment', label: 'معدات ثقيلة', icon: '🚜' },
   { key: 'solar', label: 'طاقة شمسية', icon: '☀️' },
-  { key: 'networks', label: 'نت و شبكات', icon: '📡' },           // نت وشبكات
-  { key: 'maintenance', label: 'صيانة', icon: '🛠️' },             // صيانة
+  { key: 'networks', label: 'نت و شبكات', icon: '📡' },
+  { key: 'maintenance', label: 'صيانة', icon: '🛠️' },
 
   // ثانوية
   { key: 'furniture', label: 'أثاث', icon: '🛋️' },
@@ -180,14 +180,17 @@ export default function HomePage() {
     <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
       <Header />
 
-      {/* هيرو مناسب للجوال */}
+      {/* هيرو مناسب للجوال + محتوى SEO */}
       <section className="home-hero">
         <div className="container">
           <div className="home-hero-inner">
-            <h1 className="home-hero-title">سوق اليمن</h1>
+            <h1 className="home-hero-title">
+              سوق اليمن – بيع وشراء كل شيء في اليمن
+            </h1>
             <p className="home-hero-subtitle">
-              بيع وشراء كل شيء في اليمن — سيارات، عقارات، جوالات، طاقة شمسية،
-              وظائف، صيانة، معدات ثقيلة وأكثر.
+              منصة إعلانات مبوبة في اليمن لبيع وشراء السيارات، العقارات،
+              الجوالات، الإلكترونيات، الطاقة الشمسية، الوظائف والخدمات في جميع
+              المحافظات.
             </p>
 
             {/* شريط البحث */}
@@ -209,6 +212,18 @@ export default function HomePage() {
 
       {/* محتوى الصفحة */}
       <div className="container" style={{ padding: '18px 0 40px' }}>
+        {/* نص تعريفي قصير (يساعد السيو) */}
+        <section className="home-intro" aria-label="عن سوق اليمن">
+          <p>
+            في <strong>سوق اليمن</strong> يمكنك نشر إعلانات مجانية لبيع وشراء كل
+            ما تحتاجه داخل اليمن؛ من السيارات والمركبات، العقارات والأراضي،
+            الجوالات والإلكترونيات، إلى معدات الطاقة الشمسية، الأثاث، الوظائف
+            والخدمات المتنوعة. الموقع مخصص بالكامل للسوق اليمني، مع دعم
+            الأسعار بالريال اليمني والريال السعودي والدولار الأمريكي لسهولة
+            المقارنة بين العروض.
+          </p>
+        </section>
+
         {/* شريط الأقسام أفقي (سلايدر) */}
         <div className="category-strip">
           {CATEGORY_CONFIG.map((cat) => {
@@ -338,17 +353,20 @@ export default function HomePage() {
         .home-search-button {
           border-radius: 999px;
           border: none;
-          background: linear-gradient(
-            135deg,
-            #667eea 0%,
-            #764ba2 100%
-          );
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           color: white;
           font-weight: 600;
           padding: 10px 20px;
           cursor: pointer;
           font-size: 14px;
           white-space: nowrap;
+        }
+
+        .home-intro {
+          font-size: 13px;
+          color: #4b5563;
+          line-height: 1.8;
+          margin-bottom: 10px;
         }
 
         .category-strip {
@@ -406,6 +424,9 @@ export default function HomePage() {
           .home-search-button {
             padding: 8px 16px;
             font-size: 13px;
+          }
+          .home-intro {
+            font-size: 12px;
           }
           .home-grid {
             grid-template-columns: 1fr;
