@@ -1,94 +1,89 @@
 // app/sitemap.xml/route.js
-// مولِّد خريطة الموقع (Sitemap) لمشروع Next.js (App Router)
-// يدعم:
-// 1) روابط ثابتة (الصفحة الرئيسية + الأقسام الأساسية)
-// 2) روابط ديناميكية للإعلانات عن طريق استدعاء API جاهز مثلاً /api/ads
-
 import { NextResponse } from 'next/server';
+import { db } from '@/lib/firebaseAdmin';
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://sooqyemen.com';
-
-// لو عندك Endpoint جاهز يرجّع كل الإعلانات بصيغة JSON
-// عدّل هذا الرابط حسب مشروعك (مثلاً /api/ads أو /api/listings)
-const ADS_API_ENDPOINT = `${BASE_URL}/api/ads`;
+const BASE_URL = 'https://sooqyemen.com';
 
 export async function GET() {
-  // 1) روابط ثابتة مهمّة لمحركات البحث
+  // روابط ثابتة (الصفحة الرئيسية والأقسام الرئيسية)
   const staticUrls = [
-    '/',
-    '/ads',
-    '/add',
-    '/cars',
-    '/realestate',
-    '/phones',
-    '/solar',
-    '/electronics',
-    '/jobs',
-    '/services',
+    {
+      loc: `${BASE_URL}/`,
+      changefreq: 'daily',
+      priority: 1.0,
+    },
+    {
+      loc: `${BASE_URL}/ads`,
+      changefreq: 'weekly',
+      priority: 0.9,
+    },
+    {
+      loc: `${BASE_URL}/add`,
+      changefreq: 'monthly',
+      priority: 0.6,
+    },
+    {
+      loc: `${BASE_URL}/cars`,
+      changefreq: 'weekly',
+      priority: 0.8,
+    },
+    {
+      loc: `${BASE_URL}/realestate`,
+      changefreq: 'weekly',
+      priority: 0.8,
+    },
+    {
+      loc: `${BASE_URL}/phones`,
+      changefreq: 'weekly',
+      priority: 0.8,
+    },
+    {
+      loc: `${BASE_URL}/solar`,
+      changefreq: 'weekly',
+      priority: 0.8,
+    },
   ];
 
-  // 2) نحاول نجلب الإعلانات من API (اختياري)
-  let dynamicUrls = [];
+  const urls = [...staticUrls];
+
+  // 🔥 إضافة روابط جميع الإعلانات من Firebase
   try {
-    const res = await fetch(ADS_API_ENDPOINT, { next: { revalidate: 60 } });
+    // لو اسم التجميعة غير "ads" غيّرها هنا
+    const adsSnapshot = await db.collection('ads').get();
 
-    if (res.ok) {
-      const ads = await res.json();
-
-      // نتوقع أن الـ API يرجع مصفوفة إعلانات مثل:
-      // [{ id: 'abc123', slug: 'nice-car-for-sale', updatedAt: '2025-01-10T12:00:00Z' }, ...]
-      dynamicUrls = ads.map((ad) => {
-        const adPath = ad.slug
-          ? `/ads/${ad.slug}`
-          : `/ads/${ad.id}`;
-
-        const lastMod = ad.updatedAt || ad.createdAt || null;
-
-        return {
-          loc: `${BASE_URL}${adPath}`,
-          lastmod: lastMod,
-        };
+    adsSnapshot.forEach((doc) => {
+      urls.push({
+        loc: `${BASE_URL}/ad/${doc.id}`,
+        changefreq: 'weekly',
+        priority: 0.7,
       });
-    } else {
-      console.error('Sitemap: ADS API returned status', res.status);
-    }
-  } catch (err) {
-    console.error('Sitemap: error fetching ads from API:', err);
+    });
+  } catch (error) {
+    console.error('Error generating dynamic sitemap from Firestore:', error);
+    // لو صار خطأ، نرجع فقط الروابط الثابتة ولا نوقف الخريطة
   }
 
-  // 3) بناء ملف الـ XML
-  const urlsXml = [
-    // الروابط الثابتة
-    ...staticUrls.map((path) => {
-      return `
-<url>
-  <loc>${BASE_URL}${path}</loc>
-  <changefreq>${path === '/' ? 'daily' : 'weekly'}</changefreq>
-  <priority>${path === '/' ? '1.0' : '0.8'}</priority>
-</url>`;
-    }),
-    // الروابط الديناميكية (الإعلانات)
-    ...dynamicUrls.map(({ loc, lastmod }) => {
-      return `
-<url>
-  <loc>${loc}</loc>
-  ${lastmod ? `<lastmod>${new Date(lastmod).toISOString()}</lastmod>` : ''}
-  <changefreq>daily</changefreq>
-  <priority>0.7</priority>
-</url>`;
-    }),
-  ].join('\n');
-
-  const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+  // 🧱 إنشاء XML
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urlsXml}
+${urls
+  .map(
+    (url) => `
+  <url>
+    <loc>${url.loc}</loc>
+    <changefreq>${url.changefreq}</changefreq>
+    <priority>${url.priority}</priority>
+  </url>`
+  )
+  .join('')}
 </urlset>`;
 
-  return new NextResponse(sitemap, {
+  return new NextResponse(xml, {
     status: 200,
     headers: {
       'Content-Type': 'application/xml; charset=utf-8',
-      'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=600',
+      'Cache-Control':
+        'public, s-maxage=3600, stale-while-revalidate=86400',
     },
   });
 }
