@@ -2,162 +2,137 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
+import Link from 'next/link';
 import { db } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
-import Link from 'next/link';
 
 export default function MyListingsPage() {
   const { user, loading } = useAuth();
-  const [listings, setListings] = useState([]);
+  const router = useRouter();
+
+  const [items, setItems] = useState([]);
   const [fetching, setFetching] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!user?.uid) return;
-    setFetching(true);
+    // لو لسه useAuth يحمل، لا نعمل شي
+    if (loading) return;
+
+    // لو مافيه مستخدم -> نعرض رسالة بسيطة
+    if (!user) {
+      setFetching(false);
+      return;
+    }
+
+    // جلب إعلانات المستخدم من Firestore
     const unsub = db
       .collection('listings')
       .where('userId', '==', user.uid)
-      .orderBy('createdAt', 'desc')
       .onSnapshot(
         (snap) => {
-          setListings(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+          const data = [];
+          snap.forEach((doc) => {
+            data.push({ id: doc.id, ...doc.data() });
+          });
+          setItems(data);
           setFetching(false);
         },
         (err) => {
-          console.error('my listings error:', err);
+          console.error('my-listings error:', err);
+          setError('حدث خطأ أثناء تحميل إعلاناتك، حاول لاحقاً.');
           setFetching(false);
         }
       );
+
     return () => unsub();
-  }, [user?.uid]);
-
-  const delListing = async (l) => {
-    if (!user?.uid) return;
-    if (l.userId !== user.uid) {
-      alert('لا يمكنك حذف إعلان لا تملكه');
-      return;
-    }
-    if (!confirm('هل تريد حذف هذا الإعلان نهائياً؟')) return;
-    await db.collection('listings').doc(l.id).delete();
-  };
-
-  const toggleListingHidden = async (l) => {
-    if (!user?.uid) return;
-    if (l.userId !== user.uid) {
-      alert('لا يمكنك تعديل إعلان لا تملكه');
-      return;
-    }
-    const newState = !l.hidden;
-    await db.collection('listings').doc(l.id).update({
-      hidden: newState,
-    });
-    alert(newState ? 'تم إخفاء الإعلان' : 'تم إظهار الإعلان');
-  };
+  }, [user, loading]);
 
   return (
     <>
       <Header />
-      <div className="container" style={{ marginTop: 12 }}>
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <Link className="btn" href="/">
-            ← رجوع
+
+      <div className="container" style={{ paddingTop: 16, paddingBottom: 40 }}>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h1 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>إعلاناتي</h1>
+
+          <Link href="/add" className="btn btnPrimary">
+            + أضف إعلاناً جديداً
           </Link>
-          <span className="badge">لوحة إعلاناتي</span>
         </div>
 
-        {loading ? (
-          <div className="card muted" style={{ marginTop: 12 }}>
-            جاري التحقق من تسجيل الدخول...
-          </div>
+        {/* حالة: جاري التحميل */}
+        {loading || fetching ? (
+          <div className="card muted">جاري تحميل إعلاناتك...</div>
         ) : null}
 
-        {!loading && !user ? (
+        {/* حالة: المستخدم غير مسجل دخول */}
+        {!loading && !user && !fetching && (
+          <div className="card">
+            <p style={{ marginBottom: 12 }}>
+              يجب تسجيل الدخول حتى تشاهد إعلاناتك وتقوم بتعديلها أو حذفها.
+            </p>
+            <Link href="/login" className="btn btnPrimary">
+              تسجيل الدخول
+            </Link>
+          </div>
+        )}
+
+        {/* حالة خطأ */}
+        {error && (
+          <div className="card" style={{ border: '1px solid #fecaca', background: '#fef2f2', marginTop: 12 }}>
+            {error}
+          </div>
+        )}
+
+        {/* حالة: لا يوجد إعلانات */}
+        {user && !fetching && !error && items.length === 0 && (
           <div className="card" style={{ marginTop: 12 }}>
-            يجب تسجيل الدخول لعرض وإدارة إعلاناتك.
+            <p style={{ marginBottom: 8 }}>لا يوجد لديك أي إعلانات حالياً.</p>
+            <p className="muted" style={{ fontSize: 13, marginBottom: 12 }}>
+              قم بإضافة أول إعلان لك الآن، وسيظهر هنا لتستطيع تعديله أو إخفاءه لاحقاً.
+            </p>
+            <Link href="/add" className="btn btnPrimary">
+              + أضف أول إعلان لك
+            </Link>
           </div>
-        ) : null}
+        )}
 
-        {user ? (
-          <div style={{ marginTop: 16 }}>
-            <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
-              البريد المسجل: <b>{user.email || 'بدون بريد'}</b>
-            </div>
-
-            {fetching ? (
-              <div className="card muted">جاري تحميل إعلاناتك...</div>
-            ) : listings.length === 0 ? (
-              <div className="card">
-                لا يوجد لديك إعلانات بعد.
-                <div style={{ marginTop: 8 }}>
-                  <Link className="btn btnPrimary" href="/add">
-                    أضف أول إعلان لك
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gap: 10 }}>
-                {listings.map((l) => (
-                  <div key={l.id} className="card" style={{ padding: 10 }}>
-                    <div style={{ fontWeight: 800 }}>
-                      {l.title || 'بدون عنوان'}
-                      {l.hidden ? (
-                        <span
-                          className="badge"
-                          style={{
-                            marginRight: 8,
-                            background: '#fee2e2',
-                            color: '#b91c1c',
-                          }}
-                        >
-                          مخفي
-                        </span>
-                      ) : null}
+        {/* قائمة الإعلانات */}
+        {user && !fetching && !error && items.length > 0 && (
+          <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
+            {items.map((item) => (
+              <div key={item.id} className="card" style={{ display: 'grid', gap: 8 }}>
+                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                      {item.title || 'إعلان بدون عنوان'}
                     </div>
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      القسم: {l.categoryName || l.categorySlug || 'غير محدد'}
-                    </div>
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      المدينة: {l.city || 'غير محددة'}
-                    </div>
-
-                    <div
-                      className="row"
-                      style={{
-                        marginTop: 8,
-                        flexWrap: 'wrap',
-                        gap: 6,
-                      }}
-                    >
-                      <Link className="btn" href={`/listing/${l.id}`}>
-                        عرض الإعلان
-                      </Link>
-
-                      {/* تعديل الإعلان (العنوان، الوصف، السعر، الموقع) */}
-                      <Link className="btn" href={`/edit-listing/${l.id}`}>
-                        تعديل
-                      </Link>
-
-                      <button
-                        className="btn"
-                        onClick={() => toggleListingHidden(l)}
-                      >
-                        {l.hidden ? 'إظهار الإعلان' : 'إخفاء الإعلان'}
-                      </button>
-
-                      <button
-                        className="btn"
-                        onClick={() => delListing(l)}
-                      >
-                        حذف الإعلان
-                      </button>
+                    <div className="muted" style={{ fontSize: 13 }}>
+                      {item.city || 'بدون مدينة'} · {item.category || 'قسم غير محدد'}
                     </div>
                   </div>
-                ))}
+                  <div style={{ textAlign: 'left', fontWeight: 700 }}>
+                    {item.priceYER
+                      ? `${Number(item.priceYER).toLocaleString()} ريال يمني`
+                      : 'بدون سعر'}
+                  </div>
+                </div>
+
+                <div className="row" style={{ gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                  <Link href={`/listing/${item.id}`} className="btn">
+                    عرض الإعلان
+                  </Link>
+
+                  {/* لاحقاً نضيف هنا روابط التعديل والإخفاء والحذف لما نجهز صفحاتها */}
+                  {/* مثال: */}
+                  {/* <Link href={`/edit-listing/${item.id}`} className="btn">تعديل</Link> */}
+                </div>
               </div>
-            )}
+            ))}
           </div>
-        ) : null}
+        )}
       </div>
     </>
   );
