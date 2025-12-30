@@ -14,12 +14,12 @@ const CATEGORY_CONFIG = [
   { key: 'cars', label: 'سيارات', icon: '🚗' },
   { key: 'real_estate', label: 'عقارات', icon: '🏡' },
   { key: 'phones', label: 'جوالات', icon: '📱' },
-  { key: 'electronics', label: 'إلكترونيات', icon: '💻' }, // إلكترونيات عامة
-  { key: 'motorcycles', label: 'دراجات نارية', icon: '🏍️' }, // دراجات نارية
-  { key: 'heavy_equipment', label: 'معدات ثقيلة', icon: '🚜' }, // معدات ثقيلة
+  { key: 'electronics', label: 'إلكترونيات', icon: '💻' },
+  { key: 'motorcycles', label: 'دراجات نارية', icon: '🏍️' },
+  { key: 'heavy_equipment', label: 'معدات ثقيلة', icon: '🚜' },
   { key: 'solar', label: 'طاقة شمسية', icon: '☀️' },
-  { key: 'networks', label: 'نت و شبكات', icon: '📡' }, // نت وشبكات
-  { key: 'maintenance', label: 'صيانة', icon: '🛠️' }, // صيانة
+  { key: 'networks', label: 'نت و شبكات', icon: '📡' },
+  { key: 'maintenance', label: 'صيانة', icon: '🛠️' },
 
   // ثانوية
   { key: 'furniture', label: 'أثاث', icon: '🛋️' },
@@ -184,12 +184,10 @@ export default function HomePage() {
       <section className="home-hero">
         <div className="container">
           <div className="home-hero-inner">
-            <h1 className="home-hero-title">
-              سوق اليمن – بيع وشراء كل شيء في اليمن
-            </h1>
+            <h1 className="home-hero-title">سوق اليمن</h1>
             <p className="home-hero-subtitle">
               بيع وشراء كل شيء في اليمن — سيارات، عقارات، جوالات، طاقة شمسية،
-              وظائف، صيانة، معدات ثقيلة وأكثر في جميع المحافظات.
+              وظائف، صيانة، معدات ثقيلة وأكثر.
             </p>
 
             {/* شريط البحث */}
@@ -211,18 +209,6 @@ export default function HomePage() {
 
       {/* محتوى الصفحة */}
       <div className="container" style={{ padding: '18px 0 40px' }}>
-        {/* نص تعريفي (SEO) */}
-        <section className="home-intro" aria-label="عن سوق اليمن">
-          <p>
-            في <strong>سوق اليمن</strong> يمكنك نشر إعلانات مجانية لبيع وشراء
-            السيارات، العقارات، الجوالات، الإلكترونيات، الطاقة الشمسية، الأثاث،
-            الوظائف والخدمات داخل اليمن. الموقع مخصص بالكامل للسوق اليمني مع
-            دعم عرض الأسعار بالريال اليمني والريال السعودي والدولار الأمريكي
-            لتسهيل المقارنة بين العروض، مع واجهة مبسطة تعمل على الجوال
-            والكمبيوتر.
-          </p>
-        </section>
-
         {/* شريط الأقسام أفقي (سلايدر) */}
         <div className="category-strip">
           {CATEGORY_CONFIG.map((cat) => {
@@ -304,137 +290,6 @@ export default function HomePage() {
           </>
         )}
       </div>
-
-      {/* ستايل إضافي للجوال */}
-      <style jsx>{`
-        .home-hero {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          padding: 34px 0 44px;
-        }
-        .home-hero-inner {
-          max-width: 800px;
-          margin: 0 auto;
-          text-align: center;
-        }
-        .home-hero-title {
-          font-size: 32px;
-          font-weight: 900;
-          margin-bottom: 10px;
-        }
-        .home-hero-subtitle {
-          font-size: 16px;
-          opacity: 0.9;
-          margin-bottom: 18px;
-          line-height: 1.6;
-        }
-        .home-search-wrapper {
-          max-width: 720px;
-          margin: 0 auto;
-        }
-        .home-search-bar {
-          background: white;
-          border-radius: 999px;
-          padding: 4px;
-          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-        .home-search-input {
-          flex: 1;
-          border: none;
-          outline: none;
-          padding: 10px 16px;
-          font-size: 14px;
-          border-radius: 999px;
-        }
-        .home-search-button {
-          border-radius: 999px;
-          border: none;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          font-weight: 600;
-          padding: 10px 20px;
-          cursor: pointer;
-          font-size: 14px;
-          white-space: nowrap;
-        }
-
-        .home-intro {
-          font-size: 13px;
-          color: #4b5563;
-          line-height: 1.8;
-          margin: 10px 0 12px;
-        }
-
-        .category-strip {
-          display: flex;
-          gap: 8px;
-          overflow-x: auto;
-          padding: 6px 2px 10px;
-          margin-bottom: 4px;
-          scroll-behavior: smooth;
-        }
-        .category-strip::-webkit-scrollbar {
-          display: none;
-        }
-        .category-pill {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 6px 14px;
-          border-radius: 999px;
-          border-width: 1px;
-          border-style: solid;
-          background: #ffffff;
-          font-size: 13px;
-          cursor: pointer;
-          white-space: nowrap;
-        }
-        .category-icon {
-          font-size: 15px;
-        }
-
-        .home-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-          gap: 16px;
-        }
-
-        @media (max-width: 768px) {
-          .home-hero {
-            padding: 22px 0 30px;
-          }
-          .home-hero-title {
-            font-size: 26px;
-          }
-          .home-hero-subtitle {
-            font-size: 14px;
-            margin-bottom: 14px;
-          }
-          .home-search-bar {
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
-          }
-          .home-search-input {
-            font-size: 13px;
-            padding: 8px 12px;
-          }
-          .home-search-button {
-            padding: 8px 16px;
-            font-size: 13px;
-          }
-          .home-intro {
-            font-size: 12px;
-          }
-          .home-grid {
-            grid-template-columns: 1fr;
-          }
-          .home-card img {
-            height: 170px;
-          }
-        }
-      `}</style>
     </div>
   );
 }
