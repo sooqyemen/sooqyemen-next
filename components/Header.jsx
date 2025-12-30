@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/useAuth';
 import { useEffect, useState } from 'react';
 
-// إعداد الإيميلات الإدارية
+// الإيميلات المسموح لها بلوحة الإدارة
 const RAW_ENV_ADMIN = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
 const STATIC_ADMINS = [
   'mansouralbarout@gmail.com',
@@ -15,40 +15,73 @@ const ADMIN_EMAILS = [RAW_ENV_ADMIN, ...STATIC_ADMINS]
   .filter(Boolean)
   .map((e) => String(e).toLowerCase());
 
-// لوجو سوق اليمن (مثل الشنطة اللي تستخدمها)
-const YemenMarketLogo = ({ size = 34 }) => (
+// لوجو سوق اليمن (مطابق للصورة تقريبًا)
+const YemenMarketLogo = ({ size = 40 }) => (
   <svg
     width={size}
     height={size}
-    viewBox="0 0 36 36"
+    viewBox="0 0 512 512"
     xmlns="http://www.w3.org/2000/svg"
   >
-    <rect width="36" height="36" rx="10" fill="#1E3A8A" />
+    {/* الخلفية الزرقاء بزوايا دائرية */}
+    <rect
+      x="16"
+      y="16"
+      width="480"
+      height="480"
+      rx="120"
+      ry="120"
+      fill="#0F4C8A"
+    />
+
+    {/* جسم الحقيبة الأبيض */}
+    <rect
+      x="120"
+      y="160"
+      width="272"
+      height="260"
+      rx="80"
+      ry="80"
+      fill="#FFFFFF"
+    />
+
+    {/* يد الحقيبة (القوس الذهبي) */}
     <path
-      d="M23 25H13C11.8954 25 11 24.1046 11 23V17C11 15.8954 11.8954 15 13 15H23C24.1046 15 25 15.8954 25 17V23C25 24.1046 24.1046 25 23 25Z"
-      fill="white"
+      d="M176 190 C176 140 216 104 256 104 C296 104 336 140 336 190"
+      fill="none"
+      stroke="#E5B322"
+      strokeWidth="32"
+      strokeLinecap="round"
+    />
+
+    {/* ألوان العلم اليمني */}
+    <rect x="150" y="200" width="212" height="40" fill="#CE1126" />
+    <rect x="150" y="240" width="212" height="36" fill="#FFFFFF" />
+    <rect x="150" y="276" width="212" height="40" fill="#000000" />
+
+    {/* حرف ي */}
+    <path
+      d="
+        M238 356
+        C238 332 252 320 272 320
+        C292 320 306 332 306 356
+        C306 388 284 408 272 408
+        C260 408 238 388 238 356
+        Z
+      "
+      fill="#0F4C8A"
     />
     <path
-      d="M18 13C21.3137 13 24 15.6863 24 19C24 22.3137 21.3137 25 18 25C14.6863 25 12 22.3137 12 19C12 15.6863 14.6863 13 18 13Z"
-      stroke="#FBBF24"
-      strokeWidth="4"
+      d="M252 332 C252 312 262 300 272 300 C282 300 292 312 292 332"
+      stroke="#0F4C8A"
+      strokeWidth="18"
       strokeLinecap="round"
       fill="none"
     />
-    <rect x="13" y="17" width="10" height="2" fill="#CE1126" />
-    <rect x="13" y="19" width="10" height="2" fill="white" />
-    <rect x="13" y="21" width="10" height="2" fill="#000000" />
-    <path
-      d="M20 24C20 24 19 25 18 25C17 25 16 24 16 24C15 23 16 22 17 22C18 22 19 23 20 24Z"
-      fill="#1E3A8A"
-    />
-    <path
-      d="M17 22C17 22 17 20 18 20C19 20 19 22 19 22"
-      stroke="#1E3A8A"
-      strokeWidth="2"
-      strokeLinecap="round"
-      fill="none"
-    />
+
+    {/* نقطتا الياء */}
+    <circle cx="256" cy="430" r="10" fill="#0F4C8A" />
+    <circle cx="284" cy="430" r="10" fill="#0F4C8A" />
   </svg>
 );
 
@@ -69,7 +102,12 @@ export default function Header() {
 
   const handleLogin = async () => {
     try {
-      await login();
+      if (typeof login === 'function') {
+        await login();
+      } else {
+        // لو ما فيه login في الهوك افتح صفحة /login
+        window.location.href = '/login';
+      }
       setMenuOpen(false);
     } catch (e) {
       console.error(e);
@@ -77,6 +115,7 @@ export default function Header() {
   };
 
   const handleLogout = async () => {
+    if (!logout) return;
     setIsLoggingOut(true);
     try {
       await logout();
@@ -88,12 +127,12 @@ export default function Header() {
     }
   };
 
-  // حالة التحميل البسيطة
+  // حالة التحميل
   if (loading) {
     return (
       <header className="header-shell">
         <div className="container header-bar">
-          <div className="skeleton" style={{ width: 120, height: 28 }} />
+          <div className="skeleton" style={{ width: 140, height: 30 }} />
         </div>
         <style jsx>{`
           .header-shell {
@@ -133,7 +172,7 @@ export default function Header() {
 
   return (
     <>
-      {/* شريط علوي مثل حراج */}
+      {/* الهيدر الأساسي */}
       <header
         className="header"
         style={{
@@ -147,7 +186,7 @@ export default function Header() {
         }}
       >
         <div className="container header-bar">
-          {/* زر القائمة (يظهر في الجوال فقط) */}
+          {/* زر القائمة للجوال */}
           <button
             className="icon-btn mobile-only"
             onClick={() => setMenuOpen(true)}
@@ -156,16 +195,16 @@ export default function Header() {
             <span className="icon-lines" />
           </button>
 
-          {/* الشعار في المنتصف */}
+          {/* الشعار + الاسم في المنتصف */}
           <Link href="/" className="logo-wrap">
-            <YemenMarketLogo size={32} />
+            <YemenMarketLogo size={40} />
             <div className="logo-text">
               <span className="logo-title">سوق اليمن</span>
               <span className="logo-sub">بيع وشراء كل شيء في اليمن</span>
             </div>
           </Link>
 
-          {/* زر أضف إعلاناً (يمين في الديسكتوب، أسفله في الجوال) */}
+          {/* زر أضف إعلاناً (يظهر في الديسكتوب فقط) */}
           <div className="right-slot">
             <Link href="/add" className="add-btn">
               <span className="add-plus">+</span>
@@ -174,13 +213,11 @@ export default function Header() {
           </div>
         </div>
 
-        {/* في الديسكتوب فقط: شريط ثانوي بسيط مثل حراج */}
+        {/* صف ثاني للديسكتوب (روابط إضافية) */}
         <div className="desktop-only secondary-row">
           <div className="container secondary-inner">
             {user && (
-              <span className="user-chip">
-                👤 {user.email.split('@')[0]}
-              </span>
+              <span className="user-chip">👤 {user.email.split('@')[0]}</span>
             )}
 
             <div className="secondary-links">
@@ -212,7 +249,7 @@ export default function Header() {
         </div>
       </header>
 
-      {/* القائمة الجانبية للجوال (مثل حراج) */}
+      {/* القائمة الجانبية للجوال */}
       {menuOpen && (
         <>
           <div
@@ -224,13 +261,9 @@ export default function Header() {
               <div>
                 <div className="side-title">القائمة</div>
                 {user ? (
-                  <div className="side-user">
-                    👤 {user.email}
-                  </div>
+                  <div className="side-user">👤 {user.email}</div>
                 ) : (
-                  <div className="side-user muted">
-                    غير مسجّل · زائر
-                  </div>
+                  <div className="side-user muted">زائر · لم تقم بتسجيل الدخول</div>
                 )}
               </div>
               <button
@@ -243,7 +276,11 @@ export default function Header() {
             </div>
 
             <div className="side-section">
-              <Link href="/add" className="side-item" onClick={() => setMenuOpen(false)}>
+              <Link
+                href="/add"
+                className="side-item"
+                onClick={() => setMenuOpen(false)}
+              >
                 <span>➕</span>
                 <span>أضف إعلاناً</span>
               </Link>
@@ -504,25 +541,37 @@ export default function Header() {
           display: block;
         }
 
+        /* ضبط الجوال: الشعار في المنتصف و زر القائمة في اليمين */
         @media (max-width: 768px) {
           .header-bar {
-            justify-content: space-between;
+            justify-content: center;
+            position: relative;
+            padding: 8px 0;
           }
+
           .logo-wrap {
-            margin-inline: auto;
+            margin-inline: 0;
           }
+
+          .mobile-only {
+            display: inline-flex;
+            position: absolute;
+            inset-inline-end: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+          }
+
           .right-slot {
-            display: none; /* زر أضف إعلاناً يبقى في شريط فوق الهيرو (الهيرو عندك) أو نرجعه لاحقًا كزر عائم */
+            display: none;
           }
+
           .logo-title {
             font-size: 16px;
           }
           .logo-sub {
             font-size: 10px;
           }
-          .mobile-only {
-            display: inline-flex;
-          }
+
           .desktop-only {
             display: none;
           }
