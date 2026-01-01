@@ -155,13 +155,6 @@ export default function Header() {
     }
   };
 
-  const handleLogin = () => {
-    setMenuOpen(false);
-    if (typeof window !== 'undefined') {
-      window.location.href = '/login';
-    }
-  };
-
   return (
     <>
       <header
@@ -271,10 +264,14 @@ export default function Header() {
                   </span>
                 </button>
               ) : (
-                <button className="side-item as-btn" onClick={handleLogin}>
+                <Link
+                  href="/login"
+                  className="side-item"
+                  onClick={() => setMenuOpen(false)}
+                >
                   <span>🔑</span>
-                  <span>تسجيل الدخول عبر جوجل</span>
-                </button>
+                  <span>تسجيل الدخول</span>
+                </Link>
               )}
             </div>
           </aside>
