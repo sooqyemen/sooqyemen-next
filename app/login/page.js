@@ -3,8 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-// نستورد auth و googleProvider مباشرة من ملف الإعدادات المتوافق (Compat)
-import { auth, googleProvider } from '@/lib/firebaseClient'; 
+import { auth, googleProvider } from '@/lib/firebaseClient';
 import { LogIn, Mail, Lock, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
@@ -12,27 +11,48 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [debugError, setDebugError] = useState(''); // للتشخيص
   const [loading, setLoading] = useState(false);
 
-  // تسجيل الدخول بالبريد الإلكتروني
+  // تسجيل الدخول بالبريد
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setDebugError('');
     setLoading(true);
 
     try {
-      // استخدام الطريقة المتوافقة (Compat Style) لتتناسب مع lib/firebaseClient.js
-      await auth.signInWithEmailAndPassword(email, password);
-      router.push('/'); // توجيه للرئيسية بعد النجاح
+      console.log('TRY_LOGIN', { email });
+
+      const cred = await auth.signInWithEmailAndPassword(email, password);
+
+      console.log('LOGIN_OK', cred?.user?.uid);
+      router.push('/'); // نجاح
     } catch (err) {
-      console.error(err);
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') {
-        setError('البريد الإلكتروني أو كلمة المرور غير صحيحة');
-      } else if (err.code === 'auth/too-many-requests') {
-        setError('تم تعطيل الحساب مؤقتاً بسبب كثرة المحاولات الفاشلة');
-      } else {
-        setError('حدث خطأ غير متوقع، يرجى المحاولة لاحقاً');
+      console.error('LOGIN_ERROR', err);
+
+      let msg = 'حدث خطأ غير متوقع، يرجى المحاولة لاحقاً';
+
+      if (
+        err?.code === 'auth/invalid-credential' ||
+        err?.code === 'auth/user-not-found'
+      ) {
+        msg = 'البريد الإلكتروني أو كلمة المرور غير صحيحة';
+      } else if (err?.code === 'auth/wrong-password') {
+        msg = 'كلمة المرور غير صحيحة';
+      } else if (err?.code === 'auth/too-many-requests') {
+        msg = 'تم تعطيل الحساب مؤقتاً بسبب كثرة المحاولات الفاشلة';
+      } else if (err?.code === 'auth/invalid-api-key') {
+        msg = 'مشكلة في إعدادات Firebase (API Key غير صحيحة).';
+      } else if (err?.code === 'auth/operation-not-allowed') {
+        msg = 'طريقة تسجيل الدخول بالبريد غير مفعّلة في Firebase.';
+      } else if (err?.code === 'auth/unauthorized-domain') {
+        msg = 'الدومين الحالي غير مسموح له في إعدادات Firebase.';
       }
+
+      setError(msg);
+      // سطر تشخيصي صغير تحت الرسالة
+      setDebugError(`${err?.code || 'no-code'}: ${err?.message || ''}`);
     } finally {
       setLoading(false);
     }
@@ -41,45 +61,64 @@ export default function LoginPage() {
   // تسجيل الدخول بجوجل
   const handleGoogleLogin = async () => {
     setError('');
+    setDebugError('');
     try {
-      // استخدام الطريقة المتوافقة (Compat Style)
-      await auth.signInWithPopup(googleProvider);
+      console.log('TRY_GOOGLE_LOGIN');
+      const result = await auth.signInWithPopup(googleProvider);
+      console.log('GOOGLE_LOGIN_OK', result?.user?.uid);
       router.push('/');
     } catch (err) {
-      console.error(err);
+      console.error('GOOGLE_LOGIN_ERROR', err);
       setError('فشل تسجيل الدخول بواسطة جوجل');
+      setDebugError(`${err?.code || 'no-code'}: ${err?.message || ''}`);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4" dir="rtl">
+    <div
+      className="min-h-screen flex items-center justify-center bg-slate-50 p-4"
+      dir="rtl"
+    >
       <div className="bg-white w-full max-w-md p-8 rounded-2xl shadow-lg border border-slate-100">
-        
         {/* العنوان */}
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-slate-800 flex items-center justify-center gap-2">
             <LogIn className="text-blue-600" />
             تسجيل الدخول
           </h1>
-          <p className="text-slate-500 mt-2 text-sm">أهلاً بك مجدداً في سوق اليمن</p>
+          <p className="text-slate-500 mt-2 text-sm">
+            أهلاً بك مجدداً في سوق اليمن
+          </p>
         </div>
 
-        {/* رسائل الخطأ */}
+        {/* رسائل الخطأ للمستخدم */}
         {error && (
-          <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-6 text-sm flex items-center gap-2 border border-red-100">
+          <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-2 text-sm flex items-center gap-2 border border-red-100">
             <AlertCircle size={18} />
             {error}
           </div>
         )}
 
+        {/* سطر تشخيص صغير (مفيد لنا) */}
+        {debugError && (
+          <div className="text-[11px] text-slate-500 mb-4 break-words">
+            <span className="font-semibold text-slate-600">Debug:</span>{' '}
+            {debugError}
+          </div>
+        )}
+
         {/* النموذج */}
         <form onSubmit={handleLogin} className="space-y-5">
-          
           {/* البريد الإلكتروني */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">البريد الإلكتروني</label>
+            <label className="text-sm font-medium text-slate-700">
+              البريد الإلكتروني
+            </label>
             <div className="relative">
-              <Mail className="absolute right-3 top-3 text-slate-400" size={20} />
+              <Mail
+                className="absolute right-3 top-3 text-slate-400"
+                size={20}
+              />
               <input
                 type="email"
                 required
@@ -93,9 +132,14 @@ export default function LoginPage() {
 
           {/* كلمة المرور */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">كلمة المرور</label>
+            <label className="text-sm font-medium text-slate-700">
+              كلمة المرور
+            </label>
             <div className="relative">
-              <Lock className="absolute right-3 top-3 text-slate-400" size={20} />
+              <Lock
+                className="absolute right-3 top-3 text-slate-400"
+                size={20}
+              />
               <input
                 type="password"
                 required
@@ -123,7 +167,9 @@ export default function LoginPage() {
             <div className="w-full border-t border-slate-200"></div>
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-white text-slate-500">أو تابع باستخدام</span>
+            <span className="px-2 bg-white text-slate-500">
+              أو تابع باستخدام
+            </span>
           </div>
         </div>
 
@@ -157,7 +203,10 @@ export default function LoginPage() {
         {/* التسجيل */}
         <div className="mt-8 text-center text-sm text-slate-600">
           ليس لديك حساب؟{' '}
-          <Link href="/register" className="text-blue-600 font-semibold hover:underline">
+          <Link
+            href="/register"
+            className="text-blue-600 font-semibold hover:underline"
+          >
             إنشاء حساب جديد
           </Link>
         </div>
