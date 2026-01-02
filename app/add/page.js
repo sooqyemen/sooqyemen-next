@@ -1,7 +1,7 @@
 // app/add/page.js
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Header from '@/components/Header';
 import { db, firebase, storage } from '@/lib/firebaseClient';
@@ -17,11 +17,15 @@ const LocationPicker = dynamic(
 const DEFAULT_CATEGORIES = [
   { slug: 'cars', name: 'سيارات' },
   { slug: 'real_estate', name: 'عقارات' },
-  { slug: 'phones', name: 'جوالات' },
+  { slug: 'mobiles', name: 'جوالات' },
   { slug: 'jobs', name: 'وظائف' },
   { slug: 'solar', name: 'طاقة شمسية' },
   { slug: 'furniture', name: 'أثاث' },
-  { slug: 'yemeni_products', name: 'منتجات يمنية' },
+  { slug: 'animals', name: 'حيوانات وطيور' },
+  { slug: 'networks', name: 'نت وشبكات' },
+  { slug: 'electronics', name: 'إلكترونيات' },
+  { slug: 'services', name: 'خدمات' },
+  { slug: 'maintenance', name: 'صيانة' },
 ];
 
 export default function AddPage() {
@@ -44,23 +48,53 @@ export default function AddPage() {
   const [busy, setBusy] = useState(false);
 
   const [cats, setCats] = useState(DEFAULT_CATEGORIES);
+  const [catsLoading, setCatsLoading] = useState(true);
 
-  // تحميل الأقسام من Firestore إن وجدت
-  useMemo(() => {
-    const unsub = db
-      .collection('categories')
-      .orderBy('order', 'asc')
-      .onSnapshot((snap) => {
+  // ✅ تحميل الأقسام من Firestore (categories) بشكل صحيح:
+  // - slug = Document ID
+  // - name = field "name"
+  useEffect(() => {
+    const unsub = db.collection('categories').onSnapshot(
+      (snap) => {
         const arr = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
-          .filter((c) => c.active !== false);
+          .map((d) => {
+            const data = d.data() || {};
+            return {
+              slug: d.id, // ✅ هذا هو الصحيح
+              name: String(data.name || '').trim(),
+              active: data.active,
+            };
+          })
+          .filter((c) => c.slug && c.name && c.active !== false);
+
+        // ترتيب بسيط بالاسم العربي
+        arr.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
         if (arr.length) {
-          setCats(arr.map((c) => ({ slug: c.slug, name: c.name })));
+          setCats(arr);
+          // إذا القسم الحالي غير موجود ضمن الأقسام الجديدة، خلّه أول قسم
+          if (!arr.some((x) => x.slug === category)) {
+            setCategory(arr[0].slug);
+          }
+        } else {
+          // إذا ما لقى أقسام، يرجع الافتراضي
+          setCats(DEFAULT_CATEGORIES);
+          if (!DEFAULT_CATEGORIES.some((x) => x.slug === category)) {
+            setCategory(DEFAULT_CATEGORIES[0].slug);
+          }
         }
-      });
+
+        setCatsLoading(false);
+      },
+      (err) => {
+        console.error('Failed to load categories:', err);
+        setCats(DEFAULT_CATEGORIES);
+        setCatsLoading(false);
+      }
+    );
 
     return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onPick = (c, lbl) => {
@@ -103,7 +137,6 @@ export default function AddPage() {
 
     setBusy(true);
     try {
-      // نستخدم نفس أسعار العرض/الواجهة
       const priceYER = toYER(price, currency, rates);
 
       const imageUrls = await uploadImages();
@@ -122,7 +155,6 @@ export default function AddPage() {
         phone: phone.trim() || null,
         isWhatsapp: !!isWhatsapp,
 
-        // نخزن السعر باليمني + السعر الأصلي والعملة
         priceYER: Number(priceYER),
         originalPrice: Number(price),
         originalCurrency: currency,
@@ -181,7 +213,6 @@ export default function AddPage() {
           </div>
         ) : null}
 
-        {/* ✅ إصلاح: Grid responsive بدل 1fr 1fr الثابت */}
         <div
           className="grid"
           style={{
@@ -224,6 +255,7 @@ export default function AddPage() {
                   placeholder="مثال: صنعاء"
                 />
               </div>
+
               <div style={{ flex: 1 }}>
                 <label className="muted">القسم</label>
                 <select
@@ -231,12 +263,22 @@ export default function AddPage() {
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                 >
+                  <option value="" disabled>
+                    {catsLoading ? 'جاري تحميل الأقسام...' : 'اختر القسم'}
+                  </option>
+
                   {cats.map((c) => (
                     <option key={c.slug} value={c.slug}>
                       {c.name}
                     </option>
                   ))}
                 </select>
+
+                {!catsLoading && cats.length === 0 ? (
+                  <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                    لا توجد أقسام في categories
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -340,7 +382,6 @@ export default function AddPage() {
             </button>
           </div>
 
-          {/* ✅ إصلاح: نعطي الخريطة ارتفاع واضح عشان ما تنضغط */}
           <div className="card" style={{ padding: 12 }}>
             <div style={{ fontWeight: 900, marginBottom: 10 }}>
               اختر موقع الإعلان
