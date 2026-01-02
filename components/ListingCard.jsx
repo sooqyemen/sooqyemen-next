@@ -5,25 +5,40 @@ import Link from 'next/link';
 import Price from '@/components/Price';
 
 export default function ListingCard({ listing }) {
-  const img =
-    (listing.images && listing.images[0]) ||
-    listing.image ||
-    null;
+  const img = (listing.images && listing.images[0]) || listing.image || null;
 
   // المدينة (إن وجدت)
   const city = listing.city || listing.region || '';
 
   // وصف مختصر
   const rawDesc = String(listing.description || '');
-  const shortDesc =
-    rawDesc.length > 80 ? rawDesc.slice(0, 80) + '…' : rawDesc;
+  const shortDesc = rawDesc.length > 80 ? rawDesc.slice(0, 80) + '…' : rawDesc;
 
-  // اختيار أفضل قيمة للسعر
-  const priceYER =
+  /**
+   * ✅ السعر المعتمد عندنا: YER فقط
+   * - نعرض priceYER إن وجد
+   * - أو currentBidYER إن كان مزاد
+   * - fallback أخير: نحاول نقرأ السعر من الحقول القديمة (originalPrice/originalCurrency) إن كانت موجودة
+   * - ممنوع نستخدم listing.price لأنه قد يكون SAR/USD ويخرب التحويل
+   */
+  let priceYER =
     listing.priceYER ??
     listing.currentBidYER ??
-    listing.price ??
     0;
+
+  // Fallback للإعلانات القديمة (إن وجدت)
+  if (!priceYER && listing.originalPrice) {
+    const p = Number(listing.originalPrice) || 0;
+    const cur = String(listing.originalCurrency || 'YER').toUpperCase();
+
+    // نفس أسعارك الحالية
+    const SAR_TO_YER = 425;
+    const USD_TO_YER = 1632;
+
+    if (cur === 'SAR') priceYER = p * SAR_TO_YER;
+    else if (cur === 'USD') priceYER = p * USD_TO_YER;
+    else priceYER = p; // YER
+  }
 
   return (
     <Link
@@ -89,14 +104,12 @@ export default function ListingCard({ listing }) {
           }}
         >
           <span className="badge">
-            {listing.categoryName ||
-              listing.category ||
-              'قسم'}
+            {listing.categoryName || listing.category || 'قسم'}
           </span>
 
           <div style={{ fontWeight: 700 }}>
             <Price
-              priceYER={priceYER}
+              priceYER={Number(priceYER) || 0}
               originalPrice={listing.originalPrice}
               originalCurrency={listing.originalCurrency || 'YER'}
             />
