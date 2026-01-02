@@ -53,8 +53,7 @@ export default function ListingDetails({ params }) {
   const coords = useMemo(() => {
     if (!listing) return null;
     if (Array.isArray(listing.coords) && listing.coords.length === 2) return listing.coords;
-    if (listing?.coords?.lat && listing?.coords?.lng)
-      return [listing.coords.lat, listing.coords.lng];
+    if (listing?.coords?.lat && listing?.coords?.lng) return [listing.coords.lat, listing.coords.lng];
     return null;
   }, [listing]);
 
@@ -83,14 +82,10 @@ export default function ListingDetails({ params }) {
   const img = (listing.images && listing.images[0]) || listing.image || null;
   const sellerUid = listing.userId;
 
-  const isAdmin =
-    !!user?.email && String(user.email).toLowerCase() === ADMIN_EMAIL;
+  const isAdmin = !!user?.email && String(user.email).toLowerCase() === ADMIN_EMAIL;
   const isOwner = !!user?.uid && !!sellerUid && user.uid === sellerUid;
 
-  const chatId =
-    user && sellerUid
-      ? makeChatId(user.uid, sellerUid, listing.id)
-      : null;
+  const chatId = user && sellerUid ? makeChatId(user.uid, sellerUid, listing.id) : null;
 
   // 🚫 إخفاء الإعلان عن الزوار إذا كان مخفي ولم يكن المشاهد أدمن أو صاحب الإعلان
   if (listing.hidden && !isAdmin && !isOwner) {
@@ -138,18 +133,23 @@ export default function ListingDetails({ params }) {
           </div>
         ) : null}
 
-        <div
-          className="grid"
-          style={{ gridTemplateColumns: '1.4fr 1fr', marginTop: 12 }}
-        >
+        {/* ✅ تخطيط جديد: على الديسكتوب عمودين، وعلى الجوال عمود واحد (تفاصيل ثم خريطة) */}
+        <div className="listingLayout" style={{ marginTop: 12 }}>
+          {/* التفاصيل */}
           <div className="card">
             {img ? (
               <img
                 src={img}
                 alt={listing.title || 'img'}
-                style={{ height: 320, width: '100%', objectFit: 'cover' }}
+                style={{
+                  height: 320,
+                  width: '100%',
+                  objectFit: 'cover',
+                  borderRadius: 14,
+                }}
               />
             ) : null}
+
             <div
               style={{
                 marginTop: 10,
@@ -175,41 +175,37 @@ export default function ListingDetails({ params }) {
                 </span>
               ) : null}
             </div>
+
             <div className="muted" style={{ marginTop: 4 }}>
               {listing.city || ''}
             </div>
+
             <div style={{ marginTop: 10 }}>
-              <Price
-                priceYER={listing.currentBidYER || listing.priceYER || 0}
-              />
+              <Price priceYER={listing.currentBidYER || listing.priceYER || 0} />
             </div>
 
             <hr />
+
             <div style={{ fontWeight: 800, marginBottom: 6 }}>الوصف</div>
-            <div
-              style={{
-                whiteSpace: 'pre-wrap',
-                lineHeight: 1.7,
-              }}
-            >
+            <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
               {listing.description || '—'}
             </div>
 
             <hr />
+
             <div className="row">
               {listing.phone ? (
                 <a className="btn btnPrimary" href={`tel:${listing.phone}`}>
                   اتصال
                 </a>
               ) : null}
+
               {listing.phone && listing.isWhatsapp ? (
                 <a
                   className="btn"
-                  href={`https://wa.me/${String(listing.phone).replace(
-                    /\D/g,
-                    ''
-                  )}`}
+                  href={`https://wa.me/${String(listing.phone).replace(/\D/g, '')}`}
                   target="_blank"
+                  rel="noreferrer"
                 >
                   واتساب
                 </a>
@@ -218,9 +214,7 @@ export default function ListingDetails({ params }) {
               {chatId ? (
                 <Link
                   className="btn"
-                  href={`/chat/${encodeURIComponent(
-                    chatId
-                  )}?listingId=${encodeURIComponent(
+                  href={`/chat/${encodeURIComponent(chatId)}?listingId=${encodeURIComponent(
                     listing.id
                   )}&other=${encodeURIComponent(listing.userEmail || '')}`}
                 >
@@ -234,14 +228,33 @@ export default function ListingDetails({ params }) {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gap: 12 }}>
+          {/* العمود الجانبي: مزاد + خريطة */}
+          <div className="sideCol" style={{ display: 'grid', gap: 12 }}>
             <AuctionBox listingId={listing.id} listing={listing} />
-            <ListingMap
-              coords={coords}
-              label={listing.locationLabel || listing.city || ''}
-            />
+            <ListingMap coords={coords} label={listing.locationLabel || listing.city || ''} />
           </div>
         </div>
+
+        {/* ✅ CSS داخل الصفحة لضمان الجوال */}
+        <style jsx>{`
+          .listingLayout {
+            display: grid;
+            gap: 12px;
+            grid-template-columns: 1.4fr 1fr;
+            align-items: start;
+          }
+
+          @media (max-width: 768px) {
+            .listingLayout {
+              grid-template-columns: 1fr;
+            }
+
+            /* نخلي المزاد والخريطة تحت التفاصيل */
+            .sideCol {
+              order: 2;
+            }
+          }
+        `}</style>
       </div>
     </>
   );
