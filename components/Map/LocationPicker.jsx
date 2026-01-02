@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 
 import 'leaflet/dist/leaflet.css';
 
-// إصلاح أيقونة Marker في Next + Leaflet
+// Fix marker icons
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl:
@@ -15,13 +15,11 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-// حدود اليمن (تقريبية ممتازة لمنع خروج الخريطة)
 const YEMEN_BOUNDS = [
-  [12.0, 41.0], // جنوب غرب
-  [19.5, 54.7], // شمال شرق
+  [12.0, 41.0],
+  [19.5, 54.7],
 ];
-
-const DEFAULT_CENTER = [15.3694, 44.1910]; // صنعاء
+const DEFAULT_CENTER = [15.3694, 44.1910];
 
 function ClickPicker({ value, onChange }) {
   useMapEvents({
@@ -29,7 +27,6 @@ function ClickPicker({ value, onChange }) {
       const lat = e.latlng.lat;
       const lng = e.latlng.lng;
 
-      // تأكد داخل حدود اليمن
       const inYemen =
         lat >= YEMEN_BOUNDS[0][0] &&
         lat <= YEMEN_BOUNDS[1][0] &&
@@ -49,50 +46,82 @@ function ClickPicker({ value, onChange }) {
 }
 
 export default function LocationPicker({ value, onChange }) {
+  const wrapRef = useRef(null);
+  const [map, setMap] = useState(null);
+
   const center = useMemo(() => {
-    // value لازم تكون [lat, lng]
     if (Array.isArray(value) && value.length === 2) return value;
     return DEFAULT_CENTER;
   }, [value]);
 
-  // نضيف class للـ body عشان CSS حق leaflet يشتغل
+  // أهم شيء: تحديث قياس الخريطة بعد ما الكونتينر يستقر
   useEffect(() => {
-    document.body.classList.add('leaflet-body');
-    return () => document.body.classList.remove('leaflet-body');
-  }, []);
+    if (!map) return;
+
+    const fix = () => {
+      // مرات تحتاج مرتين بسبب Grid + Fonts
+      map.invalidateSize();
+      setTimeout(() => map.invalidateSize(), 150);
+      setTimeout(() => map.invalidateSize(), 500);
+    };
+
+    fix();
+
+    // مراقبة تغيّر حجم العنصر نفسه
+    let ro;
+    if (wrapRef.current && 'ResizeObserver' in window) {
+      ro = new ResizeObserver(() => fix());
+      ro.observe(wrapRef.current);
+    }
+
+    // كمان على resize
+    window.addEventListener('resize', fix);
+
+    return () => {
+      window.removeEventListener('resize', fix);
+      if (ro) ro.disconnect();
+    };
+  }, [map]);
 
   return (
     <div className="card" style={{ minHeight: 520 }}>
       <div style={{ fontWeight: 900, marginBottom: 8 }}>
-        📍 حدّد موقع الإعلان (داخل اليمن)
+        📍 اختر موقع الإعلان
       </div>
       <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-        اضغط على الخريطة لتحديد الموقع. (لا نعتمد على “موقعي”)
+        اضغط على الخريطة لتحديد الموقع (داخل اليمن)
       </div>
 
-      <div style={{ height: 440, borderRadius: 14, overflow: 'hidden' }}>
+      <div
+        ref={wrapRef}
+        style={{
+          height: 440,
+          borderRadius: 14,
+          overflow: 'hidden',
+          width: '100%',
+        }}
+      >
         <MapContainer
           center={center}
           zoom={7}
           minZoom={6}
           maxZoom={18}
           style={{ height: '100%', width: '100%' }}
-          // قفل الحدود على اليمن
           maxBounds={YEMEN_BOUNDS}
           maxBoundsViscosity={1.0}
+          whenCreated={setMap}
         >
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution="&copy; OpenStreetMap contributors"
           />
-
           <ClickPicker value={value} onChange={onChange} />
         </MapContainer>
       </div>
 
       {value ? (
         <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-          ✅ الموقع المحدد: {value[0].toFixed(5)} , {value[1].toFixed(5)}
+          ✅ {value[0].toFixed(5)} , {value[1].toFixed(5)}
         </div>
       ) : (
         <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
