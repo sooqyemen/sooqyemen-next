@@ -2,88 +2,15 @@
 
 import Link from 'next/link';
 import { useAuth } from '@/lib/useAuth';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 // إيميلات المدراء
 const RAW_ENV_ADMIN = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-const STATIC_ADMINS = [
-  'mansouralbarout@gmail.com',
-  'aboramez965@gmail.com',
-];
+const STATIC_ADMINS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
 
 const ADMIN_EMAILS = [RAW_ENV_ADMIN, ...STATIC_ADMINS]
   .filter(Boolean)
   .map((e) => String(e).toLowerCase());
-
-// لوجو سوق اليمن (مطابق لفكرة الصورة)
-const YemenMarketLogo = ({ size = 40 }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 512 512"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    {/* الخلفية الزرقاء بزوايا دائرية */}
-    <rect
-      x="16"
-      y="16"
-      width="480"
-      height="480"
-      rx="120"
-      ry="120"
-      fill="#0F4C8A"
-    />
-
-    {/* جسم الحقيبة الأبيض */}
-    <rect
-      x="120"
-      y="160"
-      width="272"
-      height="260"
-      rx="80"
-      ry="80"
-      fill="#FFFFFF"
-    />
-
-    {/* يد الحقيبة (القوس الذهبي) */}
-    <path
-      d="M176 190 C176 140 216 104 256 104 C296 104 336 140 336 190"
-      fill="none"
-      stroke="#E5B322"
-      strokeWidth="32"
-      strokeLinecap="round"
-    />
-
-    {/* أشرطة العلم اليمني */}
-    <rect x="150" y="200" width="212" height="40" fill="#CE1126" />
-    <rect x="150" y="240" width="212" height="36" fill="#FFFFFF" />
-    <rect x="150" y="276" width="212" height="40" fill="#000000" />
-
-    {/* حرف ي */}
-    <path
-      d="
-        M238 356
-        C238 332 252 320 272 320
-        C292 320 306 332 306 356
-        C306 388 284 408 272 408
-        C260 408 238 388 238 356
-        Z
-      "
-      fill="#0F4C8A"
-    />
-    <path
-      d="M252 332 C252 312 262 300 272 300 C282 300 292 312 292 332"
-      stroke="#0F4C8A"
-      strokeWidth="18"
-      strokeLinecap="round"
-      fill="none"
-    />
-
-    {/* نقطتا الياء */}
-    <circle cx="256" cy="430" r="10" fill="#0F4C8A" />
-    <circle cx="284" cy="430" r="10" fill="#0F4C8A" />
-  </svg>
-);
 
 export default function Header() {
   const { user, loading, logout } = useAuth();
@@ -94,17 +21,53 @@ export default function Header() {
   const email = user?.email ? String(user.email).toLowerCase() : null;
   const isAdmin = !!email && ADMIN_EMAILS.includes(email);
 
+  // ظل الهيدر عند التمرير
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
+    handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // ✅ قفل سكرول الصفحة + ESC للإغلاق
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const onKey = (e) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
+
+  const handleLogout = async () => {
+    if (!logout) {
+      setMenuOpen(false);
+      return;
+    }
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      setMenuOpen(false);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   if (loading) {
     return (
       <header className="header-shell">
         <div className="container header-row">
-          <div className="skeleton" style={{ width: 140, height: 30 }} />
+          <div className="skeleton" style={{ width: 160, height: 32 }} />
         </div>
         <style jsx>{`
           .header-shell {
@@ -112,6 +75,7 @@ export default function Header() {
             top: 0;
             z-index: 1000;
             background: #ffffff;
+            border-bottom: 1px solid #eef2f7;
           }
           .header-row {
             display: flex;
@@ -142,19 +106,6 @@ export default function Header() {
     );
   }
 
-  const handleLogout = async () => {
-    if (!logout) return;
-    setIsLoggingOut(true);
-    try {
-      await logout();
-      setMenuOpen(false);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsLoggingOut(false);
-    }
-  };
-
   return (
     <>
       <header
@@ -166,11 +117,12 @@ export default function Header() {
           backgroundColor: scrolled ? 'rgba(255,255,255,0.97)' : '#ffffff',
           backdropFilter: scrolled ? 'blur(10px)' : 'none',
           boxShadow: scrolled ? '0 2px 8px rgba(15,23,42,0.08)' : 'none',
+          borderBottom: scrolled ? 'none' : '1px solid #eef2f7',
           transition: 'all 0.25s ease',
         }}
       >
         <div className="container header-row">
-          {/* زر القائمة الجانبية */}
+          {/* زر القائمة */}
           <button
             className="icon-btn"
             onClick={() => setMenuOpen(true)}
@@ -179,14 +131,9 @@ export default function Header() {
             <span className="icon-lines" />
           </button>
 
-          {/* اللوجو في المنتصف */}
-          <div className="logo-wrap">
-            <Link href="/" aria-label="سوق اليمن">
-              <YemenMarketLogo size={40} />
-            </Link>
-          </div>
+          {/* ✅ بدون شعار: نخلي زر إضافة إعلان يتمدد */}
+          <div className="center-spacer" />
 
-          {/* زر إضافة إعلان على اليسار */}
           <Link href="/add" className="btn primary add-btn">
             + أضف إعلاناً
           </Link>
@@ -197,7 +144,7 @@ export default function Header() {
       {menuOpen && (
         <>
           <div className="menu-backdrop" onClick={() => setMenuOpen(false)} />
-          <aside className="side-menu">
+          <aside className="side-menu" role="dialog" aria-modal="true">
             <div className="side-header">
               <div>
                 <div className="side-title">القائمة</div>
@@ -286,6 +233,10 @@ export default function Header() {
           padding: 8px 0;
         }
 
+        .center-spacer {
+          flex: 1;
+        }
+
         .icon-btn {
           border: none;
           background: #f1f5f9;
@@ -320,12 +271,6 @@ export default function Header() {
         }
         .icon-lines::after {
           top: 5px;
-        }
-
-        .logo-wrap {
-          display: flex;
-          justify-content: center;
-          flex: 1;
         }
 
         .add-btn {
