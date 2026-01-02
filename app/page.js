@@ -2,11 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import Header from '@/components/Header';
 import Price from '@/components/Price';
 import { db } from '@/lib/firebaseClient';
 
-// ⚙️ إعداد الأقسام (تأكد أن نفس القيم تستخدم في نموذج إضافة الإعلان)
+const HomeListingsMap = dynamic(() => import('@/components/Map/HomeListingsMap'), { ssr: false });
+
+// ⚙️ إعداد الأقسام
 const CATEGORY_CONFIG = [
   { key: 'all', label: 'الكل', icon: '📋' },
 
@@ -14,12 +17,12 @@ const CATEGORY_CONFIG = [
   { key: 'cars', label: 'سيارات', icon: '🚗' },
   { key: 'real_estate', label: 'عقارات', icon: '🏡' },
   { key: 'phones', label: 'جوالات', icon: '📱' },
-  { key: 'electronics', label: 'إلكترونيات', icon: '💻' },          // إلكترونيات عامة
-  { key: 'motorcycles', label: 'دراجات نارية', icon: '🏍️' },      // دراجات نارية
-  { key: 'heavy_equipment', label: 'معدات ثقيلة', icon: '🚜' },    // معدات ثقيلة
+  { key: 'electronics', label: 'إلكترونيات', icon: '💻' },
+  { key: 'motorcycles', label: 'دراجات نارية', icon: '🏍️' },
+  { key: 'heavy_equipment', label: 'معدات ثقيلة', icon: '🚜' },
   { key: 'solar', label: 'طاقة شمسية', icon: '☀️' },
-  { key: 'networks', label: 'نت و شبكات', icon: '📡' },           // نت وشبكات
-  { key: 'maintenance', label: 'صيانة', icon: '🛠️' },             // صيانة
+  { key: 'networks', label: 'نت و شبكات', icon: '📡' },
+  { key: 'maintenance', label: 'صيانة', icon: '🛠️' },
 
   // ثانوية
   { key: 'furniture', label: 'أثاث', icon: '🛋️' },
@@ -63,14 +66,7 @@ function HomeListingCard({ listing }) {
           />
         )}
 
-        <div
-          style={{
-            padding: 12,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 4,
-          }}
-        >
+        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div
             style={{
               fontWeight: 700,
@@ -84,15 +80,7 @@ function HomeListingCard({ listing }) {
             {listing.title || 'بدون عنوان'}
           </div>
 
-          <div
-            className="muted"
-            style={{
-              fontSize: 12,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-            }}
-          >
+          <div className="muted" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
             <span>📍</span>
             <span>{listing.city || listing.locationLabel || 'غير محدد'}</span>
           </div>
@@ -101,10 +89,7 @@ function HomeListingCard({ listing }) {
             <Price priceYER={listing.currentBidYER || listing.priceYER || 0} />
           </div>
 
-          <div
-            className="muted"
-            style={{ fontSize: 11, marginTop: 4, display: 'flex', gap: 8 }}
-          >
+          <div className="muted" style={{ fontSize: 11, marginTop: 4, display: 'flex', gap: 8 }}>
             <span>👁️ {Number(listing.views || 0)}</span>
             {listing.category && <span>• {listing.category}</span>}
           </div>
@@ -121,7 +106,10 @@ export default function HomePage() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
-  // 📡 جلب الإعلانات من Firestore
+  // ✅ الجديد: وضع العرض
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'map'
+
+  // 📡 جلب الإعلانات
   useEffect(() => {
     try {
       const unsubscribe = db
@@ -152,7 +140,7 @@ export default function HomePage() {
     }
   }, []);
 
-  // 🔍 فلترة (بحث + قسم)
+  // 🔍 فلترة
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
 
@@ -160,19 +148,13 @@ export default function HomePage() {
       const cat = (l.category || '').toLowerCase();
 
       if (selectedCategory !== 'all' && cat !== selectedCategory) return false;
-
       if (!q) return true;
 
       const title = (l.title || '').toLowerCase();
       const city = (l.city || '').toLowerCase();
       const loc = (l.locationLabel || '').toLowerCase();
 
-      return (
-        title.includes(q) ||
-        city.includes(q) ||
-        loc.includes(q) ||
-        cat.includes(q)
-      );
+      return title.includes(q) || city.includes(q) || loc.includes(q) || cat.includes(q);
     });
   }, [search, listings, selectedCategory]);
 
@@ -180,7 +162,7 @@ export default function HomePage() {
     <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
       <Header />
 
-      {/* هيرو مناسب للجوال */}
+      {/* هيرو */}
       <section className="home-hero">
         <div className="container">
           <div className="home-hero-inner">
@@ -190,7 +172,6 @@ export default function HomePage() {
               وظائف، صيانة، معدات ثقيلة وأكثر.
             </p>
 
-            {/* شريط البحث */}
             <div className="home-search-wrapper">
               <div className="home-search-bar">
                 <input
@@ -207,9 +188,25 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* محتوى الصفحة */}
+      {/* المحتوى */}
       <div className="container" style={{ padding: '18px 0 40px' }}>
-        {/* شريط الأقسام أفقي (سلايدر) */}
+        {/* ✅ صف: زر الخريطة */}
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div className="muted" style={{ fontSize: 12 }}>
+            عدد الإعلانات: {filtered.length}
+          </div>
+
+          <button
+            className={'btn ' + (viewMode === 'map' ? 'btnPrimary' : '')}
+            onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
+            type="button"
+            style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}
+          >
+            🗺️ {viewMode === 'map' ? 'عرض كقائمة' : 'عرض على الخريطة'}
+          </button>
+        </div>
+
+        {/* الأقسام */}
         <div className="category-strip">
           {CATEGORY_CONFIG.map((cat) => {
             const active = selectedCategory === cat.key;
@@ -219,12 +216,8 @@ export default function HomePage() {
                 onClick={() => setSelectedCategory(cat.key)}
                 className="category-pill"
                 style={{
-                  borderColor: active
-                    ? 'rgba(79,70,229,0.5)'
-                    : 'rgba(226,232,240,1)',
-                  backgroundColor: active
-                    ? 'rgba(79,70,229,0.08)'
-                    : '#ffffff',
+                  borderColor: active ? 'rgba(79,70,229,0.5)' : 'rgba(226,232,240,1)',
+                  backgroundColor: active ? 'rgba(79,70,229,0.08)' : '#ffffff',
                   color: active ? '#4f46e5' : '#4b5563',
                   fontWeight: active ? 600 : 500,
                 }}
@@ -236,7 +229,7 @@ export default function HomePage() {
           })}
         </div>
 
-        {/* حالات التحميل / الأخطاء */}
+        {/* حالات */}
         {loading && (
           <div className="card" style={{ textAlign: 'center', marginTop: 12 }}>
             جاري تحميل الإعلانات...
@@ -244,14 +237,7 @@ export default function HomePage() {
         )}
 
         {err && !loading && (
-          <div
-            className="card"
-            style={{
-              textAlign: 'center',
-              color: '#b91c1c',
-              marginTop: 12,
-            }}
-          >
+          <div className="card" style={{ textAlign: 'center', color: '#b91c1c', marginTop: 12 }}>
             {err}
           </div>
         )}
@@ -262,24 +248,20 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* شبكة الإعلانات */}
-        {!loading && !err && filtered.length > 0 && (
+        {/* ✅ الجديد: لو وضع الخريطة */}
+        {!loading && !err && filtered.length > 0 && viewMode === 'map' ? (
+          <div style={{ marginTop: 12 }}>
+            <HomeListingsMap listings={filtered} />
+          </div>
+        ) : null}
+
+        {/* ✅ وضع القائمة */}
+        {!loading && !err && filtered.length > 0 && viewMode === 'list' ? (
           <>
-            <div
-              className="row"
-              style={{
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 12,
-                marginTop: 10,
-              }}
-            >
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, marginTop: 10 }}>
               <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>
                 أحدث الإعلانات
               </h2>
-              <span className="muted" style={{ fontSize: 12 }}>
-                عدد الإعلانات: {filtered.length}
-              </span>
             </div>
 
             <div className="home-grid">
@@ -288,10 +270,9 @@ export default function HomePage() {
               ))}
             </div>
           </>
-        )}
+        ) : null}
       </div>
 
-      {/* ستايل إضافي للجوال */}
       <style jsx>{`
         .home-hero {
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -338,11 +319,7 @@ export default function HomePage() {
         .home-search-button {
           border-radius: 999px;
           border: none;
-          background: linear-gradient(
-            135deg,
-            #667eea 0%,
-            #764ba2 100%
-          );
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           color: white;
           font-weight: 600;
           padding: 10px 20px;
@@ -395,17 +372,6 @@ export default function HomePage() {
           .home-hero-subtitle {
             font-size: 14px;
             margin-bottom: 14px;
-          }
-          .home-search-bar {
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
-          }
-          .home-search-input {
-            font-size: 13px;
-            padding: 8px 12px;
-          }
-          .home-search-button {
-            padding: 8px 16px;
-            font-size: 13px;
           }
           .home-grid {
             grid-template-columns: 1fr;
