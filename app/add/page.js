@@ -1,12 +1,12 @@
 // app/add/page.js
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Header from '@/components/Header';
-import { auth, db, firebase, storage } from '@/lib/firebaseClient';
+import { db, firebase, storage } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
-import { toYER, useRates } from '@/lib/rates';   // 👈 الهـوك والدالة الجديدة
+import { toYER, useRates } from '@/lib/rates';
 import Link from 'next/link';
 
 const LocationPicker = dynamic(
@@ -24,9 +24,73 @@ const DEFAULT_CATEGORIES = [
   { slug: 'yemeni_products', name: 'منتجات يمنية' },
 ];
 
+// ✅ تحويل آمن لأي رقم مكتوب (يدعم الأرقام العربية والفواصل)
+function normalizeNumber(input) {
+  if (input == null) return 0;
+
+  let s = String(input).trim();
+
+  // أرقام عربية -> إنجليزية
+  const arabic = '٠١٢٣٤٥٦٧٨٩';
+  const eastern = '۰۱۲۳۴۵۶۷۸۹';
+  s = s
+    .split('')
+    .map((ch) => {
+      const a = arabic.indexOf(ch);
+      if (a !== -1) return String(a);
+      const e = eastern.indexOf(ch);
+      if (e !== -1) return String(e);
+      return ch;
+    })
+    .join('');
+
+  // حذف أي شيء غير رقم/نقطة/فاصلة
+  s = s.replace(/[^\d.,-]/g, '');
+
+  // إذا فيه فواصل آلاف، نحذفها
+  // مثال: 1,234.50 أو 1.234,50
+  // نقرر آخر فاصل عشري ونحول للباقي
+  const lastDot = s.lastIndexOf('.');
+  const lastComma = s.lastIndexOf(',');
+
+  if (lastComma > lastDot) {
+    // الفاصلة هي العشري
+    s = s.replace(/\./g, ''); // حذف نقاط الآلاف
+    s = s.replace(',', '.');  // تحويل العشري لنقطة
+    s = s.replace(/,/g, '');  // أي فواصل أخرى
+  } else {
+    // النقطة هي العشري
+    s = s.replace(/,/g, '');  // حذف فواصل الآلاف
+  }
+
+  const n = Number(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
+// ✅ تصحيح ترتيب الإحداثيات إذا كانت مقلوبة (lng/lat بدلاً من lat/lng)
+function normalizeCoords(c) {
+  if (!Array.isArray(c) || c.length < 2) return null;
+
+  let a = Number(c[0]);
+  let b = Number(c[1]);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+
+  // المتوقع: lat بين -90 و 90، lng بين -180 و 180
+  const looksLikeLatLng = Math.abs(a) <= 90 && Math.abs(b) <= 180;
+  const looksLikeLngLat = Math.abs(a) <= 180 && Math.abs(b) <= 90;
+
+  // إذا واضح إنها [lng,lat] نقلبها
+  if (!looksLikeLatLng && looksLikeLngLat) {
+    return [b, a]; // [lat,lng]
+  }
+
+  // إذا الاثنين ممكنين (نادر)، نخليها كما هي
+  return [a, b];
+}
+
 export default function AddPage() {
   const { user, loading } = useAuth();
-  const rates = useRates(); // 👈 نقرأ الأسعار مرّة واحدة هنا
+  const rates = useRates();
 
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
@@ -54,16 +118,16 @@ export default function AddPage() {
         const arr = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
           .filter((c) => c.active !== false);
-        if (arr.length) {
-          setCats(arr.map((c) => ({ slug: c.slug, name: c.name })));
-        }
+        if (arr.length) setCats(arr.map((c) => ({ slug: c.slug, name: c.name })));
       });
 
     return () => unsub();
   }, []);
 
+  // ✅ إذا LocationPicker يرجّع إحداثيات مقلوبة نصلحها هنا فوراً
   const onPick = (c, lbl) => {
-    setCoords(c);
+    const fixed = normalizeCoords(c);
+    setCoords(fixed);
     setLocationLabel(lbl || '');
   };
 
@@ -71,10 +135,7 @@ export default function AddPage() {
     if (!images.length) return [];
     const out = [];
     for (const file of images) {
-      const safeName = String(file.name || 'img').replace(
-        /[^a-zA-Z0-9._-]/g,
-        '_'
-      );
+      const safeName = String(file.name || 'img').replace(/[^a-zA-Z0-9._-]/g, '_');
       const path = `listings/${user.uid}/${Date.now()}_${safeName}`;
       const ref = storage.ref().child(path);
       await ref.put(file);
@@ -85,267 +146,31 @@ export default function AddPage() {
   };
 
   const submit = async () => {
-    if (!user) {
-      alert('سجل دخول أولاً');
-      return;
+    if (!user) return alert('سجل دخول أولاً');
+    if (!title.trim()) return alert('اكتب عنوان');
+    if (!price) return alert('اكتب سعر');
+
+    // ✅ رقم السعر بشكل صحيح
+    const numericPrice = normalizeNumber(price);
+    if (!numericPrice || numericPrice <= 0) {
+      return alert('السعر غير صحيح. اكتب رقم مثل: 200 أو 1500');
     }
-    if (!title.trim()) {
-      alert('اكتب عنوان');
-      return;
-    }
-    if (!price) {
-      alert('اكتب سعر');
-      return;
-    }
+
+    // ✅ لازم تكون الخريطة محددة (اختياري - إذا تبغاها إلزامية قلّي)
+    // لو تبغى إلزامية: فعّل هذا
+    // if (!coords) return alert('اختر موقع الإعلان من الخريطة');
 
     setBusy(true);
     try {
-      // 👈 هنا نستخدم نفس الأسعار التي تستخدمها واجهة العرض
-      const priceYER = toYER(price, currency, rates);
+      // ✅ نفس أسعار العرض
+      const priceYER = toYER(numericPrice, currency, rates);
 
       const imageUrls = await uploadImages();
 
       const endAt = auctionEnabled
         ? firebase.firestore.Timestamp.fromMillis(
-            Date.now() +
-              Math.max(1, Number(auctionMinutes || 60)) * 60 * 1000
+            Date.now() + Math.max(1, Number(auctionMinutes || 60)) * 60 * 1000
           )
         : null;
 
       await db.collection('listings').add({
-        title: title.trim(),
-        description: desc.trim(),
-        city: city.trim(),
-        category,
-        phone: phone.trim() || null,
-        isWhatsapp: !!isWhatsapp,
-
-        // 👇 نخزن السعر باليمني + السعر الأصلي والعملة
-        priceYER: Number(priceYER),
-        originalPrice: Number(price),
-        originalCurrency: currency,
-        currencyBase: 'YER',
-
-        coords: coords ? [coords[0], coords[1]] : null,
-        locationLabel: locationLabel || null,
-
-        images: imageUrls,
-
-        userId: user.uid,
-        userEmail: user.email || null,
-        userName: user.displayName || null,
-
-        views: 0,
-        likes: 0,
-        isActive: true,
-
-        auctionEnabled: !!auctionEnabled,
-        auctionEndAt: endAt,
-        currentBidYER: auctionEnabled ? Number(priceYER) : null,
-
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      });
-
-      alert('تم نشر الإعلان');
-      window.location.href = '/';
-    } catch (e) {
-      console.error(e);
-      alert('حصل خطأ أثناء النشر');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <>
-      <Header />
-      <div className="container">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <Link className="btn" href="/">
-            ← رجوع
-          </Link>
-          <span className="badge">إضافة إعلان</span>
-        </div>
-
-        {loading ? (
-          <div className="card muted" style={{ marginTop: 12 }}>
-            جاري التحميل...
-          </div>
-        ) : null}
-
-        {!loading && !user ? (
-          <div className="card" style={{ marginTop: 12 }}>
-            سجل دخول أولاً (زر Google في الأعلى)
-          </div>
-        ) : null}
-
-        <div
-          className="grid"
-          style={{ gridTemplateColumns: '1fr 1fr', marginTop: 12 }}
-        >
-          <div className="card">
-            <div style={{ fontWeight: 900, marginBottom: 10 }}>
-              بيانات الإعلان
-            </div>
-
-            <label className="muted">العنوان</label>
-            <input
-              className="input"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-
-            <div style={{ height: 10 }} />
-
-            <label className="muted">الوصف</label>
-            <textarea
-              className="input"
-              value={desc}
-              onChange={(e) => setDesc(e.target.value)}
-              rows={5}
-              style={{ resize: 'vertical' }}
-            />
-
-            <div style={{ height: 10 }} />
-
-            <div className="row">
-              <div style={{ flex: 1 }}>
-                <label className="muted">المدينة</label>
-                <input
-                  className="input"
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  placeholder="مثال: صنعاء"
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label className="muted">القسم</label>
-                <select
-                  className="input"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                >
-                  {cats.map((c) => (
-                    <option key={c.slug} value={c.slug}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div style={{ height: 10 }} />
-
-            <div className="row">
-              <div style={{ flex: 1 }}>
-                <label className="muted">السعر</label>
-                <input
-                  className="input"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  inputMode="numeric"
-                />
-              </div>
-              <div style={{ width: 160 }}>
-                <label className="muted">العملة</label>
-                <select
-                  className="input"
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                >
-                  <option value="YER">YER</option>
-                  <option value="SAR">SAR</option>
-                  <option value="USD">USD</option>
-                </select>
-              </div>
-            </div>
-
-            <div style={{ height: 10 }} />
-
-            <div className="row">
-              <div style={{ flex: 1 }}>
-                <label className="muted">رقم الجوال</label>
-                <input
-                  className="input"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="مثال: 770000000"
-                />
-              </div>
-              <div style={{ width: 160 }}>
-                <label className="muted">واتساب</label>
-                <select
-                  className="input"
-                  value={isWhatsapp ? 'yes' : 'no'}
-                  onChange={(e) =>
-                    setIsWhatsapp(e.target.value === 'yes')
-                  }
-                >
-                  <option value="yes">نعم</option>
-                  <option value="no">لا</option>
-                </select>
-              </div>
-            </div>
-
-            <div style={{ height: 10 }} />
-
-            <label className="muted">صور (اختياري)</label>
-            <input
-              className="input"
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={(e) =>
-                setImages(Array.from(e.target.files || []))
-              }
-            />
-
-            <hr />
-
-            <div
-              className="row"
-              style={{ justifyContent: 'space-between' }}
-            >
-              <div>
-                <div style={{ fontWeight: 900 }}>🔨 تفعيل المزاد</div>
-                <div className="muted" style={{ fontSize: 12 }}>
-                  إذا فعلته، يبدأ المزاد من سعر الإعلان
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                checked={auctionEnabled}
-                onChange={(e) => setAuctionEnabled(e.target.checked)}
-              />
-            </div>
-
-            {auctionEnabled ? (
-              <div className="row" style={{ marginTop: 10 }}>
-                <input
-                  className="input"
-                  value={auctionMinutes}
-                  onChange={(e) =>
-                    setAuctionMinutes(e.target.value)
-                  }
-                  inputMode="numeric"
-                />
-                <span className="muted">مدة المزاد (دقائق)</span>
-              </div>
-            ) : null}
-
-            <div style={{ height: 12 }} />
-            <button
-              className="btn btnPrimary"
-              onClick={submit}
-              disabled={!user || busy}
-            >
-              {busy ? 'جاري النشر...' : 'نشر الإعلان'}
-            </button>
-          </div>
-
-          <LocationPicker value={coords} onChange={onPick} />
-        </div>
-      </div>
-    </>
-  );
-}
