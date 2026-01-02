@@ -21,9 +21,43 @@ const YEMEN_BOUNDS = [
 ];
 const DEFAULT_CENTER = [15.3694, 44.1910];
 
+// يجيب اسم المكان من OSM
+async function reverseName(lat, lng) {
+  try {
+    const url =
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=ar`;
+    const res = await fetch(url, {
+      headers: {
+        // مهم: بعض الأحيان Nominatim يحتاج User-Agent
+        'User-Agent': 'sooqyemen/1.0 (contact: sooqyemen.com)',
+      },
+    });
+    if (!res.ok) throw new Error('reverse failed');
+    const data = await res.json();
+
+    const a = data.address || {};
+    const best =
+      a.city ||
+      a.town ||
+      a.village ||
+      a.suburb ||
+      a.county ||
+      a.state ||
+      a.region ||
+      a.country ||
+      data.display_name;
+
+    return best || '';
+  } catch {
+    return '';
+  }
+}
+
 function ClickPicker({ value, onChange }) {
+  const [loadingName, setLoadingName] = useState(false);
+
   useMapEvents({
-    click(e) {
+    async click(e) {
       const lat = e.latlng.lat;
       const lng = e.latlng.lng;
 
@@ -38,9 +72,23 @@ function ClickPicker({ value, onChange }) {
         return;
       }
 
-      onChange([lat, lng], `Lat: ${lat.toFixed(5)} , Lng: ${lng.toFixed(5)}`);
+      setLoadingName(true);
+      const name = await reverseName(lat, lng);
+      setLoadingName(false);
+
+      // لو ما قدر يجيب اسم، نرجع للإحداثيات
+      const label =
+        name?.trim() ||
+        `Lat: ${lat.toFixed(5)} , Lng: ${lng.toFixed(5)}`;
+
+      onChange([lat, lng], label);
     },
   });
+
+  // تلميح صغير (اختياري)
+  useEffect(() => {
+    if (!loadingName) return;
+  }, [loadingName]);
 
   return value ? <Marker position={value} /> : null;
 }
@@ -54,12 +102,11 @@ export default function LocationPicker({ value, onChange }) {
     return DEFAULT_CENTER;
   }, [value]);
 
-  // أهم شيء: تحديث قياس الخريطة بعد ما الكونتينر يستقر
+  // إصلاح المقاسات (منع التقطيع)
   useEffect(() => {
     if (!map) return;
 
     const fix = () => {
-      // مرات تحتاج مرتين بسبب Grid + Fonts
       map.invalidateSize();
       setTimeout(() => map.invalidateSize(), 150);
       setTimeout(() => map.invalidateSize(), 500);
@@ -67,14 +114,12 @@ export default function LocationPicker({ value, onChange }) {
 
     fix();
 
-    // مراقبة تغيّر حجم العنصر نفسه
     let ro;
     if (wrapRef.current && 'ResizeObserver' in window) {
       ro = new ResizeObserver(() => fix());
       ro.observe(wrapRef.current);
     }
 
-    // كمان على resize
     window.addEventListener('resize', fix);
 
     return () => {
