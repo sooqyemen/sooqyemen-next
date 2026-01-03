@@ -4,15 +4,14 @@ import { useEffect, useState } from 'react';
 import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 
-function safeName(user) {
-  // 1) الاسم إن وجد
-  const dn = (user?.displayName || '').trim();
-  if (dn) return dn;
+function makeUserLabel(user) {
+  if (!user) return 'مستخدم';
+  const name = (user.displayName || '').trim();
+  if (name) return name;
 
-  // 2) رقم قصير ثابت من UID (بدون بريد)
-  const uid = String(user?.uid || '');
-  const short = uid ? uid.slice(-4) : '0000';
-  return `مستخدم ${short}`;
+  const uid = String(user.uid || '');
+  const tail = uid.slice(-4).toUpperCase();
+  return `مستخدم ${tail || ''}`.trim();
 }
 
 export default function CommentsBox({ listingId }) {
@@ -56,20 +55,15 @@ export default function CommentsBox({ listingId }) {
         .collection('comments')
         .add({
           text: text.trim(),
-
-          // ✅ نثبت المالك للـ Rules
-          ownerId: user.uid,
-
-          // ✅ اسم آمن للعرض (بدون بريد)
-          userName: safeName(user),
-
+          ownerId: user.uid,                 // ✅ مطابق للـ Rules
+          userLabel: makeUserLabel(user),    // ✅ بدون بريد
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         });
 
       setText('');
     } catch (e) {
-      console.error(e);
-      alert('فشل إضافة التعليق');
+      console.error('COMMENT_ERROR', e);
+      alert((e?.code || 'error') + ' - ' + (e?.message || 'فشل إضافة التعليق'));
     } finally {
       setLoading(false);
     }
@@ -121,7 +115,7 @@ export default function CommentsBox({ listingId }) {
             }}
           >
             <div style={{ fontWeight: 700, fontSize: 13 }}>
-              {c.userName || 'مستخدم'}
+              {c.userLabel || 'مستخدم'}
             </div>
             <div style={{ fontSize: 14, marginTop: 4 }}>
               {c.text}
