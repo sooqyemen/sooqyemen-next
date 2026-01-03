@@ -113,24 +113,27 @@ export default function Header() {
         }}
       >
         <div className="container header-row">
-          {/* زر القائمة (يمين) */}
-          <div className="header-left">
-            <button
-              className="icon-btn"
-              onClick={() => setMenuOpen(true)}
-              aria-label="القائمة"
-            >
-              <span className="icon-lines" />
-            </button>
-          </div>
+          {/* زر القائمة */}
+          <button
+            className="icon-btn menu-btn"
+            onClick={() => setMenuOpen(true)}
+            aria-label="القائمة"
+          >
+            <span className="icon-lines" />
+          </button>
 
-          {/* زر إضافة إعلان (يسار) */}
-          <div className="header-right">
-            <Link href="/add" className="btn primary add-btn">
-              <span className="add-text">+ أضف إعلاناً</span>
-              <span className="add-text-mobile">+ إعلان</span>
+          {/* الشعار (اللوجو) */}
+          <div className="logo-container">
+            <Link href="/" className="logo">
+              سوق اليمن
             </Link>
           </div>
+
+          {/* زر إضافة إعلان */}
+          <Link href="/add" className="btn primary add-btn">
+            <span className="add-text">+ أضف إعلاناً</span>
+            <span className="add-text-mobile">+ إعلان</span>
+          </Link>
         </div>
       </header>
 
@@ -154,6 +157,11 @@ export default function Header() {
             </div>
 
             <div className="side-section">
+              <Link href="/" className="side-item" onClick={() => setMenuOpen(false)}>
+                <span>🏠</span>
+                <span>الرئيسية</span>
+              </Link>
+
               <Link href="/add" className="side-item" onClick={() => setMenuOpen(false)}>
                 <span>➕</span>
                 <span>أضف إعلاناً</span>
@@ -194,18 +202,49 @@ export default function Header() {
       <style jsx>{`
         /* ✅ تحسينات رئيسية للتجاوب مع الجوال */
         .header-row {
-          width: 100%;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 8px 0;
+          padding: 8px 16px;
           direction: rtl; /* للحفاظ على الاتجاه العربي */
+          width: 100%;
+          box-sizing: border-box;
+          gap: 10px;
         }
 
-        .header-left, .header-right {
+        .menu-btn, .add-btn {
           flex: 0 0 auto;
+        }
+
+        .logo-container {
+          flex: 1;
           display: flex;
+          justify-content: center;
           align-items: center;
+          min-width: 0; /* يسمح للعنصر بالانكماش */
+        }
+
+        .logo {
+          font-size: 18px;
+          font-weight: 800;
+          color: #1e293b;
+          text-decoration: none;
+          text-align: center;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 100%;
+          background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          letter-spacing: -0.5px;
+        }
+
+        @media (max-width: 480px) {
+          .logo {
+            font-size: 16px;
+          }
         }
 
         .icon-btn {
@@ -256,6 +295,7 @@ export default function Header() {
           white-space: nowrap;
           flex-shrink: 0;
           transition: all 0.2s ease;
+          min-width: 100px;
         }
 
         .btn.primary {
@@ -275,14 +315,36 @@ export default function Header() {
         .add-text-mobile { display: none; }
 
         /* تحسينات للشاشات الصغيرة */
-        @media (max-width: 480px) {
+        @media (max-width: 768px) {
           .header-row {
-            padding: 8px 10px;
+            padding: 8px 12px;
+            gap: 8px;
+          }
+          
+          .logo {
+            font-size: 16px;
           }
           
           .btn { 
             padding: 7px 12px; 
             font-size: 12px; 
+            min-width: 80px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .header-row {
+            padding: 8px 10px;
+          }
+          
+          .logo {
+            font-size: 15px;
+          }
+          
+          .btn { 
+            padding: 6px 10px; 
+            font-size: 12px; 
+            min-width: 70px;
           }
           
           .add-text { display: none; }
@@ -296,13 +358,27 @@ export default function Header() {
 
         /* تحسينات للشاشات الصغيرة جداً */
         @media (max-width: 360px) {
+          .header-row {
+            padding: 6px 8px;
+          }
+          
+          .logo {
+            font-size: 14px;
+          }
+          
           .btn { 
-            padding: 6px 10px; 
+            padding: 5px 8px; 
             font-size: 11px; 
+            min-width: 65px;
           }
           
           .add-text-mobile {
             font-size: 10px;
+          }
+          
+          .icon-btn {
+            width: 30px;
+            height: 30px;
           }
         }
 
