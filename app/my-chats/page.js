@@ -1,4 +1,3 @@
-// app/my-chats/page.js
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -9,9 +8,14 @@ import { db } from '@/lib/firebaseClient';
 
 function fmtTime(ts) {
   try {
-    const d = ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null;
+    const d = ts?.toDate ? ts.toDate() : null;
     if (!d) return '';
-    return d.toLocaleString('ar', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' });
+    return d.toLocaleString('ar', {
+      hour: '2-digit',
+      minute: '2-digit',
+      day: '2-digit',
+      month: 'short',
+    });
   } catch {
     return '';
   }
@@ -25,8 +29,6 @@ export default function MyChatsPage() {
   useEffect(() => {
     if (!user?.uid) return;
 
-    // نجيب كل المحادثات اللي المستخدم مشارك فيها
-    // لازم chat doc يحتوي participants: [uid1, uid2]
     const unsub = db
       .collection('chats')
       .where('participants', 'array-contains', user.uid)
@@ -54,7 +56,6 @@ export default function MyChatsPage() {
         ? c.participants.find((x) => String(x) !== String(uid))
         : null;
 
-      // عرض اسم الطرف الآخر من userName لو كان موجود
       const otherName =
         (c.participantNames && otherUid && c.participantNames[otherUid]) ||
         (otherUid ? `مستخدم ${String(otherUid).slice(0, 6)}…` : 'محادثة');
@@ -142,19 +143,15 @@ export default function MyChatsPage() {
                         {c.unread}
                       </span>
                     ) : null}
-                    <span className="muted" style={{ fontSize: 12 }}>{fmtTime(c.updatedAt)}</span>
+                    <span className="muted" style={{ fontSize: 12 }}>
+                      {fmtTime(c.updatedAt)}
+                    </span>
                   </div>
                 </div>
 
-                {c.lastText ? (
-                  <div className="muted" style={{ marginTop: 6, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {c.lastText}
-                  </div>
-                ) : (
-                  <div className="muted" style={{ marginTop: 6, fontSize: 13 }}>
-                    (لا توجد رسائل بعد)
-                  </div>
-                )}
+                <div className="muted" style={{ marginTop: 6, fontSize: 13 }}>
+                  {c.lastText ? c.lastText : '(لا توجد رسائل بعد)'}
+                </div>
               </Link>
             ))}
           </div>
