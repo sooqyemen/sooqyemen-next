@@ -1,13 +1,14 @@
+// app/page.js
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import Header from '@/components/Header';
 import Price from '@/components/Price';
 import { db } from '@/lib/firebaseClient';
 
-const HomeListingsMap = dynamic(() => import('@/components/Map/HomeListingsMap'), { ssr: false });
+const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), { ssr: false });
 
 // ⚙️ إعداد الأقسام
 const CATEGORY_CONFIG = [
@@ -66,7 +67,14 @@ function HomeListingCard({ listing }) {
           />
         )}
 
-        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div
+          style={{
+            padding: 12,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+          }}
+        >
           <div
             style={{
               fontWeight: 700,
@@ -80,7 +88,15 @@ function HomeListingCard({ listing }) {
             {listing.title || 'بدون عنوان'}
           </div>
 
-          <div className="muted" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div
+            className="muted"
+            style={{
+              fontSize: 12,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
             <span>📍</span>
             <span>{listing.city || listing.locationLabel || 'غير محدد'}</span>
           </div>
@@ -89,7 +105,10 @@ function HomeListingCard({ listing }) {
             <Price priceYER={listing.currentBidYER || listing.priceYER || 0} />
           </div>
 
-          <div className="muted" style={{ fontSize: 11, marginTop: 4, display: 'flex', gap: 8 }}>
+          <div
+            className="muted"
+            style={{ fontSize: 11, marginTop: 4, display: 'flex', gap: 8 }}
+          >
             <span>👁️ {Number(listing.views || 0)}</span>
             {listing.category && <span>• {listing.category}</span>}
           </div>
@@ -106,10 +125,10 @@ export default function HomePage() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
-  // ✅ الجديد: وضع العرض
-  const [viewMode, setViewMode] = useState('list'); // 'list' | 'map'
+  // ✅ جديد: وضع العرض
+  const [viewMode, setViewMode] = useState('list'); // list | map
 
-  // 📡 جلب الإعلانات
+  // 📡 جلب الإعلانات من Firestore
   useEffect(() => {
     try {
       const unsubscribe = db
@@ -140,7 +159,7 @@ export default function HomePage() {
     }
   }, []);
 
-  // 🔍 فلترة
+  // 🔍 فلترة (بحث + قسم)
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
 
@@ -148,13 +167,19 @@ export default function HomePage() {
       const cat = (l.category || '').toLowerCase();
 
       if (selectedCategory !== 'all' && cat !== selectedCategory) return false;
+
       if (!q) return true;
 
       const title = (l.title || '').toLowerCase();
       const city = (l.city || '').toLowerCase();
       const loc = (l.locationLabel || '').toLowerCase();
 
-      return title.includes(q) || city.includes(q) || loc.includes(q) || cat.includes(q);
+      return (
+        title.includes(q) ||
+        city.includes(q) ||
+        loc.includes(q) ||
+        cat.includes(q)
+      );
     });
   }, [search, listings, selectedCategory]);
 
@@ -162,7 +187,7 @@ export default function HomePage() {
     <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
       <Header />
 
-      {/* هيرو */}
+      {/* هيرو مناسب للجوال */}
       <section className="home-hero">
         <div className="container">
           <div className="home-hero-inner">
@@ -172,6 +197,7 @@ export default function HomePage() {
               وظائف، صيانة، معدات ثقيلة وأكثر.
             </p>
 
+            {/* شريط البحث */}
             <div className="home-search-wrapper">
               <div className="home-search-bar">
                 <input
@@ -181,32 +207,18 @@ export default function HomePage() {
                   onChange={(e) => setSearch(e.target.value)}
                   className="home-search-input"
                 />
-                <button className="home-search-button">بحث</button>
+                <button className="home-search-button" type="button">
+                  بحث
+                </button>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* المحتوى */}
+      {/* محتوى الصفحة */}
       <div className="container" style={{ padding: '18px 0 40px' }}>
-        {/* ✅ صف: زر الخريطة */}
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <div className="muted" style={{ fontSize: 12 }}>
-            عدد الإعلانات: {filtered.length}
-          </div>
-
-          <button
-            className={'btn ' + (viewMode === 'map' ? 'btnPrimary' : '')}
-            onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
-            type="button"
-            style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}
-          >
-            🗺️ {viewMode === 'map' ? 'عرض كقائمة' : 'عرض على الخريطة'}
-          </button>
-        </div>
-
-        {/* الأقسام */}
+        {/* شريط الأقسام أفقي */}
         <div className="category-strip">
           {CATEGORY_CONFIG.map((cat) => {
             const active = selectedCategory === cat.key;
@@ -215,9 +227,14 @@ export default function HomePage() {
                 key={cat.key}
                 onClick={() => setSelectedCategory(cat.key)}
                 className="category-pill"
+                type="button"
                 style={{
-                  borderColor: active ? 'rgba(79,70,229,0.5)' : 'rgba(226,232,240,1)',
-                  backgroundColor: active ? 'rgba(79,70,229,0.08)' : '#ffffff',
+                  borderColor: active
+                    ? 'rgba(79,70,229,0.5)'
+                    : 'rgba(226,232,240,1)',
+                  backgroundColor: active
+                    ? 'rgba(79,70,229,0.08)'
+                    : '#ffffff',
                   color: active ? '#4f46e5' : '#4b5563',
                   fontWeight: active ? 600 : 500,
                 }}
@@ -229,7 +246,40 @@ export default function HomePage() {
           })}
         </div>
 
-        {/* حالات */}
+        {/* ✅ جديد: زرّين للتبديل (قائمة / خريطة) */}
+        <div
+          className="row"
+          style={{
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginTop: 8,
+            marginBottom: 10,
+          }}
+        >
+          <div className="row" style={{ gap: 8 }}>
+            <button
+              className={'btn ' + (viewMode === 'list' ? 'btnPrimary' : '')}
+              onClick={() => setViewMode('list')}
+              type="button"
+            >
+              📋 قائمة
+            </button>
+
+            <button
+              className={'btn ' + (viewMode === 'map' ? 'btnPrimary' : '')}
+              onClick={() => setViewMode('map')}
+              type="button"
+            >
+              🗺️ خريطة
+            </button>
+          </div>
+
+          <span className="muted" style={{ fontSize: 12 }}>
+            نتيجة الفلتر: {filtered.length}
+          </span>
+        </div>
+
+        {/* حالات التحميل / الأخطاء */}
         {loading && (
           <div className="card" style={{ textAlign: 'center', marginTop: 12 }}>
             جاري تحميل الإعلانات...
@@ -237,7 +287,14 @@ export default function HomePage() {
         )}
 
         {err && !loading && (
-          <div className="card" style={{ textAlign: 'center', color: '#b91c1c', marginTop: 12 }}>
+          <div
+            className="card"
+            style={{
+              textAlign: 'center',
+              color: '#b91c1c',
+              marginTop: 12,
+            }}
+          >
             {err}
           </div>
         )}
@@ -248,31 +305,42 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* ✅ الجديد: لو وضع الخريطة */}
-        {!loading && !err && filtered.length > 0 && viewMode === 'map' ? (
-          <div style={{ marginTop: 12 }}>
-            <HomeListingsMap listings={filtered} />
-          </div>
-        ) : null}
-
-        {/* ✅ وضع القائمة */}
-        {!loading && !err && filtered.length > 0 && viewMode === 'list' ? (
+        {/* ✅ العرض حسب الوضع */}
+        {!loading && !err && filtered.length > 0 && (
           <>
-            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, marginTop: 10 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>
-                أحدث الإعلانات
-              </h2>
-            </div>
+            {viewMode === 'map' ? (
+              <HomeMapView listings={filtered} />
+            ) : (
+              <>
+                <div
+                  className="row"
+                  style={{
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 12,
+                    marginTop: 10,
+                  }}
+                >
+                  <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>
+                    أحدث الإعلانات
+                  </h2>
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    عدد الإعلانات: {filtered.length}
+                  </span>
+                </div>
 
-            <div className="home-grid">
-              {filtered.map((listing) => (
-                <HomeListingCard key={listing.id} listing={listing} />
-              ))}
-            </div>
+                <div className="home-grid">
+                  {filtered.map((listing) => (
+                    <HomeListingCard key={listing.id} listing={listing} />
+                  ))}
+                </div>
+              </>
+            )}
           </>
-        ) : null}
+        )}
       </div>
 
+      {/* ستايل إضافي للجوال */}
       <style jsx>{`
         .home-hero {
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -372,6 +440,17 @@ export default function HomePage() {
           .home-hero-subtitle {
             font-size: 14px;
             margin-bottom: 14px;
+          }
+          .home-search-bar {
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+          }
+          .home-search-input {
+            font-size: 13px;
+            padding: 8px 12px;
+          }
+          .home-search-button {
+            padding: 8px 16px;
+            font-size: 13px;
           }
           .home-grid {
             grid-template-columns: 1fr;
