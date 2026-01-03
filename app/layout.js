@@ -1,7 +1,6 @@
-// app/layout.js
 import './globals.css';
-import Header from '@/components/Header';
 import { AuthProvider } from '@/lib/useAuth';
+import Header from '@/components/Header';
 
 export const metadata = {
   title: 'سوق اليمن',
@@ -13,7 +12,7 @@ export default function RootLayout({ children }) {
     <html lang="ar" dir="rtl">
       <body>
         <AuthProvider>
-          <Header /> {/* هيدر واحد فقط بدون شعار */}
+          <Header />
           {children}
         </AuthProvider>
       </body>
