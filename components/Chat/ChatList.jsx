@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/useAuth';
 
 function fmtTime(ts) {
   try {
-    const d = ts?.toDate ? ts.toDate() : (ts ? new Date(ts) : null);
+    const d = ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null;
     if (!d) return '';
     return d.toLocaleString('ar', { hour: '2-digit', minute: '2-digit' });
   } catch {
@@ -27,18 +27,20 @@ export default function ChatList() {
     if (!uid) {
       setLoading(false);
       setRows([]);
+      setErr('');
       return;
     }
 
     setLoading(true);
     setErr('');
 
-    // ✅ نجيب كل محادثات المستخدم
+    // ✅ بدون orderBy لتجنب الحاجة لـ index
     const unsub = db
-  .collection('chats')
-  .where('participants', 'array-contains', uid)
-  .limit(50)
-  .onSnapshot(...)
+      .collection('chats')
+      .where('participants', 'array-contains', uid)
+      .limit(50)
+      .onSnapshot(
+        (snap) => {
           const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           setRows(arr);
           setLoading(false);
@@ -53,7 +55,16 @@ export default function ChatList() {
     return () => unsub();
   }, [uid]);
 
-  const list = useMemo(() => rows || [], [rows]);
+  // ترتيب محلي (اختياري) حسب الوقت لو موجود
+  const list = useMemo(() => {
+    const arr = Array.isArray(rows) ? [...rows] : [];
+    arr.sort((a, b) => {
+      const ta = (a.lastMessageAt?.toMillis?.() ?? a.updatedAt?.toMillis?.() ?? 0);
+      const tb = (b.lastMessageAt?.toMillis?.() ?? b.updatedAt?.toMillis?.() ?? 0);
+      return tb - ta;
+    });
+    return arr;
+  }, [rows]);
 
   if (!user) {
     return <div className="card">سجل دخول أولاً لعرض محادثاتك.</div>;
@@ -85,14 +96,17 @@ export default function ChatList() {
         const last = c.lastMessageText || '—';
         const t = fmtTime(c.lastMessageAt || c.updatedAt);
 
+        const otherUid =
+          Array.isArray(c.participants) ? (c.participants.find((x) => x !== uid) || '') : '';
+
+        const href = `/chat/${encodeURIComponent(c.id)}?listingId=${encodeURIComponent(
+          c.listingId || ''
+        )}&otherUid=${encodeURIComponent(otherUid)}`;
+
         return (
           <Link
             key={c.id}
-            href={`/chat/${encodeURIComponent(c.id)}?listingId=${encodeURIComponent(
-              c.listingId || ''
-            )}&otherUid=${encodeURIComponent(
-              (c.participants || []).find((x) => x !== uid) || ''
-            )}`}
+            href={href}
             className="card"
             style={{ textDecoration: 'none', color: 'inherit' }}
           >
