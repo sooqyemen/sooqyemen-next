@@ -2,9 +2,9 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
-
 import 'leaflet/dist/leaflet.css';
 
 // Fix Leaflet default icon paths (Next.js)
@@ -22,21 +22,36 @@ const YEMEN_BOUNDS = [
 
 const DEFAULT_CENTER = [15.3694, 44.1910];
 
+// ✅ LocalStorage key
+const SEEN_KEY = 'sooq_seen_listings_v1';
+
+function readSeen() {
+  try {
+    const raw = localStorage.getItem(SEEN_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(arr) ? arr.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeSeen(set) {
+  try {
+    localStorage.setItem(SEEN_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
 function normalizeCoords(listing) {
-  // array format: [lat, lng]
   if (Array.isArray(listing?.coords) && listing.coords.length === 2) {
     const lat = Number(listing.coords[0]);
     const lng = Number(listing.coords[1]);
     if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
   }
-
-  // object format: {lat, lng}
   if (listing?.coords?.lat != null && listing?.coords?.lng != null) {
     const lat = Number(listing.coords.lat);
     const lng = Number(listing.coords.lng);
     if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
   }
-
   return null;
 }
 
@@ -49,16 +64,60 @@ function inYemen([lat, lng]) {
   );
 }
 
+// ✅ Icons: default (new) + seen (visited)
+const iconNew = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
+const iconSeen = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-grey.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
+// ✅ Small formatter (YER)
+function fmtYER(v) {
+  const n = Number(v || 0);
+  if (!Number.isFinite(n)) return '—';
+  return new Intl.NumberFormat('ar-YE').format(Math.round(n)) + ' ريال';
+}
+
 export default function HomeMapView({ listings = [] }) {
-  // نعرض فقط الإعلانات التي لديها إحداثيات صحيحة وداخل اليمن
-  const points = listings
-    .map((l) => {
-      const c = normalizeCoords(l);
-      if (!c) return null;
-      if (!inYemen(c)) return null;
-      return { ...l, _coords: c };
-    })
-    .filter(Boolean);
+  const [seen, setSeen] = useState(() => new Set());
+
+  useEffect(() => {
+    // load seen once
+    setSeen(readSeen());
+  }, []);
+
+  const points = useMemo(() => {
+    return listings
+      .map((l) => {
+        const c = normalizeCoords(l);
+        if (!c) return null;
+        if (!inYemen(c)) return null;
+        return { ...l, _coords: c };
+      })
+      .filter(Boolean);
+  }, [listings]);
+
+  const markSeen = (id) => {
+    const sid = String(id);
+    setSeen((prev) => {
+      const next = new Set(prev);
+      next.add(sid);
+      writeSeen(next);
+      return next;
+    });
+  };
 
   return (
     <div className="card" style={{ padding: 12 }}>
@@ -82,7 +141,7 @@ export default function HomeMapView({ listings = [] }) {
           style={{ height: '100%', width: '100%' }}
           maxBounds={YEMEN_BOUNDS}
           maxBoundsViscosity={1.0}
-          scrollWheelZoom={true}
+          scrollWheelZoom
         >
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -95,10 +154,17 @@ export default function HomeMapView({ listings = [] }) {
               l.image ||
               null;
 
+            const isSeen = seen.has(String(l.id));
+            const price = l.currentBidYER || l.priceYER || 0;
+
             return (
-              <Marker key={l.id} position={l._coords}>
+              <Marker
+                key={l.id}
+                position={l._coords}
+                icon={isSeen ? iconSeen : iconNew}
+              >
                 <Popup>
-                  <div style={{ width: 220 }}>
+                  <div style={{ width: 230 }}>
                     {img ? (
                       <img
                         src={img}
@@ -116,19 +182,25 @@ export default function HomeMapView({ listings = [] }) {
                     <div style={{ fontWeight: 800, marginBottom: 4 }}>
                       {l.title || 'بدون عنوان'}
                     </div>
-                    <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
+
+                    <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>
                       📍 {l.city || l.locationLabel || 'غير محدد'}
+                    </div>
+
+                    <div style={{ fontWeight: 900, marginBottom: 10 }}>
+                      💰 {fmtYER(price)}
                     </div>
 
                     <Link
                       href={`/listing/${l.id}`}
+                      onClick={() => markSeen(l.id)}
                       style={{
                         display: 'inline-flex',
                         width: '100%',
                         justifyContent: 'center',
                         padding: '8px 10px',
                         borderRadius: 10,
-                        background: '#2563eb',
+                        background: isSeen ? '#64748b' : '#2563eb',
                         color: '#fff',
                         textDecoration: 'none',
                         fontWeight: 700,
@@ -137,6 +209,10 @@ export default function HomeMapView({ listings = [] }) {
                     >
                       فتح الإعلان
                     </Link>
+
+                    <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>
+                      {isSeen ? '✅ تمت المشاهدة' : '🆕 جديد'}
+                    </div>
                   </div>
                 </Popup>
               </Marker>
@@ -153,9 +229,8 @@ export default function HomeMapView({ listings = [] }) {
 
       <style jsx>{`
         @media (max-width: 768px) {
-          div[style*='height: 520px'] {
+          .card :global(.leaflet-container) {
             height: 420px !important;
-            min-height: 420px !important;
           }
         }
       `}</style>
