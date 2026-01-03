@@ -3,7 +3,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import Header from '@/components/Header';
 import { db, firebase, storage } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import { toYER, useRates } from '@/lib/rates';
@@ -192,7 +191,6 @@ export default function AddPage() {
 
   return (
     <>
-      <Header />
       <div className="container">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <Link className="btn" href="/">
