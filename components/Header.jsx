@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useAuth } from '@/lib/useAuth';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 // إيميلات المدراء
 const RAW_ENV_ADMIN = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
@@ -11,6 +11,37 @@ const STATIC_ADMINS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
 const ADMIN_EMAILS = [RAW_ENV_ADMIN, ...STATIC_ADMINS]
   .filter(Boolean)
   .map((e) => String(e).toLowerCase());
+
+// لوجو سوق اليمن
+const YemenMarketLogo = ({ size = 40 }) => (
+  <svg width={size} height={size} viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+    <rect x="16" y="16" width="480" height="480" rx="120" ry="120" fill="#0F4C8A" />
+    <rect x="120" y="160" width="272" height="260" rx="80" ry="80" fill="#FFFFFF" />
+    <path
+      d="M176 190 C176 140 216 104 256 104 C296 104 336 140 336 190"
+      fill="none"
+      stroke="#E5B322"
+      strokeWidth="32"
+      strokeLinecap="round"
+    />
+    <rect x="150" y="200" width="212" height="40" fill="#CE1126" />
+    <rect x="150" y="240" width="212" height="36" fill="#FFFFFF" />
+    <rect x="150" y="276" width="212" height="40" fill="#000000" />
+    <path
+      d="M238 356 C238 332 252 320 272 320 C292 320 306 332 306 356 C306 388 284 408 272 408 C260 408 238 388 238 356 Z"
+      fill="#0F4C8A"
+    />
+    <path
+      d="M252 332 C252 312 262 300 272 300 C282 300 292 312 292 332"
+      stroke="#0F4C8A"
+      strokeWidth="18"
+      strokeLinecap="round"
+      fill="none"
+    />
+    <circle cx="256" cy="430" r="10" fill="#0F4C8A" />
+    <circle cx="284" cy="430" r="10" fill="#0F4C8A" />
+  </svg>
+);
 
 export default function Header() {
   const { user, loading, logout } = useAuth();
@@ -21,37 +52,14 @@ export default function Header() {
   const email = user?.email ? String(user.email).toLowerCase() : null;
   const isAdmin = !!email && ADMIN_EMAILS.includes(email);
 
-  // ظل الهيدر عند التمرير
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
-    handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // ✅ قفل سكرول الصفحة + ESC للإغلاق
-  useEffect(() => {
-    if (!menuOpen) return;
-
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    const onKey = (e) => {
-      if (e.key === 'Escape') setMenuOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [menuOpen]);
-
   const handleLogout = async () => {
-    if (!logout) {
-      setMenuOpen(false);
-      return;
-    }
+    if (!logout) return;
     setIsLoggingOut(true);
     try {
       await logout();
@@ -66,8 +74,8 @@ export default function Header() {
   if (loading) {
     return (
       <header className="header-shell">
-        <div className="container header-row">
-          <div className="skeleton" style={{ width: 160, height: 32 }} />
+        <div className="container header-grid">
+          <div className="skeleton" style={{ width: 140, height: 30 }} />
         </div>
         <style jsx>{`
           .header-shell {
@@ -75,20 +83,14 @@ export default function Header() {
             top: 0;
             z-index: 1000;
             background: #ffffff;
-            border-bottom: 1px solid #eef2f7;
           }
-          .header-row {
-            display: flex;
-            justify-content: center;
+          .header-grid {
+            display: grid;
+            place-items: center;
             padding: 10px 0;
           }
           .skeleton {
-            background: linear-gradient(
-              90deg,
-              #f1f5f9 25%,
-              #e2e8f0 50%,
-              #f1f5f9 75%
-            );
+            background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
             background-size: 200% 100%;
             border-radius: 999px;
             animation: loading 1.4s infinite;
@@ -117,25 +119,26 @@ export default function Header() {
           backgroundColor: scrolled ? 'rgba(255,255,255,0.97)' : '#ffffff',
           backdropFilter: scrolled ? 'blur(10px)' : 'none',
           boxShadow: scrolled ? '0 2px 8px rgba(15,23,42,0.08)' : 'none',
-          borderBottom: scrolled ? 'none' : '1px solid #eef2f7',
           transition: 'all 0.25s ease',
         }}
       >
-        <div className="container header-row">
-          {/* زر القائمة */}
-          <button
-            className="icon-btn"
-            onClick={() => setMenuOpen(true)}
-            aria-label="القائمة"
-          >
+        <div className="container header-grid">
+          {/* يمين: زر القائمة */}
+          <button className="icon-btn" onClick={() => setMenuOpen(true)} aria-label="القائمة">
             <span className="icon-lines" />
           </button>
 
-          {/* ✅ بدون شعار: نخلي زر إضافة إعلان يتمدد */}
-          <div className="center-spacer" />
+          {/* وسط: اللوجو */}
+          <div className="logo-wrap">
+            <Link href="/" aria-label="سوق اليمن">
+              <YemenMarketLogo size={40} />
+            </Link>
+          </div>
 
-          <Link href="/add" className="btn primary add-btn">
-            + أضف إعلاناً
+          {/* يسار: زر إضافة إعلان */}
+          <Link href="/add" className="btn primary add-btn" aria-label="أضف إعلاناً">
+            <span className="add-plus">+</span>
+            <span className="add-text">أضف إعلاناً</span>
           </Link>
         </div>
       </header>
@@ -151,47 +154,29 @@ export default function Header() {
                 {user ? (
                   <div className="side-user">👤 {user.email}</div>
                 ) : (
-                  <div className="side-user muted">
-                    زائر · لم تقم بتسجيل الدخول
-                  </div>
+                  <div className="side-user muted">زائر · لم تقم بتسجيل الدخول</div>
                 )}
               </div>
-              <button
-                className="icon-btn"
-                onClick={() => setMenuOpen(false)}
-                aria-label="إغلاق"
-              >
+              <button className="icon-btn" onClick={() => setMenuOpen(false)} aria-label="إغلاق">
                 ✕
               </button>
             </div>
 
             <div className="side-section">
-              <Link
-                href="/add"
-                className="side-item"
-                onClick={() => setMenuOpen(false)}
-              >
+              <Link href="/add" className="side-item" onClick={() => setMenuOpen(false)}>
                 <span>➕</span>
                 <span>أضف إعلاناً</span>
               </Link>
 
               {user && (
-                <Link
-                  href="/my-listings"
-                  className="side-item"
-                  onClick={() => setMenuOpen(false)}
-                >
+                <Link href="/my-listings" className="side-item" onClick={() => setMenuOpen(false)}>
                   <span>📋</span>
                   <span>إعلاناتي</span>
                 </Link>
               )}
 
               {isAdmin && (
-                <Link
-                  href="/admin"
-                  className="side-item"
-                  onClick={() => setMenuOpen(false)}
-                >
+                <Link href="/admin" className="side-item" onClick={() => setMenuOpen(false)}>
                   <span>🛡️</span>
                   <span>لوحة الإدارة</span>
                 </Link>
@@ -200,22 +185,12 @@ export default function Header() {
 
             <div className="side-section">
               {user ? (
-                <button
-                  className="side-item as-btn"
-                  onClick={handleLogout}
-                  disabled={isLoggingOut}
-                >
+                <button className="side-item as-btn" onClick={handleLogout} disabled={isLoggingOut}>
                   <span>🚪</span>
-                  <span>
-                    {isLoggingOut ? 'جاري تسجيل الخروج…' : 'تسجيل الخروج'}
-                  </span>
+                  <span>{isLoggingOut ? 'جاري تسجيل الخروج…' : 'تسجيل الخروج'}</span>
                 </button>
               ) : (
-                <Link
-                  href="/login"
-                  className="side-item"
-                  onClick={() => setMenuOpen(false)}
-                >
+                <Link href="/login" className="side-item" onClick={() => setMenuOpen(false)}>
                   <span>🔑</span>
                   <span>تسجيل الدخول</span>
                 </Link>
@@ -226,15 +201,13 @@ export default function Header() {
       )}
 
       <style jsx>{`
-        .header-row {
-          display: flex;
+        /* ✅ أهم نقطة: Grid يمنع اختفاء الأزرار */
+        .header-grid {
+          display: grid;
+          grid-template-columns: auto 1fr auto;
           align-items: center;
-          justify-content: space-between;
           padding: 8px 0;
-        }
-
-        .center-spacer {
-          flex: 1;
+          gap: 10px;
         }
 
         .icon-btn {
@@ -247,6 +220,7 @@ export default function Header() {
           align-items: center;
           justify-content: center;
           cursor: pointer;
+          flex: 0 0 auto;
         }
 
         .icon-lines {
@@ -273,8 +247,11 @@ export default function Header() {
           top: 5px;
         }
 
-        .add-btn {
-          white-space: nowrap;
+        /* وسط: اللوجو يتوسّط بدون ما “يدفع” الأزرار */
+        .logo-wrap {
+          display: flex;
+          justify-content: center;
+          min-width: 0;
         }
 
         .btn {
@@ -289,14 +266,31 @@ export default function Header() {
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          gap: 8px;
+          white-space: nowrap;
         }
 
         .btn.primary {
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           border: none;
           color: #ffffff;
-          font-weight: 600;
+          font-weight: 700;
           box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+        }
+
+        .add-plus {
+          font-size: 16px;
+          line-height: 1;
+        }
+
+        /* ✅ على الجوال: نخلي زر الإضافة “صغير” عشان ما يزحم ويخفي زر القائمة */
+        @media (max-width: 420px) {
+          .add-text {
+            display: none;
+          }
+          .btn {
+            padding: 7px 10px;
+          }
         }
 
         /* القائمة الجانبية */
@@ -368,7 +362,7 @@ export default function Header() {
         }
 
         @media (max-width: 768px) {
-          .header-row {
+          .header-grid {
             padding: 8px 10px;
           }
         }
