@@ -114,19 +114,23 @@ export default function Header() {
       >
         <div className="container header-row">
           {/* زر القائمة (يمين) */}
-          <button
-            className="icon-btn"
-            onClick={() => setMenuOpen(true)}
-            aria-label="القائمة"
-          >
-            <span className="icon-lines" />
-          </button>
+          <div className="header-left">
+            <button
+              className="icon-btn"
+              onClick={() => setMenuOpen(true)}
+              aria-label="القائمة"
+            >
+              <span className="icon-lines" />
+            </button>
+          </div>
 
           {/* زر إضافة إعلان (يسار) */}
-          <Link href="/add" className="btn primary add-btn">
-            <span className="add-text">+ أضف إعلاناً</span>
-            <span className="add-text-mobile">+ إعلان</span>
-          </Link>
+          <div className="header-right">
+            <Link href="/add" className="btn primary add-btn">
+              <span className="add-text">+ أضف إعلاناً</span>
+              <span className="add-text-mobile">+ إعلان</span>
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -188,21 +192,20 @@ export default function Header() {
       )}
 
       <style jsx>{`
-        /* ✅ أهم إصلاح: ما نخلي أي عنصر يندف خارج الشاشة */
+        /* ✅ تحسينات رئيسية للتجاوب مع الجوال */
         .header-row {
           width: 100%;
           display: flex;
-          flex-direction: row-reverse; /* عشان القائمة يمين في RTL */
           align-items: center;
           justify-content: space-between;
-          gap: 10px;
           padding: 8px 0;
-          overflow: hidden; /* يمنع التمدد الأفقي */
+          direction: rtl; /* للحفاظ على الاتجاه العربي */
         }
 
-        .icon-btn,
-        .add-btn {
-          flex: 0 0 auto; /* ✅ يمنع اختفاء زر القائمة بسبب flex-shrink */
+        .header-left, .header-right {
+          flex: 0 0 auto;
+          display: flex;
+          align-items: center;
         }
 
         .icon-btn {
@@ -215,6 +218,7 @@ export default function Header() {
           align-items: center;
           justify-content: center;
           cursor: pointer;
+          flex-shrink: 0;
         }
 
         .icon-lines {
@@ -250,9 +254,8 @@ export default function Header() {
           align-items: center;
           justify-content: center;
           white-space: nowrap;
-          max-width: 70vw; /* ✅ يحمي من كسر الهيدر */
-          overflow: hidden;
-          text-overflow: ellipsis;
+          flex-shrink: 0;
+          transition: all 0.2s ease;
         }
 
         .btn.primary {
@@ -263,13 +266,44 @@ export default function Header() {
           box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
         }
 
+        .btn.primary:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 6px 16px rgba(99, 102, 241, 0.45);
+        }
+
         /* نص زر الإضافة: كبير للديسكتوب / مختصر للجوال */
         .add-text-mobile { display: none; }
 
+        /* تحسينات للشاشات الصغيرة */
         @media (max-width: 480px) {
-          .btn { padding: 7px 10px; font-size: 12px; }
+          .header-row {
+            padding: 8px 10px;
+          }
+          
+          .btn { 
+            padding: 7px 12px; 
+            font-size: 12px; 
+          }
+          
           .add-text { display: none; }
           .add-text-mobile { display: inline; }
+          
+          .icon-btn {
+            width: 32px;
+            height: 32px;
+          }
+        }
+
+        /* تحسينات للشاشات الصغيرة جداً */
+        @media (max-width: 360px) {
+          .btn { 
+            padding: 6px 10px; 
+            font-size: 11px; 
+          }
+          
+          .add-text-mobile {
+            font-size: 10px;
+          }
         }
 
         /* القائمة الجانبية */
@@ -291,6 +325,7 @@ export default function Header() {
           display: flex;
           flex-direction: column;
           padding: 14px 14px 18px;
+          direction: rtl;
         }
         .side-header {
           display: flex;
@@ -331,7 +366,9 @@ export default function Header() {
         }
 
         @media (max-width: 768px) {
-          .header-row { padding: 8px 10px; }
+          .side-menu {
+            width: 85%;
+          }
         }
       `}</style>
     </>
