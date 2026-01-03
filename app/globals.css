@@ -1,298 +1,204 @@
-:root {
-  --primary: #2563eb;
-  --primary-dark: #1e40af;
-  --bg-color: #f8fafc;
-  --card-bg: #ffffff;
-  --text-main: #1e293b;
-  --text-muted: #64748b;
-  --border: #e2e8f0;
-  --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --radius: 16px;
-}
+/* globals.css */
 
+/* إعادة تعيين أساسي */
 * {
   box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
-}
-
-body {
   margin: 0;
   padding: 0;
-  font-family: 'Cairo', system-ui, sans-serif;
-  background-color: var(--bg-color);
-  color: var(--text-main);
-  padding-bottom: 80px; /* مساحة للنافبار السفلي في الجوال */
 }
 
-a {
-  text-decoration: none;
-  color: inherit;
-}
-
-/* حاوية الصفحة */
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 16px;
-}
-
-/* البطاقات العامة */
-.card {
-  background: var(--card-bg);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  padding: 16px;
-  box-shadow: var(--shadow);
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-}
-
-/* الشبكة العامة */
-.grid {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-}
-
-/* الأزرار */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px 16px;
-  border-radius: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  border: none;
-  background: #f1f5f9;
-  color: var(--text-main);
-  transition: all 0.2s;
-  font-size: 14px;
-}
-
-.btn:active {
-  transform: scale(0.96);
-}
-
-.btnPrimary {
-  background: var(--primary);
-  color: white;
-  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
-}
-
-.btnPrimary:hover {
-  background: var(--primary-dark);
-}
-
-/* المدخلات */
-.input {
-  width: 100%;
-  padding: 12px 16px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: #fff;
-  font-family: inherit;
-  font-size: 15px;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.input:focus {
-  border-color: var(--primary);
-}
-
-/* نصوص وعناصر مساعدة */
-.row {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.col {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.muted {
-  color: var(--text-muted);
-}
-
-.badge {
-  background: #f1f5f9;
-  color: var(--text-muted);
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-/* ========================= */
-/*   ستايل الصفحة الرئيسية   */
-/* ========================= */
-
-/* هيرو الصفحة الرئيسية */
-.home-hero {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 34px 0 44px;
-}
-
-.home-hero-inner {
-  max-width: 800px;
-  margin: 0 auto;
-  text-align: center;
-}
-
-.home-hero-title {
-  font-size: 32px;
-  font-weight: 900;
-  margin-bottom: 10px;
-}
-
-.home-hero-subtitle {
-  font-size: 16px;
-  opacity: 0.9;
-  margin-bottom: 18px;
-  line-height: 1.6;
-}
-
-.home-search-wrapper {
-  max-width: 720px;
-  margin: 0 auto;
-}
-
-.home-search-bar {
-  background: white;
-  border-radius: 999px;
-  padding: 4px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.home-search-input {
-  flex: 1;
-  border: none;
-  outline: none;
-  padding: 10px 16px;
-  font-size: 14px;
-  border-radius: 999px;
-}
-
-.home-search-button {
-  border-radius: 999px;
-  border: none;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  font-weight: 600;
-  padding: 10px 20px;
-  cursor: pointer;
-  font-size: 14px;
-  white-space: nowrap;
-}
-
-/* شريط الأقسام في الرئيسية */
-.category-strip {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 6px 2px 10px;
-  margin-bottom: 4px;
+html {
+  -webkit-text-size-adjust: 100%; /* منع تكبير النص على iOS */
+  text-size-adjust: 100%;
   scroll-behavior: smooth;
 }
 
-.category-strip::-webkit-scrollbar {
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: #ffffff;
+  color: #1e293b;
+  line-height: 1.5;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* تخطيط الجوال مع الهيدر الثابت */
+.body-layout {
+  padding-top: env(safe-area-inset-top, 0px);
+  min-height: 100vh;
+}
+
+.main-content {
+  min-height: calc(100vh - 60px - env(safe-area-inset-top, 0px));
+  padding-top: 80px; /* مسافة أعلى المحتوى (هيدر + مسافة) */
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  padding-right: 16px;
+  padding-left: 16px;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* مساحة آمنة للهواتف الحديثة */
+.safe-area-bottom {
+  height: env(safe-area-inset-bottom, 0px);
+  background: transparent;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* تحسينات للشاشات الصغيرة */
+@media (max-width: 768px) {
+  .main-content {
+    padding-top: 70px;
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+}
+
+@media (max-width: 360px) {
+  .main-content {
+    padding-top: 65px;
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+}
+
+/* تحسينات للشاشات الكبيرة (سطح المكتب) */
+@media (min-width: 769px) {
+  .body-layout {
+    padding-top: 0;
+  }
+  
+  .main-content {
+    padding-top: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+    min-height: auto;
+  }
+  
+  .safe-area-bottom {
+    display: none;
+  }
+}
+
+/* تحسينات اللمس على الجوال */
+button,
+a,
+input,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* منع التحديد على العناصر التفاعلية */
+button,
+a {
+  user-select: none;
+}
+
+/* تحسينات للنصوص العربية */
+:lang(ar) {
+  line-height: 1.8;
+}
+
+/* تحسينات للصور */
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* تحسينات للنماذج */
+input,
+textarea,
+select,
+button {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* تحسينات للروابط */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* كلاس مساعد للإخفاء على الجوال */
+.mobile-only {
   display: none;
 }
 
-.category-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border-radius: 999px;
-  border-width: 1px;
-  border-style: solid;
-  background: #ffffff;
-  font-size: 13px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.category-icon {
-  font-size: 15px;
-}
-
-/* شبكة الإعلانات في الرئيسية */
-.home-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
-}
-
-/* ========================= */
-/*       تحسينات الجوال      */
-/* ========================= */
-
 @media (max-width: 768px) {
-  .hide-on-mobile {
-    display: none !important;
+  .mobile-only {
+    display: block;
   }
-
-  .grid {
-    grid-template-columns: 1fr; /* بطاقة واحدة في السطر للجوال */
-  }
-
-  .container {
-    padding: 12px;
-  }
-
-  .home-hero {
-    padding: 22px 0 30px;
-  }
-
-  .home-hero-title {
-    font-size: 26px;
-  }
-
-  .home-hero-subtitle {
-    font-size: 14px;
-    margin-bottom: 14px;
-  }
-
-  .home-search-bar {
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
-  }
-
-  .home-search-input {
-    font-size: 13px;
-    padding: 8px 12px;
-  }
-
-  .home-search-button {
-    padding: 8px 16px;
-    font-size: 13px;
-  }
-
-  .home-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .home-card img {
-    height: 170px;
+  
+  .desktop-only {
+    display: none;
   }
 }
-.leaflet-container {
-  width: 100%;
-  height: 100%;
+
+/* كلاس مساعد للإخفاء على سطح المكتب */
+@media (min-width: 769px) {
+  .mobile-only {
+    display: none;
+  }
+  
+  .desktop-only {
+    display: block;
+  }
 }
-.leaflet-control-container {
-  direction: ltr;
+
+/* تحسينات للشريط التمرير */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* منع التكبير الزائد على حقول الإدخال في iOS */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+textarea {
+  font-size: 16px; /* منع التكبير التلقائي في iOS */
+}
+
+/* تحسينات للتركيز */
+:focus-visible {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+/* تحسينات للطباعة */
+@media print {
+  .main-content {
+    padding-top: 0;
+  }
+  
+  .safe-area-bottom,
+  header {
+    display: none;
+  }
 }
