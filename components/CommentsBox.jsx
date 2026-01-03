@@ -4,6 +4,17 @@ import { useEffect, useState } from 'react';
 import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 
+function safeName(user) {
+  // 1) الاسم إن وجد
+  const dn = (user?.displayName || '').trim();
+  if (dn) return dn;
+
+  // 2) رقم قصير ثابت من UID (بدون بريد)
+  const uid = String(user?.uid || '');
+  const short = uid ? uid.slice(-4) : '0000';
+  return `مستخدم ${short}`;
+}
+
 export default function CommentsBox({ listingId }) {
   const { user } = useAuth();
   const [comments, setComments] = useState([]);
@@ -45,12 +56,19 @@ export default function CommentsBox({ listingId }) {
         .collection('comments')
         .add({
           text: text.trim(),
-          userId: user.uid,
-          userName: user.displayName || user.email || 'مستخدم',
+
+          // ✅ نثبت المالك للـ Rules
+          ownerId: user.uid,
+
+          // ✅ اسم آمن للعرض (بدون بريد)
+          userName: safeName(user),
+
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         });
+
       setText('');
     } catch (e) {
+      console.error(e);
       alert('فشل إضافة التعليق');
     } finally {
       setLoading(false);
@@ -103,7 +121,7 @@ export default function CommentsBox({ listingId }) {
             }}
           >
             <div style={{ fontWeight: 700, fontSize: 13 }}>
-              {c.userName}
+              {c.userName || 'مستخدم'}
             </div>
             <div style={{ fontSize: 14, marginTop: 4 }}>
               {c.text}
