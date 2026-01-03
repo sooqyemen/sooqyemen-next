@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic';
 import Header from '@/components/Header';
 import Price from '@/components/Price';
 import AuctionBox from '@/components/AuctionBox';
-import { db } from '@/lib/firebaseClient';
+import { db, firebase } from '@/lib/firebaseClient'; // ✅ أضفنا firebase
 import { useAuth } from '@/lib/useAuth';
 import { logListingView } from '@/lib/analytics';
 import Link from 'next/link';
@@ -16,11 +16,54 @@ const ListingMap = dynamic(() => import('@/components/Map/ListingMap'), { ssr: f
 // نفس بريد الأدمن المستخدم في لوحة التحكم
 const ADMIN_EMAIL = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'mansouralbarout@gmail.com').toLowerCase();
 
+// ✅ LocalStorage key لمنع تكرار العداد لنفس الجهاز
+const VIEW_KEY = 'sooq_viewed_listing_v1';
+const VIEW_TTL_MS = 12 * 60 * 60 * 1000; // 12 ساعة
+
 function makeChatId(uid1, uid2, listingId) {
   const a = String(uid1 || '');
   const b = String(uid2 || '');
   const sorted = [a, b].sort().join('_');
   return `${sorted}__${listingId}`;
+}
+
+function readViewCache() {
+  try {
+    const raw = localStorage.getItem(VIEW_KEY);
+    const obj = raw ? JSON.parse(raw) : {};
+    return obj && typeof obj === 'object' ? obj : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeViewCache(obj) {
+  try {
+    localStorage.setItem(VIEW_KEY, JSON.stringify(obj));
+  } catch {}
+}
+
+// ✅ يزيد المشاهدة مرة واحدة لكل جهاز خلال 12 ساعة
+async function bumpViewOnce(listingId) {
+  if (!listingId) return;
+
+  const now = Date.now();
+  const cache = readViewCache();
+  const last = Number(cache[listingId] || 0);
+
+  if (last && now - last < VIEW_TTL_MS) {
+    return; // تم احتسابها مؤخرًا
+  }
+
+  // خزّن قبل الطلب لتقليل التكرار لو المستخدم عمل Refresh سريع
+  cache[listingId] = now;
+  writeViewCache(cache);
+
+  // زد views في Firestore
+  await db.collection('listings').doc(listingId).update({
+    views: firebase.firestore.FieldValue.increment(1),
+    lastViewedAt: firebase.firestore.FieldValue.serverTimestamp(), // اختياري مفيد
+  });
 }
 
 export default function ListingDetails({ params }) {
@@ -44,9 +87,18 @@ export default function ListingDetails({ params }) {
     return () => unsub();
   }, [id]);
 
+  // ✅ الحل الأساسي: زيادة المشاهدات مباشرة
   useEffect(() => {
     if (!id) return;
-    // سجل مشاهدة الإعلان
+    bumpViewOnce(id).catch((e) => {
+      // لو فشل بسبب Rules مثلًا، ما نخرب الصفحة
+      console.warn('bumpViewOnce failed:', e?.code || e?.message || e);
+    });
+  }, [id]);
+
+  // (اختياري) نتركه موجود لو عندك تسجيلات تحليلية أخرى
+  useEffect(() => {
+    if (!id) return;
     logListingView(id, user).catch(() => {});
   }, [id, user?.uid]);
 
@@ -133,7 +185,6 @@ export default function ListingDetails({ params }) {
           </div>
         ) : null}
 
-        {/* ✅ تخطيط جديد: على الديسكتوب عمودين، وعلى الجوال عمود واحد (تفاصيل ثم خريطة) */}
         <div className="listingLayout" style={{ marginTop: 12 }}>
           {/* التفاصيل */}
           <div className="card">
@@ -235,7 +286,6 @@ export default function ListingDetails({ params }) {
           </div>
         </div>
 
-        {/* ✅ CSS داخل الصفحة لضمان الجوال */}
         <style jsx>{`
           .listingLayout {
             display: grid;
@@ -248,8 +298,6 @@ export default function ListingDetails({ params }) {
             .listingLayout {
               grid-template-columns: 1fr;
             }
-
-            /* نخلي المزاد والخريطة تحت التفاصيل */
             .sideCol {
               order: 2;
             }
