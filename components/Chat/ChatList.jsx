@@ -35,12 +35,10 @@ export default function ChatList() {
 
     // ✅ نجيب كل محادثات المستخدم
     const unsub = db
-      .collection('chats')
-      .where('participants', 'array-contains', uid)
-      .orderBy('updatedAt', 'desc')
-      .limit(50)
-      .onSnapshot(
-        (snap) => {
+  .collection('chats')
+  .where('participants', 'array-contains', uid)
+  .limit(50)
+  .onSnapshot(...)
           const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           setRows(arr);
           setLoading(false);
