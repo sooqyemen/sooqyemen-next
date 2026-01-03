@@ -13,7 +13,7 @@ export default function RootLayout({ children }) {
     <html lang="ar" dir="rtl">
       <body>
         <AuthProvider>
-          <Header />
+          <Header /> {/* هيدر واحد فقط بدون شعار */}
           {children}
         </AuthProvider>
       </body>
