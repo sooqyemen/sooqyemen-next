@@ -12,37 +12,6 @@ const ADMIN_EMAILS = [RAW_ENV_ADMIN, ...STATIC_ADMINS]
   .filter(Boolean)
   .map((e) => String(e).toLowerCase());
 
-// لوجو سوق اليمن
-const YemenMarketLogo = ({ size = 40 }) => (
-  <svg width={size} height={size} viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-    <rect x="16" y="16" width="480" height="480" rx="120" ry="120" fill="#0F4C8A" />
-    <rect x="120" y="160" width="272" height="260" rx="80" ry="80" fill="#FFFFFF" />
-    <path
-      d="M176 190 C176 140 216 104 256 104 C296 104 336 140 336 190"
-      fill="none"
-      stroke="#E5B322"
-      strokeWidth="32"
-      strokeLinecap="round"
-    />
-    <rect x="150" y="200" width="212" height="40" fill="#CE1126" />
-    <rect x="150" y="240" width="212" height="36" fill="#FFFFFF" />
-    <rect x="150" y="276" width="212" height="40" fill="#000000" />
-    <path
-      d="M238 356 C238 332 252 320 272 320 C292 320 306 332 306 356 C306 388 284 408 272 408 C260 408 238 388 238 356 Z"
-      fill="#0F4C8A"
-    />
-    <path
-      d="M252 332 C252 312 262 300 272 300 C282 300 292 312 292 332"
-      stroke="#0F4C8A"
-      strokeWidth="18"
-      strokeLinecap="round"
-      fill="none"
-    />
-    <circle cx="256" cy="430" r="10" fill="#0F4C8A" />
-    <circle cx="284" cy="430" r="10" fill="#0F4C8A" />
-  </svg>
-);
-
 export default function Header() {
   const { user, loading, logout } = useAuth();
   const [scrolled, setScrolled] = useState(false);
@@ -52,14 +21,37 @@ export default function Header() {
   const email = user?.email ? String(user.email).toLowerCase() : null;
   const isAdmin = !!email && ADMIN_EMAILS.includes(email);
 
+  // ظل الهيدر عند التمرير
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
+    handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // قفل سكرول الصفحة + ESC للإغلاق
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const onKey = (e) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
+
   const handleLogout = async () => {
-    if (!logout) return;
+    if (!logout) {
+      setMenuOpen(false);
+      return;
+    }
     setIsLoggingOut(true);
     try {
       await logout();
@@ -74,8 +66,8 @@ export default function Header() {
   if (loading) {
     return (
       <header className="header-shell">
-        <div className="container header-grid">
-          <div className="skeleton" style={{ width: 140, height: 30 }} />
+        <div className="container header-row">
+          <div className="skeleton" style={{ width: 160, height: 32 }} />
         </div>
         <style jsx>{`
           .header-shell {
@@ -83,10 +75,11 @@ export default function Header() {
             top: 0;
             z-index: 1000;
             background: #ffffff;
+            border-bottom: 1px solid #eef2f7;
           }
-          .header-grid {
-            display: grid;
-            place-items: center;
+          .header-row {
+            display: flex;
+            justify-content: center;
             padding: 10px 0;
           }
           .skeleton {
@@ -96,12 +89,8 @@ export default function Header() {
             animation: loading 1.4s infinite;
           }
           @keyframes loading {
-            0% {
-              background-position: 200% 0;
-            }
-            100% {
-              background-position: -200% 0;
-            }
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
           }
         `}</style>
       </header>
@@ -119,26 +108,24 @@ export default function Header() {
           backgroundColor: scrolled ? 'rgba(255,255,255,0.97)' : '#ffffff',
           backdropFilter: scrolled ? 'blur(10px)' : 'none',
           boxShadow: scrolled ? '0 2px 8px rgba(15,23,42,0.08)' : 'none',
+          borderBottom: scrolled ? 'none' : '1px solid #eef2f7',
           transition: 'all 0.25s ease',
         }}
       >
-        <div className="container header-grid">
-          {/* يمين: زر القائمة */}
-          <button className="icon-btn" onClick={() => setMenuOpen(true)} aria-label="القائمة">
+        <div className="container header-row">
+          {/* زر القائمة (يمين) */}
+          <button
+            className="icon-btn"
+            onClick={() => setMenuOpen(true)}
+            aria-label="القائمة"
+          >
             <span className="icon-lines" />
           </button>
 
-          {/* وسط: اللوجو */}
-          <div className="logo-wrap">
-            <Link href="/" aria-label="سوق اليمن">
-              <YemenMarketLogo size={40} />
-            </Link>
-          </div>
-
-          {/* يسار: زر إضافة إعلان */}
-          <Link href="/add" className="btn primary add-btn" aria-label="أضف إعلاناً">
-            <span className="add-plus">+</span>
-            <span className="add-text">أضف إعلاناً</span>
+          {/* زر إضافة إعلان (يسار) */}
+          <Link href="/add" className="btn primary add-btn">
+            <span className="add-text">+ أضف إعلاناً</span>
+            <span className="add-text-mobile">+ إعلان</span>
           </Link>
         </div>
       </header>
@@ -201,13 +188,21 @@ export default function Header() {
       )}
 
       <style jsx>{`
-        /* ✅ أهم نقطة: Grid يمنع اختفاء الأزرار */
-        .header-grid {
-          display: grid;
-          grid-template-columns: auto 1fr auto;
+        /* ✅ أهم إصلاح: ما نخلي أي عنصر يندف خارج الشاشة */
+        .header-row {
+          width: 100%;
+          display: flex;
+          flex-direction: row-reverse; /* عشان القائمة يمين في RTL */
           align-items: center;
-          padding: 8px 0;
+          justify-content: space-between;
           gap: 10px;
+          padding: 8px 0;
+          overflow: hidden; /* يمنع التمدد الأفقي */
+        }
+
+        .icon-btn,
+        .add-btn {
+          flex: 0 0 auto; /* ✅ يمنع اختفاء زر القائمة بسبب flex-shrink */
         }
 
         .icon-btn {
@@ -220,7 +215,6 @@ export default function Header() {
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          flex: 0 0 auto;
         }
 
         .icon-lines {
@@ -240,19 +234,8 @@ export default function Header() {
           border-radius: 4px;
           background: #0f172a;
         }
-        .icon-lines::before {
-          top: -5px;
-        }
-        .icon-lines::after {
-          top: 5px;
-        }
-
-        /* وسط: اللوجو يتوسّط بدون ما “يدفع” الأزرار */
-        .logo-wrap {
-          display: flex;
-          justify-content: center;
-          min-width: 0;
-        }
+        .icon-lines::before { top: -5px; }
+        .icon-lines::after { top: 5px; }
 
         .btn {
           border-radius: 999px;
@@ -266,31 +249,27 @@ export default function Header() {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          gap: 8px;
           white-space: nowrap;
+          max-width: 70vw; /* ✅ يحمي من كسر الهيدر */
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .btn.primary {
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           border: none;
           color: #ffffff;
-          font-weight: 700;
+          font-weight: 600;
           box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
         }
 
-        .add-plus {
-          font-size: 16px;
-          line-height: 1;
-        }
+        /* نص زر الإضافة: كبير للديسكتوب / مختصر للجوال */
+        .add-text-mobile { display: none; }
 
-        /* ✅ على الجوال: نخلي زر الإضافة “صغير” عشان ما يزحم ويخفي زر القائمة */
-        @media (max-width: 420px) {
-          .add-text {
-            display: none;
-          }
-          .btn {
-            padding: 7px 10px;
-          }
+        @media (max-width: 480px) {
+          .btn { padding: 7px 10px; font-size: 12px; }
+          .add-text { display: none; }
+          .add-text-mobile { display: inline; }
         }
 
         /* القائمة الجانبية */
@@ -319,17 +298,9 @@ export default function Header() {
           justify-content: space-between;
           margin-bottom: 12px;
         }
-        .side-title {
-          font-weight: 800;
-          font-size: 17px;
-        }
-        .side-user {
-          font-size: 12px;
-          margin-top: 2px;
-        }
-        .muted {
-          color: #9ca3af;
-        }
+        .side-title { font-weight: 800; font-size: 17px; }
+        .side-user { font-size: 12px; margin-top: 2px; }
+        .muted { color: #9ca3af; }
 
         .side-section {
           border-top: 1px solid #e5e7eb;
@@ -351,9 +322,7 @@ export default function Header() {
           width: 22px;
           text-align: center;
         }
-        .side-item:hover {
-          background: #f3f4f6;
-        }
+        .side-item:hover { background: #f3f4f6; }
         .side-item.as-btn {
           border: none;
           background: transparent;
@@ -362,9 +331,7 @@ export default function Header() {
         }
 
         @media (max-width: 768px) {
-          .header-grid {
-            padding: 8px 10px;
-          }
+          .header-row { padding: 8px 10px; }
         }
       `}</style>
     </>
