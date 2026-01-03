@@ -22,6 +22,15 @@ body {
   min-height: 100vh;
 }
 
+/* ========== تخطيط الصفحات ========== */
+
+/* Wrapper عام للصفحات */
+.page-wrapper {
+  min-height: 100vh;
+  padding-top: 64px; /* ارتفاع الهيدر */
+  background: #f8fafc;
+}
+
 /* تخطيط الجوال مع الهيدر الثابت */
 .body-layout {
   padding-top: env(safe-area-inset-top, 0px);
@@ -50,12 +59,526 @@ body {
   z-index: 1;
 }
 
-/* تحسينات للشاشات الصغيرة */
+/* ========== أنماط الصفحات الثابتة (عن المنصة، مساعدة، خصوصية) ========== */
+
+/* أنماط عامة لجميع الصفحات الثابتة */
+.page-header {
+  text-align: center;
+  padding: 50px 20px;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: white;
+  margin-bottom: 40px;
+  border-radius: 0 0 24px 24px;
+  box-shadow: 0 4px 20px rgba(79, 70, 229, 0.2);
+}
+
+.page-header h1 {
+  font-size: 36px;
+  font-weight: 900;
+  margin-bottom: 12px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.page-subtitle {
+  font-size: 18px;
+  opacity: 0.95;
+  max-width: 600px;
+  margin: 0 auto;
+  font-weight: 400;
+}
+
+.page-content {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 20px 60px;
+}
+
+/* ========== صفحة "عن المنصة" ========== */
+.about-section {
+  background: white;
+  padding: 30px;
+  border-radius: 16px;
+  margin-bottom: 30px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border-right: 4px solid #4f46e5;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.about-section:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+.about-section h2 {
+  font-size: 24px;
+  color: #1e293b;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.about-section p {
+  line-height: 1.8;
+  color: #475569;
+  font-size: 16px;
+  margin-bottom: 15px;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 25px;
+  margin-top: 25px;
+}
+
+.feature-card {
+  background: #f8fafc;
+  padding: 25px;
+  border-radius: 12px;
+  text-align: center;
+  transition: all 0.3s ease;
+  border: 1px solid #e2e8f0;
+  position: relative;
+  overflow: hidden;
+}
+
+.feature-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(to bottom, #4f46e5, #7c3aed);
+}
+
+.feature-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 25px rgba(0, 0, 0, 0.1);
+  background: white;
+}
+
+.feature-icon {
+  font-size: 40px;
+  margin-bottom: 15px;
+  display: inline-block;
+  transition: transform 0.3s ease;
+}
+
+.feature-card:hover .feature-icon {
+  transform: scale(1.1);
+}
+
+.feature-card h3 {
+  font-size: 18px;
+  color: #1e293b;
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+
+.feature-card p {
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.contact-info {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 25px;
+  border-radius: 12px;
+  margin-top: 20px;
+  border: 1px solid #e2e8f0;
+}
+
+.contact-info p {
+  margin-bottom: 12px;
+  color: #1e293b;
+  font-size: 15px;
+}
+
+.contact-info a {
+  color: #4f46e5;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.2s ease;
+}
+
+.contact-info a:hover {
+  color: #7c3aed;
+  text-decoration: underline;
+}
+
+/* ========== صفحة "مساعدة ودعم" ========== */
+.help-section {
+  background: white;
+  padding: 30px;
+  border-radius: 16px;
+  margin-bottom: 30px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+}
+
+.help-section h2 {
+  font-size: 24px;
+  color: #1e293b;
+  margin-bottom: 25px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #f1f5f9;
+}
+
+.faq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.faq-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.3s ease;
+}
+
+.faq-item:hover {
+  border-color: #c7d2fe;
+}
+
+.faq-question {
+  width: 100%;
+  padding: 20px;
+  background: #f8fafc;
+  border: none;
+  text-align: right;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background 0.3s ease;
+}
+
+.faq-question:hover {
+  background: #f1f5f9;
+}
+
+.faq-icon {
+  font-size: 20px;
+  font-weight: bold;
+  color: #4f46e5;
+  transition: transform 0.3s ease;
+}
+
+.faq-question[aria-expanded="true"] .faq-icon {
+  transform: rotate(45deg);
+}
+
+.faq-answer {
+  padding: 20px;
+  background: white;
+  border-top: 1px solid #e2e8f0;
+  color: #475569;
+  line-height: 1.7;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.guide-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.guide-step {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  padding: 25px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 12px;
+  border-right: 4px solid #4f46e5;
+  transition: transform 0.3s ease;
+}
+
+.guide-step:hover {
+  transform: translateX(5px);
+}
+
+.step-number {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: white;
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 18px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3);
+}
+
+.step-content h3 {
+  color: #1e293b;
+  margin-bottom: 8px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.step-content p {
+  color: #64748b;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.support-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 25px;
+  margin-top: 25px;
+}
+
+.support-card {
+  background: white;
+  padding: 25px;
+  border-radius: 12px;
+  text-align: center;
+  border: 1px solid #e2e8f0;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.support-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 100%;
+  height: 4px;
+  background: linear-gradient(to left, #4f46e5, #7c3aed);
+}
+
+.support-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 25px rgba(0, 0, 0, 0.1);
+  border-color: #c7d2fe;
+}
+
+.support-icon {
+  font-size: 45px;
+  margin-bottom: 15px;
+  display: inline-block;
+}
+
+.support-card h3 {
+  font-size: 18px;
+  color: #1e293b;
+  margin-bottom: 12px;
+  font-weight: 700;
+}
+
+.support-card p {
+  color: #64748b;
+  font-size: 14px;
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+
+.troubleshooting {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.problem-solution {
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  padding: 25px;
+  border-radius: 12px;
+  border-right: 4px solid #dc2626;
+  transition: transform 0.3s ease;
+}
+
+.problem-solution:hover {
+  transform: translateX(5px);
+}
+
+.problem-solution h4 {
+  color: #dc2626;
+  margin-bottom: 12px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.problem-solution ul {
+  color: #475569;
+  padding-right: 20px;
+  line-height: 1.8;
+}
+
+.problem-solution li {
+  margin-bottom: 10px;
+  position: relative;
+  padding-right: 10px;
+}
+
+.problem-solution li::before {
+  content: '•';
+  color: #dc2626;
+  font-weight: bold;
+  position: absolute;
+  right: -15px;
+}
+
+/* ========== صفحة "سياسة الخصوصية" ========== */
+.privacy-section {
+  background: white;
+  padding: 30px;
+  border-radius: 16px;
+  margin-bottom: 30px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+  transition: transform 0.3s ease;
+}
+
+.privacy-section:hover {
+  transform: translateY(-2px);
+}
+
+.privacy-section h2 {
+  font-size: 24px;
+  color: #1e293b;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #f1f5f9;
+  position: relative;
+}
+
+.privacy-section h2::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  right: 0;
+  width: 60px;
+  height: 2px;
+  background: linear-gradient(to left, #4f46e5, #7c3aed);
+}
+
+.privacy-section h3 {
+  font-size: 18px;
+  color: #475569;
+  margin: 25px 0 15px;
+  font-weight: 700;
+}
+
+.privacy-section p {
+  line-height: 1.8;
+  color: #475569;
+  font-size: 16px;
+  margin-bottom: 15px;
+}
+
+.privacy-section ul {
+  color: #475569;
+  padding-right: 25px;
+  line-height: 1.8;
+  margin-bottom: 20px;
+}
+
+.privacy-section li {
+  margin-bottom: 12px;
+  position: relative;
+  padding-right: 15px;
+}
+
+.privacy-section li::before {
+  content: '✓';
+  color: #4f46e5;
+  font-weight: bold;
+  position: absolute;
+  right: -15px;
+}
+
+.privacy-section a {
+  color: #4f46e5;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.2s ease;
+  border-bottom: 1px dotted transparent;
+}
+
+.privacy-section a:hover {
+  color: #7c3aed;
+  border-bottom-color: #7c3aed;
+}
+
+/* ========== تحسينات للشاشات الصغيرة ========== */
 @media (max-width: 768px) {
   .main-content {
     padding-top: 70px;
     padding-right: 12px;
     padding-left: 12px;
+  }
+  
+  .page-header {
+    padding: 30px 15px;
+    border-radius: 0 0 20px 20px;
+    margin-bottom: 25px;
+  }
+  
+  .page-header h1 {
+    font-size: 28px;
+  }
+  
+  .page-subtitle {
+    font-size: 16px;
+  }
+  
+  .page-content {
+    padding: 0 15px 40px;
+  }
+  
+  .about-section,
+  .help-section,
+  .privacy-section {
+    padding: 20px;
+  }
+  
+  .about-section h2,
+  .help-section h2,
+  .privacy-section h2 {
+    font-size: 20px;
+  }
+  
+  .features-grid,
+  .support-cards {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+  
+  .guide-step {
+    flex-direction: column;
+    text-align: center;
+    padding: 20px;
+  }
+  
+  .step-number {
+    margin: 0 auto 15px;
+  }
+  
+  .faq-question {
+    padding: 16px;
+    font-size: 15px;
   }
 }
 
@@ -65,9 +588,17 @@ body {
     padding-right: 10px;
     padding-left: 10px;
   }
+  
+  .page-header {
+    padding: 25px 12px;
+  }
+  
+  .page-header h1 {
+    font-size: 24px;
+  }
 }
 
-/* تحسينات للشاشات الكبيرة (سطح المكتب) */
+/* ========== تحسينات للشاشات الكبيرة (سطح المكتب) ========== */
 @media (min-width: 769px) {
   .body-layout {
     padding-top: 0;
@@ -83,7 +614,24 @@ body {
   .safe-area-bottom {
     display: none;
   }
+  
+  .page-wrapper {
+    padding-top: 72px;
+  }
+  
+  .page-content {
+    max-width: 1000px;
+  }
 }
+
+/* تحسينات للشاشات الكبيرة جداً */
+@media (min-width: 1200px) {
+  .page-content {
+    max-width: 1100px;
+  }
+}
+
+/* ========== تحسينات عامة ========== */
 
 /* تحسينات اللمس على الجوال */
 button,
@@ -159,36 +707,40 @@ a:hover {
 
 /* تحسينات للشريط التمرير */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
   background: #f1f5f9;
-  border-radius: 4px;
+  border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
+  background: linear-gradient(135deg, #c7d2fe 0%, #a5b4fc 100%);
+  border-radius: 5px;
+  border: 2px solid #f1f5f9;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: linear-gradient(135deg, #a5b4fc 0%, #818cf8 100%);
 }
 
 /* منع التكبير الزائد على حقول الإدخال في iOS */
 input[type="text"],
 input[type="email"],
 input[type="password"],
+input[type="tel"],
+input[type="number"],
 textarea {
   font-size: 16px; /* منع التكبير التلقائي في iOS */
 }
 
 /* تحسينات للتركيز */
 :focus-visible {
-  outline: 2px solid #4f46e5;
+  outline: 3px solid rgba(79, 70, 229, 0.3);
   outline-offset: 2px;
+  border-radius: 4px;
 }
 
 /* تحسينات للطباعة */
@@ -198,7 +750,77 @@ textarea {
   }
   
   .safe-area-bottom,
-  header {
+  header,
+  .page-header {
     display: none;
   }
+  
+  .page-content {
+    padding: 0;
+  }
+  
+  .about-section,
+  .help-section,
+  .privacy-section {
+    box-shadow: none;
+    border: 1px solid #ddd;
+    page-break-inside: avoid;
+  }
 }
+
+/* تحسينات للروابط في النصوص */
+.page-content a {
+  color: #4f46e5;
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.page-content a:hover {
+  color: #7c3aed;
+  text-decoration: underline;
+}
+
+/* تحسينات للأقسام */
+section {
+  scroll-margin-top: 80px; /* لمنع قطع المحتوى بالهيدر */
+}
+
+/* تحسينات للرسوم المتحركة */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.about-section,
+.help-section,
+.privacy-section {
+  animation: slideIn 0.5s ease forwards;
+}
+
+.about-section:nth-child(1) { animation-delay: 0.1s; }
+.about-section:nth-child(2) { animation-delay: 0.2s; }
+.about-section:nth-child(3) { animation-delay: 0.3s; }
+.about-section:nth-child(4) { animation-delay: 0.4s; }
+.about-section:nth-child(5) { animation-delay: 0.5s; }
+
+.feature-card,
+.support-card {
+  animation: slideIn 0.5s ease forwards;
+  opacity: 0;
+}
+
+.feature-card:nth-child(1) { animation-delay: 0.2s; }
+.feature-card:nth-child(2) { animation-delay: 0.3s; }
+.feature-card:nth-child(3) { animation-delay: 0.4s; }
+.feature-card:nth-child(4) { animation-delay: 0.5s; }
+
+.support-card:nth-child(1) { animation-delay: 0.2s; }
+.support-card:nth-child(2) { animation-delay: 0.3s; }
+.support-card:nth-child(3) { animation-delay: 0.4s; }
