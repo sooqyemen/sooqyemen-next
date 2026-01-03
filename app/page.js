@@ -4,7 +4,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import Header from '@/components/Header';
 import Price from '@/components/Price';
 import { db } from '@/lib/firebaseClient';
 
@@ -185,8 +184,6 @@ export default function HomePage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
-      <Header />
-
       {/* هيرو مناسب للجوال */}
       <section className="home-hero">
         <div className="container">
@@ -246,7 +243,7 @@ export default function HomePage() {
           })}
         </div>
 
-        {/* ✅ جديد: زرّين للتبديل (قائمة / خريطة) */}
+        {/* ✅ زرّين للتبديل (قائمة / خريطة) */}
         <div
           className="row"
           style={{
