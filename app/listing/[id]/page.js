@@ -1,13 +1,13 @@
 // app/listing/[id]/page.js
 'use client';
 
-import CommentsBox from '@/components/CommentsBox';
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Header from '@/components/Header';
 import Price from '@/components/Price';
 import AuctionBox from '@/components/AuctionBox';
-import { db, firebase } from '@/lib/firebaseClient'; // ✅ أضفنا firebase
+import CommentsBox from '@/components/CommentsBox';
+import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import { logListingView } from '@/lib/analytics';
 import Link from 'next/link';
@@ -63,7 +63,7 @@ async function bumpViewOnce(listingId) {
   // زد views في Firestore
   await db.collection('listings').doc(listingId).update({
     views: firebase.firestore.FieldValue.increment(1),
-    lastViewedAt: firebase.firestore.FieldValue.serverTimestamp(), // اختياري مفيد
+    lastViewedAt: firebase.firestore.FieldValue.serverTimestamp(),
   });
 }
 
@@ -92,7 +92,6 @@ export default function ListingDetails({ params }) {
   useEffect(() => {
     if (!id) return;
     bumpViewOnce(id).catch((e) => {
-      // لو فشل بسبب Rules مثلًا، ما نخرب الصفحة
       console.warn('bumpViewOnce failed:', e?.code || e?.message || e);
     });
   }, [id]);
@@ -241,6 +240,11 @@ export default function ListingDetails({ params }) {
             <div style={{ fontWeight: 800, marginBottom: 6 }}>الوصف</div>
             <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
               {listing.description || '—'}
+            </div>
+
+            {/* ✅ هنا مكان التعليقات (تحت الوصف مباشرة) */}
+            <div style={{ marginTop: 12 }}>
+              <CommentsBox listingId={listing.id} />
             </div>
 
             <hr />
