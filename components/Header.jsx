@@ -1,3 +1,4 @@
+// components/Header.jsx
 'use client';
 
 import Link from 'next/link';
@@ -12,6 +13,9 @@ const ADMIN_EMAILS = [RAW_ENV_ADMIN, ...STATIC_ADMINS]
   .filter(Boolean)
   .map((e) => String(e).toLowerCase());
 
+// ✅ ثبّت ارتفاع الهيدر عشان نعوضه تحت
+const HEADER_H = 56;
+
 export default function Header() {
   const { user, loading, logout } = useAuth();
   const [scrolled, setScrolled] = useState(false);
@@ -23,13 +27,13 @@ export default function Header() {
 
   // ظل الهيدر عند التمرير
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', handleScroll);
+    const handleScroll = () => setScrolled(window.scrollY > 10);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // قفل سكرول الصفحة + ESC للإغلاق
+  // ✅ قفل سكرول الصفحة + ESC للإغلاق
   useEffect(() => {
     if (!menuOpen) return;
 
@@ -63,79 +67,110 @@ export default function Header() {
     }
   };
 
+  // ✅ أثناء التحميل نخلي هيدر ثابت بسيط
   if (loading) {
     return (
-      <header className="header-shell">
-        <div className="container header-row">
-          <div className="skeleton" style={{ width: 160, height: 32 }} />
-        </div>
+      <>
+        <header className="header-shell">
+          <div className="container header-row">
+            <div className="skeleton" style={{ width: 160, height: 32 }} />
+          </div>
+        </header>
+
+        {/* ✅ تعويض ارتفاع الهيدر */}
+        <div style={{ height: HEADER_H }} />
+
         <style jsx>{`
           .header-shell {
-            position: sticky;
+            position: fixed;
             top: 0;
+            left: 0;
+            right: 0;
             z-index: 1000;
             background: #ffffff;
             border-bottom: 1px solid #eef2f7;
+            height: ${HEADER_H}px;
+            display: flex;
+            align-items: center;
+            transform: translateZ(0);
+            -webkit-transform: translateZ(0);
           }
           .header-row {
             display: flex;
             justify-content: center;
-            padding: 10px 0;
+            padding: 0 12px;
+            width: 100%;
           }
           .skeleton {
-            background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+            background: linear-gradient(
+              90deg,
+              #f1f5f9 25%,
+              #e2e8f0 50%,
+              #f1f5f9 75%
+            );
             background-size: 200% 100%;
             border-radius: 999px;
             animation: loading 1.4s infinite;
           }
           @keyframes loading {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
+            0% {
+              background-position: 200% 0;
+            }
+            100% {
+              background-position: -200% 0;
+            }
           }
         `}</style>
-      </header>
+      </>
     );
   }
 
   return (
     <>
+      {/* ✅ Fixed بدل Sticky (هذا اللي يحل اختفاء زر القائمة بالجوال) */}
       <header
         className="header"
         style={{
-          position: 'sticky',
+          position: 'fixed',
           top: 0,
+          left: 0,
+          right: 0,
           zIndex: 1000,
-          backgroundColor: scrolled ? 'rgba(255,255,255,0.97)' : '#ffffff',
+          height: HEADER_H,
+          backgroundColor: scrolled ? 'rgba(255,255,255,0.98)' : '#ffffff',
           backdropFilter: scrolled ? 'blur(10px)' : 'none',
-          boxShadow: scrolled ? '0 2px 8px rgba(15,23,42,0.08)' : 'none',
+          WebkitBackdropFilter: scrolled ? 'blur(10px)' : 'none',
+          boxShadow: scrolled ? '0 2px 10px rgba(15,23,42,0.10)' : 'none',
           borderBottom: scrolled ? 'none' : '1px solid #eef2f7',
-          transition: 'all 0.25s ease',
+          transition: 'all 0.2s ease',
+          transform: 'translateZ(0)',
+          WebkitTransform: 'translateZ(0)',
         }}
       >
         <div className="container header-row">
           {/* زر القائمة */}
           <button
-            className="icon-btn menu-btn"
+            className="icon-btn"
             onClick={() => setMenuOpen(true)}
             aria-label="القائمة"
+            type="button"
           >
             <span className="icon-lines" />
           </button>
 
-          {/* الشعار (اللوجو) */}
-          <div className="logo-container">
-            <Link href="/" className="logo">
-              سوق اليمن
-            </Link>
-          </div>
+          {/* وسط فاضي (بدون شعار وبدون نص) */}
+          <div className="center-spacer" />
 
-          {/* زر إضافة إعلان */}
-          <Link href="/add" className="btn primary add-btn">
-            <span className="add-text">+ أضف إعلاناً</span>
-            <span className="add-text-mobile">+ إعلان</span>
+          {/* زر إضافة إعلان (يصغر تلقائي للجوال) */}
+          <Link href="/add" className="add-link" aria-label="أضف إعلاناً">
+            <span className="add-plus">+</span>
+            <span className="add-text">أضف إعلاناً</span>
           </Link>
         </div>
       </header>
+
+      {/* ✅ تعويض ارتفاع الهيدر حتى لا يغطي المحتوى */}
+      <div style={{ height: HEADER_H }} />
 
       {/* القائمة الجانبية */}
       {menuOpen && (
@@ -146,36 +181,50 @@ export default function Header() {
               <div>
                 <div className="side-title">القائمة</div>
                 {user ? (
-                  <div className="side-user">👤 {user.email}</div>
+                  <div className="side-user">👤 {user.displayName || 'مستخدم'}</div>
                 ) : (
-                  <div className="side-user muted">زائر · لم تقم بتسجيل الدخول</div>
+                  <div className="side-user muted">
+                    زائر · لم تقم بتسجيل الدخول
+                  </div>
                 )}
               </div>
-              <button className="icon-btn" onClick={() => setMenuOpen(false)} aria-label="إغلاق">
+              <button
+                className="icon-btn"
+                onClick={() => setMenuOpen(false)}
+                aria-label="إغلاق"
+                type="button"
+              >
                 ✕
               </button>
             </div>
 
             <div className="side-section">
-              <Link href="/" className="side-item" onClick={() => setMenuOpen(false)}>
-                <span>🏠</span>
-                <span>الرئيسية</span>
-              </Link>
-
-              <Link href="/add" className="side-item" onClick={() => setMenuOpen(false)}>
+              <Link
+                href="/add"
+                className="side-item"
+                onClick={() => setMenuOpen(false)}
+              >
                 <span>➕</span>
                 <span>أضف إعلاناً</span>
               </Link>
 
               {user && (
-                <Link href="/my-listings" className="side-item" onClick={() => setMenuOpen(false)}>
+                <Link
+                  href="/my-listings"
+                  className="side-item"
+                  onClick={() => setMenuOpen(false)}
+                >
                   <span>📋</span>
                   <span>إعلاناتي</span>
                 </Link>
               )}
 
               {isAdmin && (
-                <Link href="/admin" className="side-item" onClick={() => setMenuOpen(false)}>
+                <Link
+                  href="/admin"
+                  className="side-item"
+                  onClick={() => setMenuOpen(false)}
+                >
                   <span>🛡️</span>
                   <span>لوحة الإدارة</span>
                 </Link>
@@ -184,12 +233,23 @@ export default function Header() {
 
             <div className="side-section">
               {user ? (
-                <button className="side-item as-btn" onClick={handleLogout} disabled={isLoggingOut}>
+                <button
+                  className="side-item as-btn"
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                  type="button"
+                >
                   <span>🚪</span>
-                  <span>{isLoggingOut ? 'جاري تسجيل الخروج…' : 'تسجيل الخروج'}</span>
+                  <span>
+                    {isLoggingOut ? 'جاري تسجيل الخروج…' : 'تسجيل الخروج'}
+                  </span>
                 </button>
               ) : (
-                <Link href="/login" className="side-item" onClick={() => setMenuOpen(false)}>
+                <Link
+                  href="/login"
+                  className="side-item"
+                  onClick={() => setMenuOpen(false)}
+                >
                   <span>🔑</span>
                   <span>تسجيل الدخول</span>
                 </Link>
@@ -200,64 +260,29 @@ export default function Header() {
       )}
 
       <style jsx>{`
-        /* ✅ تحسينات رئيسية للتجاوب مع الجوال */
         .header-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 8px 16px;
-          direction: rtl; /* للحفاظ على الاتجاه العربي */
-          width: 100%;
-          box-sizing: border-box;
-          gap: 10px;
+          height: ${HEADER_H}px;
+          padding: 0 10px;
         }
 
-        .menu-btn, .add-btn {
-          flex: 0 0 auto;
-        }
-
-        .logo-container {
+        .center-spacer {
           flex: 1;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          min-width: 0; /* يسمح للعنصر بالانكماش */
-        }
-
-        .logo {
-          font-size: 18px;
-          font-weight: 800;
-          color: #1e293b;
-          text-decoration: none;
-          text-align: center;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          max-width: 100%;
-          background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-          letter-spacing: -0.5px;
-        }
-
-        @media (max-width: 480px) {
-          .logo {
-            font-size: 16px;
-          }
         }
 
         .icon-btn {
           border: none;
           background: #f1f5f9;
           border-radius: 999px;
-          width: 34px;
-          height: 34px;
+          width: 36px;
+          height: 36px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          flex-shrink: 0;
+          flex: 0 0 auto;
         }
 
         .icon-lines {
@@ -277,108 +302,52 @@ export default function Header() {
           border-radius: 4px;
           background: #0f172a;
         }
-        .icon-lines::before { top: -5px; }
-        .icon-lines::after { top: 5px; }
+        .icon-lines::before {
+          top: -5px;
+        }
+        .icon-lines::after {
+          top: 5px;
+        }
 
-        .btn {
+        /* زر إضافة إعلان */
+        .add-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
           border-radius: 999px;
-          padding: 7px 14px;
-          font-size: 13px;
-          border: 1px solid #e2e8f0;
-          background: #ffffff;
-          cursor: pointer;
           text-decoration: none;
-          color: #111827;
+          color: #ffffff;
+          font-weight: 800;
+          border: none;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          box-shadow: 0 4px 12px rgba(99, 102, 241, 0.30);
+          flex: 0 0 auto;
+          white-space: nowrap;
+        }
+        .add-plus {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          white-space: nowrap;
-          flex-shrink: 0;
-          transition: all 0.2s ease;
-          min-width: 100px;
+          width: 22px;
+          height: 22px;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.18);
+          font-size: 16px;
+          line-height: 1;
+        }
+        .add-text {
+          font-size: 13px;
         }
 
-        .btn.primary {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          border: none;
-          color: #ffffff;
-          font-weight: 600;
-          box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
-        }
-
-        .btn.primary:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 6px 16px rgba(99, 102, 241, 0.45);
-        }
-
-        /* نص زر الإضافة: كبير للديسكتوب / مختصر للجوال */
-        .add-text-mobile { display: none; }
-
-        /* تحسينات للشاشات الصغيرة */
-        @media (max-width: 768px) {
-          .header-row {
-            padding: 8px 12px;
-            gap: 8px;
-          }
-          
-          .logo {
-            font-size: 16px;
-          }
-          
-          .btn { 
-            padding: 7px 12px; 
-            font-size: 12px; 
-            min-width: 80px;
-          }
-        }
-
-        @media (max-width: 480px) {
-          .header-row {
+        /* ✅ على الجوال: نخلي الزر أصغر (حتى ما يضغط الهيدر) */
+        @media (max-width: 420px) {
+          .add-link {
             padding: 8px 10px;
+            gap: 6px;
           }
-          
-          .logo {
-            font-size: 15px;
-          }
-          
-          .btn { 
-            padding: 6px 10px; 
-            font-size: 12px; 
-            min-width: 70px;
-          }
-          
-          .add-text { display: none; }
-          .add-text-mobile { display: inline; }
-          
-          .icon-btn {
-            width: 32px;
-            height: 32px;
-          }
-        }
-
-        /* تحسينات للشاشات الصغيرة جداً */
-        @media (max-width: 360px) {
-          .header-row {
-            padding: 6px 8px;
-          }
-          
-          .logo {
-            font-size: 14px;
-          }
-          
-          .btn { 
-            padding: 5px 8px; 
-            font-size: 11px; 
-            min-width: 65px;
-          }
-          
-          .add-text-mobile {
-            font-size: 10px;
-          }
-          
-          .icon-btn {
-            width: 30px;
-            height: 30px;
+          .add-text {
+            display: none; /* نخليها + فقط */
           }
         }
 
@@ -401,7 +370,6 @@ export default function Header() {
           display: flex;
           flex-direction: column;
           padding: 14px 14px 18px;
-          direction: rtl;
         }
         .side-header {
           display: flex;
@@ -409,9 +377,17 @@ export default function Header() {
           justify-content: space-between;
           margin-bottom: 12px;
         }
-        .side-title { font-weight: 800; font-size: 17px; }
-        .side-user { font-size: 12px; margin-top: 2px; }
-        .muted { color: #9ca3af; }
+        .side-title {
+          font-weight: 900;
+          font-size: 17px;
+        }
+        .side-user {
+          font-size: 12px;
+          margin-top: 2px;
+        }
+        .muted {
+          color: #9ca3af;
+        }
 
         .side-section {
           border-top: 1px solid #e5e7eb;
@@ -423,28 +399,24 @@ export default function Header() {
           display: flex;
           align-items: center;
           gap: 10px;
-          padding: 9px 4px;
+          padding: 9px 6px;
           font-size: 14px;
           text-decoration: none;
           color: #111827;
-          border-radius: 8px;
+          border-radius: 10px;
         }
         .side-item span:first-child {
           width: 22px;
           text-align: center;
         }
-        .side-item:hover { background: #f3f4f6; }
+        .side-item:hover {
+          background: #f3f4f6;
+        }
         .side-item.as-btn {
           border: none;
           background: transparent;
           text-align: start;
           cursor: pointer;
-        }
-
-        @media (max-width: 768px) {
-          .side-menu {
-            width: 85%;
-          }
         }
       `}</style>
     </>
