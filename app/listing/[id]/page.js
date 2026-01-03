@@ -1,6 +1,7 @@
 // app/listing/[id]/page.js
 'use client';
 
+import CommentsBox from '@/components/CommentsBox';
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Header from '@/components/Header';
