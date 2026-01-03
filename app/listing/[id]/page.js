@@ -3,7 +3,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import Header from '@/components/Header';
 import Price from '@/components/Price';
 import AuctionBox from '@/components/AuctionBox';
 import CommentsBox from '@/components/CommentsBox';
@@ -111,23 +110,17 @@ export default function ListingDetails({ params }) {
 
   if (loading) {
     return (
-      <>
-        <Header />
-        <div className="container">
-          <div className="card muted">جاري التحميل...</div>
-        </div>
-      </>
+      <div className="container">
+        <div className="card muted">جاري التحميل...</div>
+      </div>
     );
   }
 
   if (!listing) {
     return (
-      <>
-        <Header />
-        <div className="container">
-          <div className="card">الإعلان غير موجود</div>
-        </div>
-      </>
+      <div className="container">
+        <div className="card">الإعلان غير موجود</div>
+      </div>
     );
   }
 
@@ -142,173 +135,167 @@ export default function ListingDetails({ params }) {
   // 🚫 إخفاء الإعلان عن الزوار إذا كان مخفي ولم يكن المشاهد أدمن أو صاحب الإعلان
   if (listing.hidden && !isAdmin && !isOwner) {
     return (
-      <>
-        <Header />
-        <div className="container">
-          <div className="row" style={{ justifyContent: 'space-between' }}>
-            <Link className="btn" href="/">
-              ← رجوع
-            </Link>
-          </div>
-          <div className="card" style={{ marginTop: 12 }}>
-            هذا الإعلان غير متاح حالياً
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  return (
-    <>
-      <Header />
       <div className="container">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <Link className="btn" href="/">
             ← رجوع
           </Link>
-          <span className="badge">👁️ {Number(listing.views || 0)}</span>
         </div>
+        <div className="card" style={{ marginTop: 12 }}>
+          هذا الإعلان غير متاح حالياً
+        </div>
+      </div>
+    );
+  }
 
-        {/* تنبيه للأدمن/صاحب الإعلان إذا كان الإعلان مخفي */}
-        {listing.hidden && (isAdmin || isOwner) ? (
+  return (
+    <div className="container">
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <Link className="btn" href="/">
+          ← رجوع
+        </Link>
+        <span className="badge">👁️ {Number(listing.views || 0)}</span>
+      </div>
+
+      {/* تنبيه للأدمن/صاحب الإعلان إذا كان الإعلان مخفي */}
+      {listing.hidden && (isAdmin || isOwner) ? (
+        <div
+          className="card"
+          style={{
+            marginTop: 10,
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            color: '#7f1d1d',
+            fontSize: 14,
+          }}
+        >
+          هذا الإعلان <b>مخفي</b> حالياً عن الزوار، ولا يظهر في القوائم العامة.
+        </div>
+      ) : null}
+
+      <div className="listingLayout" style={{ marginTop: 12 }}>
+        {/* التفاصيل */}
+        <div className="card">
+          {img ? (
+            <img
+              src={img}
+              alt={listing.title || 'img'}
+              style={{
+                height: 320,
+                width: '100%',
+                objectFit: 'cover',
+                borderRadius: 14,
+              }}
+            />
+          ) : null}
+
           <div
-            className="card"
             style={{
               marginTop: 10,
-              background: '#fef2f2',
-              border: '1px solid #fecaca',
-              color: '#7f1d1d',
-              fontSize: 14,
+              fontWeight: 900,
+              fontSize: 22,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              flexWrap: 'wrap',
             }}
           >
-            هذا الإعلان <b>مخفي</b> حالياً عن الزوار، ولا يظهر في القوائم العامة.
-          </div>
-        ) : null}
-
-        <div className="listingLayout" style={{ marginTop: 12 }}>
-          {/* التفاصيل */}
-          <div className="card">
-            {img ? (
-              <img
-                src={img}
-                alt={listing.title || 'img'}
+            {listing.title || 'بدون عنوان'}
+            {listing.hidden && (isAdmin || isOwner) ? (
+              <span
+                className="badge"
                 style={{
-                  height: 320,
-                  width: '100%',
-                  objectFit: 'cover',
-                  borderRadius: 14,
+                  background: '#fee2e2',
+                  color: '#b91c1c',
+                  fontSize: 11,
                 }}
-              />
+              >
+                مخفي
+              </span>
+            ) : null}
+          </div>
+
+          <div className="muted" style={{ marginTop: 4 }}>
+            {listing.city || ''}
+          </div>
+
+          <div style={{ marginTop: 10 }}>
+            <Price priceYER={listing.currentBidYER || listing.priceYER || 0} />
+          </div>
+
+          <hr />
+
+          <div style={{ fontWeight: 800, marginBottom: 6 }}>الوصف</div>
+          <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
+            {listing.description || '—'}
+          </div>
+
+          {/* ✅ التعليقات */}
+          <div style={{ marginTop: 12 }}>
+            <CommentsBox listingId={listing.id} />
+          </div>
+
+          <hr />
+
+          <div className="row">
+            {listing.phone ? (
+              <a className="btn btnPrimary" href={`tel:${listing.phone}`}>
+                اتصال
+              </a>
             ) : null}
 
-            <div
-              style={{
-                marginTop: 10,
-                fontWeight: 900,
-                fontSize: 22,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                flexWrap: 'wrap',
-              }}
-            >
-              {listing.title || 'بدون عنوان'}
-              {listing.hidden && (isAdmin || isOwner) ? (
-                <span
-                  className="badge"
-                  style={{
-                    background: '#fee2e2',
-                    color: '#b91c1c',
-                    fontSize: 11,
-                  }}
-                >
-                  مخفي
-                </span>
-              ) : null}
-            </div>
+            {listing.phone && listing.isWhatsapp ? (
+              <a
+                className="btn"
+                href={`https://wa.me/${String(listing.phone).replace(/\D/g, '')}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                واتساب
+              </a>
+            ) : null}
 
-            <div className="muted" style={{ marginTop: 4 }}>
-              {listing.city || ''}
-            </div>
-
-            <div style={{ marginTop: 10 }}>
-              <Price priceYER={listing.currentBidYER || listing.priceYER || 0} />
-            </div>
-
-            <hr />
-
-            <div style={{ fontWeight: 800, marginBottom: 6 }}>الوصف</div>
-            <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
-              {listing.description || '—'}
-            </div>
-
-            {/* ✅ هنا مكان التعليقات (تحت الوصف مباشرة) */}
-            <div style={{ marginTop: 12 }}>
-              <CommentsBox listingId={listing.id} />
-            </div>
-
-            <hr />
-
-            <div className="row">
-              {listing.phone ? (
-                <a className="btn btnPrimary" href={`tel:${listing.phone}`}>
-                  اتصال
-                </a>
-              ) : null}
-
-              {listing.phone && listing.isWhatsapp ? (
-                <a
-                  className="btn"
-                  href={`https://wa.me/${String(listing.phone).replace(/\D/g, '')}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  واتساب
-                </a>
-              ) : null}
-
-              {chatId ? (
-  <Link
-    className="btn"
-    href={`/chat/${encodeURIComponent(chatId)}?listingId=${encodeURIComponent(
-      listing.id
-    )}&otherUid=${encodeURIComponent(sellerUid || '')}`}
-  >
-    بدء محادثة
-  </Link>
-) : (
-  <span className="muted" style={{ fontSize: 12 }}>
-    سجل دخول لبدء محادثة
-  </span>
-)}
-            </div>
-          </div>
-
-          {/* العمود الجانبي: مزاد + خريطة */}
-          <div className="sideCol" style={{ display: 'grid', gap: 12 }}>
-            <AuctionBox listingId={listing.id} listing={listing} />
-            <ListingMap coords={coords} label={listing.locationLabel || listing.city || ''} />
+            {chatId ? (
+              <Link
+                className="btn"
+                href={`/chat/${encodeURIComponent(chatId)}?listingId=${encodeURIComponent(
+                  listing.id
+                )}&otherUid=${encodeURIComponent(sellerUid || '')}`}
+              >
+                بدء محادثة
+              </Link>
+            ) : (
+              <span className="muted" style={{ fontSize: 12 }}>
+                سجل دخول لبدء محادثة
+              </span>
+            )}
           </div>
         </div>
 
-        <style jsx>{`
-          .listingLayout {
-            display: grid;
-            gap: 12px;
-            grid-template-columns: 1.4fr 1fr;
-            align-items: start;
-          }
-
-          @media (max-width: 768px) {
-            .listingLayout {
-              grid-template-columns: 1fr;
-            }
-            .sideCol {
-              order: 2;
-            }
-          }
-        `}</style>
+        {/* العمود الجانبي */}
+        <div className="sideCol" style={{ display: 'grid', gap: 12 }}>
+          <AuctionBox listingId={listing.id} listing={listing} />
+          <ListingMap coords={coords} label={listing.locationLabel || listing.city || ''} />
+        </div>
       </div>
-    </>
+
+      <style jsx>{`
+        .listingLayout {
+          display: grid;
+          gap: 12px;
+          grid-template-columns: 1.4fr 1fr;
+          align-items: start;
+        }
+
+        @media (max-width: 768px) {
+          .listingLayout {
+            grid-template-columns: 1fr;
+          }
+          .sideCol {
+            order: 2;
+          }
+        }
+      `}</style>
+    </div>
   );
 }
