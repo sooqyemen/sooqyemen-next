@@ -268,19 +268,19 @@ export default function ListingDetails({ params }) {
               ) : null}
 
               {chatId ? (
-                <Link
-                  className="btn"
-                  href={`/chat/${encodeURIComponent(chatId)}?listingId=${encodeURIComponent(
-                    listing.id
-                  )}&other=${encodeURIComponent(listing.userEmail || '')}`}
-                >
-                  بدء محادثة
-                </Link>
-              ) : (
-                <span className="muted" style={{ fontSize: 12 }}>
-                  سجل دخول لبدء محادثة
-                </span>
-              )}
+  <Link
+    className="btn"
+    href={`/chat/${encodeURIComponent(chatId)}?listingId=${encodeURIComponent(
+      listing.id
+    )}&otherUid=${encodeURIComponent(sellerUid || '')}`}
+  >
+    بدء محادثة
+  </Link>
+) : (
+  <span className="muted" style={{ fontSize: 12 }}>
+    سجل دخول لبدء محادثة
+  </span>
+)}
             </div>
           </div>
 
