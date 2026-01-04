@@ -1,4 +1,4 @@
-// app/listing/[id]/page.js - النسخة المحسنة
+// app/listing/[id]/page.js - النسخة المحسنة مع زر جوجل مابس
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -444,9 +444,34 @@ export default function ListingDetails({ params }) {
               <div className="map-section">
                 <h3 className="section-title">الموقع</h3>
                 {coords ? (
-                  <div className="map-container">
-                    <ListingMap coords={coords} label={listing.locationLabel || listing.city || ''} />
-                  </div>
+                  <>
+                    <div className="map-container">
+                      <ListingMap coords={coords} label={listing.locationLabel || listing.city || ''} />
+                    </div>
+                    
+                    {/* أزرار خرائط جوجل */}
+                    <div className="google-maps-buttons">
+                      <a 
+                        href={`https://www.google.com/maps?q=${coords[0]},${coords[1]}&z=15&hl=ar`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="google-maps-button"
+                      >
+                        <span className="google-maps-icon">🗺️</span>
+                        <span className="google-maps-text">فتح في خرائط جوجل</span>
+                      </a>
+                      
+                      <a 
+                        href={`https://www.google.com/maps/@${coords[0]},${coords[1]},15z?hl=ar&entry=ttu`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="google-maps-button satellite"
+                      >
+                        <span className="google-maps-icon">🛰️</span>
+                        <span className="google-maps-text">قمر صناعي</span>
+                      </a>
+                    </div>
+                  </>
                 ) : (
                   <div className="map-placeholder">
                     <div className="map-icon">📍</div>
@@ -458,6 +483,60 @@ export default function ListingDetails({ params }) {
           </div>
         </div>
       </div>
+
+      {/* أضف هذه الأنماط إذا لم يكن لديك ملف listing.css */}
+      <style jsx>{`
+        .google-maps-buttons {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0.75rem;
+          margin-top: 1rem;
+        }
+        
+        .google-maps-button {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.75rem;
+          background: #4285f4;
+          color: white;
+          padding: 0.875rem 1rem;
+          border-radius: 10px;
+          text-decoration: none;
+          font-weight: 600;
+          font-size: 0.875rem;
+          transition: all 0.3s ease;
+          text-align: center;
+          border: 2px solid transparent;
+        }
+        
+        .google-maps-button:hover {
+          background: #3367d6;
+          transform: translateY(-2px);
+          box-shadow: 0 6px 15px rgba(66, 133, 244, 0.3);
+          text-decoration: none;
+          color: white;
+        }
+        
+        .google-maps-button.satellite {
+          background: #10b981;
+        }
+        
+        .google-maps-button.satellite:hover {
+          background: #059669;
+          box-shadow: 0 6px 15px rgba(16, 185, 129, 0.3);
+        }
+        
+        .google-maps-icon {
+          font-size: 1.25rem;
+        }
+        
+        @media (max-width: 768px) {
+          .google-maps-buttons {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
     </div>
   );
 }
