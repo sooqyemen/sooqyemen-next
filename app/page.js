@@ -1,6 +1,4 @@
-// 📁 الموقع: /app/page.jsx
 'use client';
-
 import { useEffect, useMemo, useState, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
@@ -373,7 +371,7 @@ export default function HomePage() {
       if (!q) return true;
 
       const title = safeText(listing.title).toLowerCase();
-      const city = safeText(listing.city).toLowerCase();
+      const city = safeText(liting.city).toLowerCase();
       const locationLabel = safeText(listing.locationLabel).toLowerCase();
       const description = safeText(listing.description).toLowerCase();
       const category = String(listing.category || '').toLowerCase();
