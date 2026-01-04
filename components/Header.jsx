@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/useAuth';
 import { useEffect, useState } from 'react';
 
-// إيميلات المدراء
 const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
 
 export default function Header() {
@@ -13,25 +12,15 @@ export default function Header() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
 
-  // التحقق إذا كان المستخدم مديراً
   const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase());
 
-  // محاكاة تحقق من الرسائل غير المقروءة
+  // (اختياري) محاكاة — خله false دائمًا لو ما عندك نظام رسائل غير مقروءة الحقيقي
   useEffect(() => {
-    if (user) {
-      const hasMessages = Math.random() > 0.7;
-      setHasUnreadMessages(hasMessages);
-    }
+    if (user) setHasUnreadMessages(false);
   }, [user]);
 
-  // قفل سكرول الصفحة عندما تكون القائمة مفتوحة
   useEffect(() => {
-    if (menuOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-
+    document.body.style.overflow = menuOpen ? 'hidden' : '';
     return () => {
       document.body.style.overflow = '';
     };
@@ -55,14 +44,9 @@ export default function Header() {
     <>
       <header className="header">
         <div className="header-inner">
-
-          {/* ✅ Mobile */}
+          {/* Mobile */}
           <div className="mobile-nav">
-            <button
-              className="menu-btn"
-              onClick={() => setMenuOpen(true)}
-              aria-label="فتح القائمة"
-            >
+            <button className="menu-btn" onClick={() => setMenuOpen(true)} aria-label="فتح القائمة">
               <span className="menu-icon">☰</span>
             </button>
 
@@ -70,16 +54,12 @@ export default function Header() {
               سوق اليمن
             </Link>
 
-            <Link
-              href="/add"
-              className="add-btn-mobile"
-              aria-label="أضف إعلان جديد"
-            >
+            <Link href="/add" className="add-btn-mobile" aria-label="أضف إعلان جديد">
               + إعلان
             </Link>
           </div>
 
-          {/* ✅ Desktop */}
+          {/* Desktop */}
           <div className="desktop-nav">
             <Link href="/" className="logo">
               سوق اليمن
@@ -93,7 +73,7 @@ export default function Header() {
                 الإعلانات
               </Link>
 
-              {/* ❌ حذفنا الفئات من الأعلى */}
+              {/* ✅ تم حذف الفئات */}
               {/* <Link href="/categories" className="nav-link">الفئات</Link> */}
 
               {isAdmin && (
@@ -113,24 +93,24 @@ export default function Header() {
                   </Link>
 
                   <div className="user-menu">
-                    <span className="user-greeting">
-                      أهلاً، {user.name || user.email?.split('@')[0]}
-                    </span>
+                    <span className="user-greeting">أهلاً، {user.name || user.email?.split('@')[0]}</span>
 
                     <div className="dropdown">
                       <Link href="/my-listings" className="dropdown-item">
                         📋 إعلاناتي
                       </Link>
+
                       <Link href="/my-chats" className="dropdown-item">
                         💬 محادثاتي
-                        {hasUnreadMessages && (
-                          <span className="unread-dot" />
-                        )}
+                        {hasUnreadMessages && <span className="unread-dot" />}
                       </Link>
+
                       <Link href="/profile" className="dropdown-item">
                         👤 الملف الشخصي
                       </Link>
+
                       <div className="dropdown-divider" />
+
                       <button
                         onClick={handleLogout}
                         disabled={isLoggingOut}
@@ -146,6 +126,7 @@ export default function Header() {
                   <Link href="/add" className="add-btn-desktop">
                     + أضف إعلان
                   </Link>
+
                   <div className="auth-buttons">
                     <Link href="/login" className="login-btn">
                       تسجيل الدخول
@@ -161,6 +142,7 @@ export default function Header() {
         </div>
       </header>
 
+      {/* هذا spacer مهم لأن الهيدر fixed */}
       <div className="header-spacer" />
 
       <div
@@ -169,10 +151,7 @@ export default function Header() {
         aria-hidden="true"
       />
 
-      <aside
-        className={`side-menu ${menuOpen ? 'open' : ''}`}
-        aria-hidden={!menuOpen}
-      >
+      <aside className={`side-menu ${menuOpen ? 'open' : ''}`} aria-hidden={!menuOpen}>
         <div className="side-menu-header">
           <div className="side-menu-user">
             {user ? (
@@ -191,11 +170,7 @@ export default function Header() {
             )}
           </div>
 
-          <button
-            className="close-menu-btn"
-            onClick={closeMenu}
-            aria-label="إغلاق القائمة"
-          >
+          <button className="close-menu-btn" onClick={closeMenu} aria-label="إغلاق القائمة">
             ✕
           </button>
         </div>
@@ -230,9 +205,7 @@ export default function Header() {
                   <span className="item-icon">💬</span>
                   <span className="item-text">
                     محادثاتي
-                    {hasUnreadMessages && (
-                      <span className="unread-badge">جديد</span>
-                    )}
+                    {hasUnreadMessages && <span className="unread-dot" />}
                   </span>
                 </Link>
               </>
@@ -261,17 +234,9 @@ export default function Header() {
                   <span className="item-text">الملف الشخصي</span>
                 </Link>
 
-                <button
-                  className="menu-item logout-menu-item"
-                  onClick={handleLogout}
-                  disabled={isLoggingOut}
-                >
-                  <span className="item-icon">
-                    {isLoggingOut ? '⏳' : '🚪'}
-                  </span>
-                  <span className="item-text">
-                    {isLoggingOut ? 'جاري تسجيل الخروج…' : 'تسجيل الخروج'}
-                  </span>
+                <button className="menu-item logout-menu-item" onClick={handleLogout} disabled={isLoggingOut}>
+                  <span className="item-icon">{isLoggingOut ? '⏳' : '🚪'}</span>
+                  <span className="item-text">{isLoggingOut ? 'جاري تسجيل الخروج…' : 'تسجيل الخروج'}</span>
                 </button>
               </>
             ) : (
@@ -292,11 +257,6 @@ export default function Header() {
           <div className="menu-section">
             <h3 className="section-title">المزيد</h3>
 
-            <Link href="/about" className="menu-item" onClick={closeMenu}>
-              <span className="item-icon">ℹ️</span>
-              <span className="item-text">عن المنصة</span>
-            </Link>
-
             <Link href="/help" className="menu-item" onClick={closeMenu}>
               <span className="item-icon">❓</span>
               <span className="item-text">مساعدة ودعم</span>
@@ -305,6 +265,11 @@ export default function Header() {
             <Link href="/privacy" className="menu-item" onClick={closeMenu}>
               <span className="item-icon">🔒</span>
               <span className="item-text">سياسة الخصوصية</span>
+            </Link>
+
+            <Link href="/terms" className="menu-item" onClick={closeMenu}>
+              <span className="item-icon">📄</span>
+              <span className="item-text">الشروط والأحكام</span>
             </Link>
           </div>
         </nav>
