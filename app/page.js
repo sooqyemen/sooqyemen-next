@@ -1,4 +1,4 @@
-// app/page.jsx (متوافق مع مشروعك الحالي بدون أي تعديلات على Firestore)
+// app/page.jsx - النسخة المحسنة
 'use client';
 
 import { useEffect, useMemo, useState, useRef } from 'react';
@@ -11,29 +11,25 @@ import { db } from '@/lib/firebaseClient';
 const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
   ssr: false,
   loading: () => (
-    <div className="card muted" style={{ textAlign: 'center' }}>
-      جاري تحميل الخريطة...
+    <div className="loading-card">
+      <div className="spinner"></div>
+      <p>جاري تحميل الخريطة...</p>
     </div>
   ),
 });
 
-// ✅ نفس مفاتيح الأقسام المستخدمة عندك (لا تغيّرها إلا إذا كنت متأكد)
+// ✅ نفس مفاتيح الأقسام المستخدمة عندك
 const CATEGORY_CONFIG = [
   { key: 'all', label: 'الكل', icon: '📋' },
-
   { key: 'cars', label: 'سيارات', icon: '🚗' },
   { key: 'real_estate', label: 'عقارات', icon: '🏡' },
-
-  // مهم: في مشروعك صفحة الإضافة تستخدم mobiles
   { key: 'mobiles', label: 'جوالات', icon: '📱' },
-
   { key: 'electronics', label: 'إلكترونيات', icon: '💻' },
   { key: 'motorcycles', label: 'دراجات نارية', icon: '🏍️' },
   { key: 'heavy_equipment', label: 'معدات ثقيلة', icon: '🚜' },
   { key: 'solar', label: 'طاقة شمسية', icon: '☀️' },
   { key: 'networks', label: 'نت و شبكات', icon: '📡' },
   { key: 'maintenance', label: 'صيانة', icon: '🛠️' },
-
   { key: 'furniture', label: 'أثاث', icon: '🛋️' },
   { key: 'animals', label: 'حيوانات و طيور', icon: '🐑' },
   { key: 'jobs', label: 'وظائف', icon: '💼' },
@@ -54,71 +50,133 @@ function formatRelative(ts) {
     const hrs = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
 
-    if (mins <= 1) return 'قبل قليل';
+    if (mins <= 1) return 'الآن';
     if (mins < 60) return `قبل ${mins} دقيقة`;
     if (hrs < 24) return `قبل ${hrs} ساعة`;
     if (days < 7) return `قبل ${days} يوم`;
-    return d.toLocaleDateString('ar');
+    if (days < 30) return `قبل ${Math.floor(days / 7)} أسبوع`;
+    return d.toLocaleDateString('ar-YE');
   } catch {
     return 'قبل قليل';
   }
 }
 
-function HomeListingCard({ listing }) {
-  const img =
-    (Array.isArray(listing.images) && listing.images[0]) ||
-    listing.image ||
-    null;
-
+// ✅ بطاقة العرض الشبكي (Grid Card) - صور صغيرة
+function GridListingCard({ listing }) {
+  const img = (Array.isArray(listing.images) && listing.images[0]) || listing.image || null;
   const catKey = String(listing.category || '').toLowerCase();
   const catObj = CATEGORY_CONFIG.find((c) => c.key === catKey);
-
   const desc = safeText(listing.description).trim();
-  const shortDesc =
-    desc.length > 90 ? `${desc.slice(0, 90)}...` : desc || '—';
+  const shortDesc = desc.length > 60 ? `${desc.slice(0, 60)}...` : desc || '—';
 
   return (
     <Link href={`/listing/${listing.id}`} className="card-link">
-      <div className="card listing-card">
-        {img ? (
-          <img
-            src={img}
-            alt={listing.title || 'صورة الإعلان'}
-            className="listing-img"
-            loading="lazy"
-          />
-        ) : (
-          <div className="img-fallback">🖼️</div>
-        )}
+      <div className="listing-card grid-card">
+        <div className="image-container">
+          {img ? (
+            <img
+              src={img}
+              alt={listing.title || 'صورة الإعلان'}
+              className="listing-img"
+              loading="lazy"
+            />
+          ) : (
+            <div className="img-fallback">🖼️</div>
+          )}
+          {listing.auctionEnabled && (
+            <div className="auction-badge">⚡ مزاد</div>
+          )}
+        </div>
 
-        <div className="card-body">
-          <div className="top-row">
-            <div className="title" title={listing.title || ''}>
+        <div className="card-content">
+          <div className="card-header">
+            <h3 className="listing-title" title={listing.title || ''}>
               {listing.title || 'بدون عنوان'}
-            </div>
-            {catObj ? (
-              <div className="cat-pill">
-                <span className="cat-ic">{catObj.icon}</span>
-                <span>{catObj.label}</span>
-              </div>
-            ) : null}
+            </h3>
+            {catObj && (
+              <span className="category-badge">
+                <span className="category-icon">{catObj.icon}</span>
+              </span>
+            )}
           </div>
 
-          <div className="muted loc">
-            <span>📍</span>
+          <div className="listing-location">
+            <span className="location-icon">📍</span>
             <span>{listing.city || listing.locationLabel || 'غير محدد'}</span>
           </div>
 
-          <div className="desc muted">{shortDesc}</div>
+          <p className="listing-description">{shortDesc}</p>
 
-          <div className="price">
+          <div className="price-section">
             <Price priceYER={listing.currentBidYER || listing.priceYER || 0} />
           </div>
 
-          <div className="meta muted">
-            <span>👁️ {Number(listing.views || 0)}</span>
-            <span className="dot">•</span>
-            <span>⏱️ {formatRelative(listing.createdAt)}</span>
+          <div className="listing-footer">
+            <span className="views-count">👁️ {Number(listing.views || 0)}</span>
+            <span className="time-ago">⏱️ {formatRelative(listing.createdAt)}</span>
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+// ✅ بطاقة العرض القائمة (List Card) - صور متوسطة
+function ListListingCard({ listing }) {
+  const img = (Array.isArray(listing.images) && listing.images[0]) || listing.image || null;
+  const catKey = String(listing.category || '').toLowerCase();
+  const catObj = CATEGORY_CONFIG.find((c) => c.key === catKey);
+  const desc = safeText(listing.description).trim();
+  const shortDesc = desc.length > 120 ? `${desc.slice(0, 120)}...` : desc || '—';
+
+  return (
+    <Link href={`/listing/${listing.id}`} className="card-link">
+      <div className="listing-card list-card">
+        <div className="list-image-container">
+          {img ? (
+            <img
+              src={img}
+              alt={listing.title || 'صورة الإعلان'}
+              className="list-img"
+              loading="lazy"
+            />
+          ) : (
+            <div className="list-img-fallback">🖼️</div>
+          )}
+        </div>
+
+        <div className="list-content">
+          <div className="list-header">
+            <div className="list-title-section">
+              <h3 className="list-title" title={listing.title || ''}>
+                {listing.title || 'بدون عنوان'}
+              </h3>
+              {catObj && (
+                <span className="list-category">
+                  <span className="list-category-icon">{catObj.icon}</span>
+                  <span>{catObj.label}</span>
+                </span>
+              )}
+            </div>
+            
+            <div className="list-price-section">
+              <Price priceYER={listing.currentBidYER || listing.priceYER || 0} />
+            </div>
+          </div>
+
+          <div className="list-location">
+            <span className="location-icon">📍</span>
+            <span>{listing.city || listing.locationLabel || 'غير محدد'}</span>
+          </div>
+
+          <p className="list-description">{shortDesc}</p>
+
+          <div className="list-footer">
+            <span className="list-views">👁️ {Number(listing.views || 0)} مشاهدة</span>
+            <span className="list-time">⏱️ {formatRelative(listing.createdAt)}</span>
+            {listing.auctionEnabled && (
+              <span className="list-auction">⚡ مزاد نشط</span>
+            )}
           </div>
         </div>
       </div>
@@ -139,43 +197,47 @@ function SearchBar({ search, setSearch, suggestions }) {
   }, []);
 
   return (
-    <div className="search-wrap" ref={ref}>
-      <div className="search-bar">
-        <input
-          className="search-input"
-          value={search}
-          onChange={(e) => {
-            const v = e.target.value;
-            setSearch(v);
-            setOpen(!!v.trim());
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') setOpen(false);
-          }}
-          placeholder="ابحث باسم المنتج أو المدينة أو القسم..."
-        />
-        <button className="search-btn" type="button" onClick={() => setOpen(false)}>
+    <div className="search-wrapper" ref={ref}>
+      <div className="search-container">
+        <div className="search-input-wrapper">
+          <span className="search-icon">🔍</span>
+          <input
+            className="search-input"
+            value={search}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSearch(v);
+              setOpen(!!v.trim());
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') setOpen(false);
+            }}
+            placeholder="ابحث عن سيارات، عقارات، جوالات..."
+          />
+        </div>
+        <button className="search-button" type="button" onClick={() => setOpen(false)}>
           بحث
         </button>
       </div>
 
-      {open && suggestions.length > 0 ? (
-        <div className="suggest">
+      {open && suggestions.length > 0 && (
+        <div className="suggestions-dropdown">
           {suggestions.map((s, i) => (
             <button
               key={i}
-              className="suggest-item"
+              className="suggestion-item"
               type="button"
               onClick={() => {
                 setSearch(s);
                 setOpen(false);
               }}
             >
-              🔎 {s}
+              <span className="suggestion-icon">🔍</span>
+              <span className="suggestion-text">{s}</span>
             </button>
           ))}
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
@@ -183,22 +245,22 @@ function SearchBar({ search, setSearch, suggestions }) {
 export default function HomePage() {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState('');
+  const [error, setError] = useState('');
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [viewMode, setViewMode] = useState('list'); // list | map
+  const [viewMode, setViewMode] = useState('grid'); // grid | list | map
 
-  // ✅ جلب الإعلانات: متوافق مع مشروعك الحالي (لا status ولا featured ولا indexes إضافية)
+  // ✅ جلب الإعلانات - نفس الكود الحالي
   useEffect(() => {
     setLoading(true);
-    setErr('');
+    setError('');
 
     try {
       const unsub = db
         .collection('listings')
         .orderBy('createdAt', 'desc')
-        .limit(80)
+        .limit(100) // زدنا الحد ليعرض أكثر
         .onSnapshot(
           (snap) => {
             const data = snap.docs.map((doc) => ({
@@ -210,7 +272,7 @@ export default function HomePage() {
           },
           (e) => {
             console.error('Firestore home error:', e);
-            setErr(e?.message || 'حدث خطأ في جلب الإعلانات');
+            setError(e?.message || 'حدث خطأ في جلب الإعلانات');
             setLoading(false);
           }
         );
@@ -218,46 +280,55 @@ export default function HomePage() {
       return () => unsub();
     } catch (e) {
       console.error('Firestore home fatal:', e);
-      setErr('تعذّر الاتصال بقاعدة البيانات');
+      setError('تعذّر الاتصال بقاعدة البيانات');
       setLoading(false);
     }
   }, []);
 
-  // ✅ اقتراحات بحث (من العناوين والمدن والأقسام)
+  // ✅ اقتراحات بحث محسنة
   const suggestions = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return [];
 
-    const set = new Set();
-    for (const l of listings) {
-      const title = safeText(l.title);
-      const city = safeText(l.city);
-      const cat = safeText(l.category);
+    const results = new Set();
+    const allListings = listings.slice(0, 50); // للبحث فقط في 50 إعلان أول
 
-      if (title.toLowerCase().includes(q)) set.add(title);
-      if (city.toLowerCase().includes(q)) set.add(city);
-      if (cat.toLowerCase().includes(q)) set.add(cat);
-      if (set.size >= 6) break;
-    }
-    return Array.from(set).slice(0, 6);
+    // إضافة نتائج من العناوين
+    allListings.forEach(l => {
+      const title = safeText(l.title).toLowerCase();
+      if (title.includes(q)) results.add(l.title);
+    });
+
+    // إضافة نتائج من المدن
+    allListings.forEach(l => {
+      const city = safeText(l.city).toLowerCase();
+      if (city.includes(q)) results.add(l.city);
+    });
+
+    // إضافة نتائج من الأقسام
+    CATEGORY_CONFIG.forEach(cat => {
+      if (cat.label.toLowerCase().includes(q)) results.add(cat.label);
+    });
+
+    return Array.from(results).slice(0, 8);
   }, [search, listings]);
 
-  // ✅ فلترة: نعتمد على isActive/hidden إن وجدت بدون ما نطلب index
+  // ✅ فلترة الإعلانات
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const catSelected = String(selectedCategory || 'all').toLowerCase();
 
     return (listings || [])
       .filter((l) => {
-        // لو فيه isActive وخاطئة نخفيه
+        // فلترة حسب الحالة
         if (typeof l.isActive === 'boolean' && l.isActive === false) return false;
-
-        // لو فيه hidden true نخفيه عن العامة
         if (l.hidden === true) return false;
 
+        // فلترة حسب القسم
         const cat = String(l.category || '').toLowerCase();
         if (catSelected !== 'all' && cat !== catSelected) return false;
 
+        // فلترة حسب البحث
         if (!q) return true;
 
         const title = safeText(l.title).toLowerCase();
@@ -276,327 +347,874 @@ export default function HomePage() {
   }, [listings, search, selectedCategory]);
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
+    <div className="home-page">
       <Header />
 
-      {/* Hero */}
-      <section className="hero">
-        <div className="container">
-          <h1 className="hero-title">سوق اليمن</h1>
-          <p className="hero-sub">
-            بيع وشراء كل شيء في اليمن — سيارات، عقارات، جوالات، طاقة شمسية، وظائف وأكثر.
-          </p>
-
-          <SearchBar search={search} setSearch={setSearch} suggestions={suggestions} />
+      {/* Hero Section */}
+      <section className="hero-section">
+        <div className="hero-container">
+          <div className="hero-content">
+            <h1 className="hero-title">سوق اليمن</h1>
+            <p className="hero-subtitle">
+              أكبر منصة للإعلانات والمزادات في اليمن - بيع وشراء كل شيء
+            </p>
+            
+            <SearchBar 
+              search={search} 
+              setSearch={setSearch} 
+              suggestions={suggestions} 
+            />
+          </div>
         </div>
       </section>
 
-      <div className="container" style={{ padding: '14px 0 40px' }}>
-        {/* Categories */}
-        <div className="cats">
-          {CATEGORY_CONFIG.map((c) => {
-            const active = selectedCategory === c.key;
-            return (
-              <button
-                key={c.key}
-                type="button"
-                className={'cat ' + (active ? 'active' : '')}
-                onClick={() => setSelectedCategory(c.key)}
+      {/* Main Content */}
+      <main className="main-content">
+        <div className="container">
+          {/* Categories Bar */}
+          <div className="categories-container">
+            <div className="categories-scroll">
+              {CATEGORY_CONFIG.map((c) => {
+                const active = selectedCategory === c.key;
+                return (
+                  <button
+                    key={c.key}
+                    type="button"
+                    className={`category-button ${active ? 'active' : ''}`}
+                    onClick={() => setSelectedCategory(c.key)}
+                  >
+                    <span className="category-button-icon">{c.icon}</span>
+                    <span className="category-button-label">{c.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Toolbar */}
+          <div className="toolbar">
+            <div className="toolbar-left">
+              <div className="view-toggle">
+                <button
+                  type="button"
+                  className={`view-toggle-button ${viewMode === 'grid' ? 'active' : ''}`}
+                  onClick={() => setViewMode('grid')}
+                >
+                  <span className="view-toggle-icon">◼️◼️</span>
+                  <span>شبكة</span>
+                </button>
+                <button
+                  type="button"
+                  className={`view-toggle-button ${viewMode === 'list' ? 'active' : ''}`}
+                  onClick={() => setViewMode('list')}
+                >
+                  <span className="view-toggle-icon">☰</span>
+                  <span>قائمة</span>
+                </button>
+                <button
+                  type="button"
+                  className={`view-toggle-button ${viewMode === 'map' ? 'active' : ''}`}
+                  onClick={() => setViewMode('map')}
+                >
+                  <span className="view-toggle-icon">🗺️</span>
+                  <span>خريطة</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="toolbar-right">
+              <span className="results-count">
+                {filtered.length} إعلان
+              </span>
+            </div>
+          </div>
+
+          {/* Content */}
+          {loading ? (
+            <div className="loading-container">
+              <div className="spinner"></div>
+              <p>جاري تحميل الإعلانات...</p>
+            </div>
+          ) : error ? (
+            <div className="error-container">
+              <div className="error-icon">⚠️</div>
+              <h3>حدث خطأ</h3>
+              <p>{error}</p>
+              <button 
+                className="retry-button"
+                onClick={() => window.location.reload()}
               >
-                <span className="cat-emoji">{c.icon}</span>
-                <span>{c.label}</span>
+                إعادة المحاولة
               </button>
-            );
-          })}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">📭</div>
+              <h3>لا توجد إعلانات</h3>
+              <p>لا توجد إعلانات مطابقة لبحثك حالياً.</p>
+              <Link href="/add" className="add-listing-link">
+                ➕ أضف أول إعلان
+              </Link>
+            </div>
+          ) : viewMode === 'map' ? (
+            <HomeMapView listings={filtered} />
+          ) : viewMode === 'grid' ? (
+            <div className="grid-view">
+              {filtered.map((l) => (
+                <GridListingCard key={l.id} listing={l} />
+              ))}
+            </div>
+          ) : (
+            <div className="list-view">
+              {filtered.map((l) => (
+                <ListListingCard key={l.id} listing={l} />
+              ))}
+            </div>
+          )}
         </div>
+      </main>
 
-        {/* View toggle */}
-        <div className="toolbar">
-          <div className="toggle">
-            <button
-              type="button"
-              className={'tbtn ' + (viewMode === 'list' ? 'on' : '')}
-              onClick={() => setViewMode('list')}
-            >
-              📋 قائمة
-            </button>
-            <button
-              type="button"
-              className={'tbtn ' + (viewMode === 'map' ? 'on' : '')}
-              onClick={() => setViewMode('map')}
-            >
-              🗺️ خريطة
-            </button>
-          </div>
-
-          <div className="muted" style={{ fontSize: 12 }}>
-            النتائج: {filtered.length}
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="card" style={{ textAlign: 'center' }}>
-            جاري تحميل الإعلانات...
-          </div>
-        ) : err ? (
-          <div className="card" style={{ color: '#b91c1c', direction: 'ltr' }}>
-            {err}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="card muted" style={{ textAlign: 'center' }}>
-            لا توجد إعلانات مطابقة حالياً.
-          </div>
-        ) : viewMode === 'map' ? (
-          <HomeMapView listings={filtered} />
-        ) : (
-          <div className="grid">
-            {filtered.map((l) => (
-              <HomeListingCard key={l.id} listing={l} />
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Floating Add Button */}
+      <Link href="/add" className="floating-add-button">
+        <span className="floating-add-icon">➕</span>
+        <span className="floating-add-text">أضف إعلان</span>
+      </Link>
 
       <style jsx>{`
-        .hero {
-          padding: 26px 0 22px;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: #fff;
-          text-align: center;
-        }
-        .hero-title {
-          font-size: 28px;
-          font-weight: 900;
-          margin: 0 0 8px;
-        }
-        .hero-sub {
-          margin: 0 auto 14px;
-          max-width: 720px;
-          opacity: 0.92;
-          line-height: 1.6;
-          font-size: 14px;
+        .home-page {
+          min-height: 100vh;
+          background: #f8fafc;
         }
 
-        .search-wrap {
-          max-width: 720px;
+        /* Hero Section */
+        .hero-section {
+          background: linear-gradient(135deg, #FF6B35 0%, #FF8E53 100%);
+          color: white;
+          padding: 2.5rem 0 3rem;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .hero-container {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 0 1.5rem;
+        }
+
+        .hero-content {
+          text-align: center;
+          max-width: 800px;
+          margin: 0 auto;
+        }
+
+        .hero-title {
+          font-size: 2.5rem;
+          font-weight: 800;
+          margin-bottom: 0.75rem;
+          text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .hero-subtitle {
+          font-size: 1.125rem;
+          opacity: 0.95;
+          margin-bottom: 2rem;
+          line-height: 1.6;
+        }
+
+        /* Search Bar */
+        .search-wrapper {
+          max-width: 700px;
           margin: 0 auto;
           position: relative;
         }
-        .search-bar {
-          background: #fff;
-          border-radius: 999px;
-          padding: 4px;
+
+        .search-container {
+          background: white;
+          border-radius: 50px;
+          padding: 0.5rem;
           display: flex;
-          gap: 8px;
           align-items: center;
-          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+          border: 2px solid transparent;
+          transition: all 0.3s ease;
         }
+
+        .search-container:focus-within {
+          border-color: #FF6B35;
+          box-shadow: 0 10px 25px rgba(255, 107, 53, 0.2);
+        }
+
+        .search-input-wrapper {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          padding: 0 1rem;
+        }
+
+        .search-icon {
+          margin-left: 0.5rem;
+          color: #6c757d;
+        }
+
         .search-input {
           flex: 1;
           border: none;
           outline: none;
-          padding: 10px 14px;
-          border-radius: 999px;
-          font-size: 14px;
-        }
-        .search-btn {
-          border: none;
-          border-radius: 999px;
-          padding: 10px 18px;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: #fff;
-          font-weight: 800;
-          cursor: pointer;
-          white-space: nowrap;
-        }
-        .suggest {
-          position: absolute;
-          inset-inline: 0;
-          top: calc(100% + 8px);
-          background: #fff;
-          border: 1px solid #e5e7eb;
-          border-radius: 14px;
-          overflow: hidden;
-          box-shadow: 0 14px 30px rgba(0, 0, 0, 0.12);
-          z-index: 20;
-        }
-        .suggest-item {
-          width: 100%;
-          text-align: start;
-          background: #fff;
-          border: none;
-          padding: 10px 12px;
-          cursor: pointer;
-        }
-        .suggest-item:hover {
-          background: #f8fafc;
+          padding: 0.75rem;
+          font-size: 1rem;
+          background: transparent;
         }
 
-        .cats {
+        .search-input::placeholder {
+          color: #6c757d;
+        }
+
+        .search-button {
+          background: #1A1A2E;
+          color: white;
+          border: none;
+          border-radius: 40px;
+          padding: 0.75rem 2rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          white-space: nowrap;
+        }
+
+        .search-button:hover {
+          background: #0F3460;
+        }
+
+        .suggestions-dropdown {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          right: 0;
+          background: white;
+          border-radius: 15px;
+          margin-top: 0.5rem;
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+          overflow: hidden;
+          z-index: 1000;
+        }
+
+        .suggestion-item {
+          width: 100%;
+          text-align: right;
+          background: white;
+          border: none;
+          padding: 0.75rem 1rem;
+          cursor: pointer;
           display: flex;
-          gap: 8px;
+          align-items: center;
+          gap: 0.75rem;
+          transition: background 0.2s ease;
+        }
+
+        .suggestion-item:hover {
+          background: #f8f9fa;
+        }
+
+        .suggestion-icon {
+          color: #FF6B35;
+        }
+
+        .suggestion-text {
+          flex: 1;
+          text-align: right;
+        }
+
+        /* Categories */
+        .categories-container {
+          background: white;
+          border-bottom: 1px solid #e9ecef;
+          padding: 1rem 0;
+          position: sticky;
+          top: 60px;
+          z-index: 40;
+          box-shadow: 0 2px 10px rgba(26, 26, 46, 0.05);
+        }
+
+        .categories-scroll {
+          display: flex;
+          gap: 0.75rem;
           overflow-x: auto;
-          padding: 8px 2px 10px;
+          padding: 0.5rem 0;
           scroll-behavior: smooth;
         }
-        .cats::-webkit-scrollbar {
-          display: none;
+
+        .categories-scroll::-webkit-scrollbar {
+          height: 4px;
         }
-        .cat {
-          border: 1px solid #e2e8f0;
-          background: #fff;
-          border-radius: 999px;
-          padding: 7px 14px;
+
+        .categories-scroll::-webkit-scrollbar-track {
+          background: #f8f9fa;
+          border-radius: 10px;
+        }
+
+        .categories-scroll::-webkit-scrollbar-thumb {
+          background: #dee2e6;
+          border-radius: 10px;
+        }
+
+        .category-button {
           display: inline-flex;
           align-items: center;
-          gap: 6px;
+          gap: 0.5rem;
+          padding: 0.75rem 1.25rem;
+          border-radius: 50px;
+          border: 1px solid #e9ecef;
+          background: white;
+          font-size: 0.875rem;
           cursor: pointer;
           white-space: nowrap;
-          font-size: 13px;
-          color: #334155;
-        }
-        .cat.active {
-          border-color: rgba(79, 70, 229, 0.45);
-          background: rgba(79, 70, 229, 0.08);
-          color: #4f46e5;
-          font-weight: 700;
-        }
-        .cat-emoji {
-          font-size: 15px;
+          transition: all 0.2s ease;
+          flex-shrink: 0;
+          color: #495057;
         }
 
+        .category-button:hover {
+          border-color: #FF6B35;
+          transform: translateY(-1px);
+        }
+
+        .category-button.active {
+          background: linear-gradient(135deg, #FF6B35 0%, #FF8E53 100%);
+          color: white;
+          border-color: transparent;
+          box-shadow: 0 4px 12px rgba(255, 107, 53, 0.2);
+        }
+
+        .category-button-icon {
+          font-size: 1.25rem;
+        }
+
+        /* Toolbar */
         .toolbar {
           display: flex;
-          align-items: center;
           justify-content: space-between;
-          margin: 8px 0 12px;
+          align-items: center;
+          margin: 1.5rem 0;
+          flex-wrap: wrap;
+          gap: 1rem;
         }
-        .toggle {
+
+        .toolbar-left, .toolbar-right {
           display: flex;
-          gap: 8px;
+          align-items: center;
+          gap: 1rem;
         }
-        .tbtn {
-          border: 1px solid #e2e8f0;
-          background: #fff;
+
+        .view-toggle {
+          display: flex;
+          gap: 0.5rem;
+          background: #f8f9fa;
+          padding: 0.25rem;
           border-radius: 10px;
-          padding: 8px 12px;
+          border: 1px solid #e9ecef;
+        }
+
+        .view-toggle-button {
+          padding: 0.5rem 1rem;
+          border-radius: 8px;
+          border: none;
+          background: transparent;
+          font-size: 0.875rem;
+          font-weight: 500;
           cursor: pointer;
-          font-weight: 700;
-          font-size: 13px;
-        }
-        .tbtn.on {
-          background: rgba(79, 70, 229, 0.1);
-          border-color: rgba(79, 70, 229, 0.45);
-          color: #4f46e5;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          color: #495057;
+          transition: all 0.2s ease;
         }
 
-        .grid {
+        .view-toggle-button:hover {
+          color: #FF6B35;
+        }
+
+        .view-toggle-button.active {
+          background: white;
+          color: #FF6B35;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+          font-weight: 600;
+        }
+
+        .results-count {
+          font-size: 0.875rem;
+          color: #495057;
+          font-weight: 600;
+        }
+
+        /* Grid View */
+        .grid-view {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-          gap: 14px;
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          gap: 1.5rem;
+          margin-bottom: 3rem;
         }
 
-        .card-link {
-          text-decoration: none;
-          color: inherit;
-        }
-
-        .listing-card {
-          border-radius: 14px;
+        /* Grid Card */
+        .grid-card {
+          background: white;
+          border-radius: 15px;
           overflow: hidden;
-          border: 1px solid #eef2f7;
-          background: #fff;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+          border: 1px solid #e9ecef;
+          transition: all 0.3s ease;
           height: 100%;
           display: flex;
           flex-direction: column;
         }
 
-        .listing-img {
-          width: 100%;
-          height: 180px;
-          object-fit: cover;
+        .grid-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 12px 25px rgba(26, 26, 46, 0.1);
+          border-color: #FF6B35;
+        }
+
+        .card-link {
+          text-decoration: none;
+          color: inherit;
           display: block;
         }
+
+        .card-link:hover {
+          text-decoration: none;
+        }
+
+        .image-container {
+          position: relative;
+          width: 100%;
+          height: 140px; /* صورة أصغر */
+          overflow: hidden;
+          background: #f8f9fa;
+        }
+
+        .listing-img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          transition: transform 0.3s ease;
+        }
+
+        .grid-card:hover .listing-img {
+          transform: scale(1.05);
+        }
+
         .img-fallback {
           width: 100%;
-          height: 180px;
+          height: 100%;
           display: flex;
           align-items: center;
           justify-content: center;
-          background: #f1f5f9;
-          font-size: 34px;
+          background: #f8f9fa;
+          font-size: 2rem;
+          color: #adb5bd;
         }
 
-        .card-body {
-          padding: 12px;
+        .auction-badge {
+          position: absolute;
+          top: 0.5rem;
+          right: 0.5rem;
+          background: rgba(255, 107, 53, 0.9);
+          color: white;
+          padding: 0.25rem 0.75rem;
+          border-radius: 50px;
+          font-size: 0.75rem;
+          font-weight: 600;
+          z-index: 2;
+        }
+
+        .card-content {
+          padding: 1rem;
+          flex: 1;
           display: flex;
           flex-direction: column;
-          gap: 6px;
         }
 
-        .top-row {
+        .card-header {
           display: flex;
           align-items: flex-start;
           justify-content: space-between;
-          gap: 8px;
+          gap: 0.5rem;
+          margin-bottom: 0.5rem;
         }
-        .title {
-          font-weight: 900;
-          font-size: 15px;
-          color: #0f172a;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+
+        .listing-title {
+          font-weight: 700;
+          font-size: 1rem;
+          color: #1A1A2E;
+          margin: 0;
           flex: 1;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          line-height: 1.4;
         }
-        .cat-pill {
-          border: 1px solid #e2e8f0;
-          background: #fff;
-          border-radius: 999px;
-          padding: 4px 8px;
-          font-size: 11px;
-          display: inline-flex;
+
+        .category-badge {
+          background: #f8f9fa;
+          border-radius: 50%;
+          width: 28px;
+          height: 28px;
+          display: flex;
           align-items: center;
-          gap: 6px;
-          color: #334155;
+          justify-content: center;
           flex-shrink: 0;
         }
 
-        .loc {
+        .category-icon {
+          font-size: 1rem;
+        }
+
+        .listing-location {
+          color: #495057;
+          font-size: 0.875rem;
           display: flex;
           align-items: center;
-          gap: 6px;
-          font-size: 12px;
+          gap: 0.5rem;
+          margin-bottom: 0.5rem;
         }
-        .desc {
-          font-size: 12px;
-          line-height: 1.6;
+
+        .location-icon {
+          color: #6c757d;
         }
-        .price {
-          margin-top: 4px;
+
+        .listing-description {
+          color: #6c757d;
+          font-size: 0.875rem;
+          line-height: 1.5;
+          margin-bottom: 0.75rem;
+          flex: 1;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
         }
-        .meta {
+
+        .price-section {
+          margin-top: auto;
+        }
+
+        .listing-footer {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-top: 0.75rem;
+          padding-top: 0.75rem;
+          border-top: 1px solid #e9ecef;
+          font-size: 0.75rem;
+          color: #6c757d;
+        }
+
+        .views-count, .time-ago {
           display: flex;
           align-items: center;
-          gap: 8px;
-          font-size: 11px;
-          margin-top: 4px;
+          gap: 0.25rem;
         }
-        .dot {
-          opacity: 0.5;
+
+        /* List View */
+        .list-view {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+          margin-bottom: 3rem;
+        }
+
+        /* List Card */
+        .list-card {
+          background: white;
+          border: 1px solid #e9ecef;
+          border-radius: 15px;
+          overflow: hidden;
+          transition: all 0.2s ease;
+          display: flex;
+        }
+
+        .list-card:hover {
+          border-color: #FF6B35;
+          box-shadow: 0 4px 12px rgba(255, 107, 53, 0.1);
+        }
+
+        .list-image-container {
+          width: 160px;
+          flex-shrink: 0;
+          background: #f8f9fa;
+        }
+
+        .list-img {
+          width: 100%;
+          height: 140px;
+          object-fit: cover;
+          display: block;
+        }
+
+        .list-img-fallback {
+          width: 100%;
+          height: 140px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #f8f9fa;
+          font-size: 2rem;
+          color: #adb5bd;
+        }
+
+        .list-content {
+          flex: 1;
+          padding: 1rem 1.5rem;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .list-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 1rem;
+          margin-bottom: 0.5rem;
+        }
+
+        .list-title-section {
+          flex: 1;
+        }
+
+        .list-title {
+          font-weight: 700;
+          font-size: 1.125rem;
+          color: #1A1A2E;
+          margin: 0 0 0.5rem 0;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+
+        .list-category {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          background: #f8f9fa;
+          padding: 0.25rem 0.75rem;
+          border-radius: 50px;
+          font-size: 0.875rem;
+          color: #495057;
+        }
+
+        .list-category-icon {
+          font-size: 1rem;
+        }
+
+        .list-price-section {
+          flex-shrink: 0;
+        }
+
+        .list-location {
+          color: #495057;
+          font-size: 0.875rem;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-bottom: 0.5rem;
+        }
+
+        .list-description {
+          color: #6c757d;
+          font-size: 0.875rem;
+          line-height: 1.5;
+          margin-bottom: 1rem;
+          flex: 1;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+
+        .list-footer {
+          display: flex;
+          gap: 1.5rem;
+          font-size: 0.875rem;
+          color: #6c757d;
+        }
+
+        .list-views, .list-time, .list-auction {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .list-auction {
+          color: #FF6B35;
+          font-weight: 600;
+        }
+
+        /* Loading, Error, Empty States */
+        .loading-container, .error-container, .empty-state {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 4rem 2rem;
+          text-align: center;
+        }
+
+        .loading-card {
+          padding: 2rem;
+          text-align: center;
+          background: white;
+          border-radius: 15px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+
+        .spinner {
+          width: 50px;
+          height: 50px;
+          border: 3px solid #f3f3f3;
+          border-top: 3px solid #FF6B35;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+          margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+
+        .error-icon, .empty-icon {
+          font-size: 3rem;
+          margin-bottom: 1rem;
+          opacity: 0.7;
+        }
+
+        .error-icon {
+          color: #dc3545;
+        }
+
+        .empty-icon {
+          color: #6c757d;
+        }
+
+        .error-container h3, .empty-state h3 {
+          color: #1A1A2E;
+          margin-bottom: 0.5rem;
+        }
+
+        .error-container p, .empty-state p {
+          color: #6c757d;
+          margin-bottom: 1.5rem;
+          max-width: 400px;
+        }
+
+        .retry-button, .add-listing-link {
+          background: #FF6B35;
+          color: white;
+          border: none;
+          border-radius: 8px;
+          padding: 0.75rem 1.5rem;
+          font-weight: 600;
+          cursor: pointer;
+          text-decoration: none;
+          display: inline-block;
+          transition: background 0.2s ease;
+        }
+
+        .retry-button:hover, .add-listing-link:hover {
+          background: #e55a2b;
+          text-decoration: none;
+          color: white;
+        }
+
+        /* Floating Add Button */
+        .floating-add-button {
+          position: fixed;
+          bottom: 2rem;
+          right: 2rem;
+          background: linear-gradient(135deg, #FF6B35 0%, #FF8E53 100%);
+          color: white;
+          border: none;
+          border-radius: 50px;
+          padding: 1rem 2rem;
+          font-weight: 700;
+          cursor: pointer;
+          box-shadow: 0 8px 25px rgba(255, 107, 53, 0.3);
+          z-index: 100;
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          transition: all 0.3s ease;
+          text-decoration: none;
+        }
+
+        .floating-add-button:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 12px 30px rgba(255, 107, 53, 0.4);
+          text-decoration: none;
+          color: white;
+        }
+
+        .floating-add-icon {
+          font-size: 1.25rem;
+        }
+
+        /* Responsive */
+        .container {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 0 1.5rem;
         }
 
         @media (max-width: 768px) {
-          .grid {
-            grid-template-columns: 1fr;
-          }
-          .listing-img,
-          .img-fallback {
-            height: 170px;
-          }
           .hero-title {
-            font-size: 24px;
+            font-size: 2rem;
+          }
+          
+          .hero-subtitle {
+            font-size: 1rem;
+          }
+          
+          .grid-view {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+          }
+          
+          .list-card {
+            flex-direction: column;
+          }
+          
+          .list-image-container {
+            width: 100%;
+          }
+          
+          .list-img, .list-img-fallback {
+            height: 160px;
+          }
+          
+          .list-content {
+            padding: 1rem;
+          }
+          
+          .floating-add-button {
+            bottom: 1.5rem;
+            right: 1.5rem;
+            padding: 0.875rem 1.5rem;
+            font-size: 0.875rem;
+          }
+          
+          .search-button {
+            padding: 0.75rem 1.5rem;
+            font-size: 0.875rem;
+          }
+          
+          .image-container, .img-fallback {
+            height: 150px;
+          }
+        }
+
+        @media (min-width: 769px) and (max-width: 1024px) {
+          .grid-view {
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
           }
         }
       `}</style>
