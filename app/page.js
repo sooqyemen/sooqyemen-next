@@ -8,7 +8,7 @@ import Price from '@/components/Price';
 import Header from '@/components/Header';
 import { db } from '@/lib/firebaseClient';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import './home.css'; // ✅ استيراد ملف CSS المحسن
+import './home.css'; // ✅ الستايل الجديد للصفحة الرئيسية فقط
 
 // تحميل ديناميكي للخريطة (تجنب SSR لمشاكل Leaflet)
 const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
@@ -48,7 +48,7 @@ function formatRelative(ts) {
   try {
     const d = ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null;
     if (!d || Number.isNaN(d.getTime())) return 'قبل قليل';
-    
+
     const now = new Date();
     const diff = now - d;
     const mins = Math.floor(diff / 60000);
@@ -66,7 +66,7 @@ function formatRelative(ts) {
   }
 }
 
-// ✅ مكون بطاقة العرض الشبكي
+// ✅ بطاقة الشبكة (تستخدم نفس كلاساتك القديمة لأنها موجودة في home.css الطويل عندك)
 function GridListingCard({ listing }) {
   const img = (Array.isArray(listing.images) && listing.images[0]) || null;
   const catKey = String(listing.category || '').toLowerCase();
@@ -85,18 +85,17 @@ function GridListingCard({ listing }) {
               className="listing-img"
               loading="lazy"
               onError={(e) => {
-                e.target.style.display = 'none';
-                e.target.parentElement.querySelector('.img-fallback').style.display = 'flex';
+                e.currentTarget.style.display = 'none';
+                const fb = e.currentTarget.parentElement?.querySelector('.img-fallback');
+                if (fb) fb.style.display = 'flex';
               }}
             />
           ) : null}
           <div className={`img-fallback ${img ? 'hidden' : ''}`}>
             {catObj?.icon || '🖼️'}
           </div>
-          
-          {listing.auctionEnabled && (
-            <div className="auction-badge">⚡ مزاد</div>
-          )}
+
+          {listing.auctionEnabled && <div className="auction-badge">⚡ مزاد</div>}
         </div>
 
         <div className="card-content">
@@ -119,7 +118,7 @@ function GridListingCard({ listing }) {
           <p className="listing-description">{shortDesc}</p>
 
           <div className="price-section">
-            <Price 
+            <Price
               priceYER={listing.currentBidYER || listing.priceYER || 0}
               originalPrice={listing.originalPrice}
               originalCurrency={listing.originalCurrency}
@@ -137,7 +136,7 @@ function GridListingCard({ listing }) {
   );
 }
 
-// ✅ مكون بطاقة العرض القائمة
+// ✅ بطاقة القائمة
 function ListListingCard({ listing }) {
   const img = (Array.isArray(listing.images) && listing.images[0]) || null;
   const catKey = String(listing.category || '').toLowerCase();
@@ -156,8 +155,9 @@ function ListListingCard({ listing }) {
               className="list-img"
               loading="lazy"
               onError={(e) => {
-                e.target.style.display = 'none';
-                e.target.parentElement.querySelector('.list-img-fallback').style.display = 'flex';
+                e.currentTarget.style.display = 'none';
+                const fb = e.currentTarget.parentElement?.querySelector('.list-img-fallback');
+                if (fb) fb.style.display = 'flex';
               }}
             />
           ) : null}
@@ -179,9 +179,9 @@ function ListListingCard({ listing }) {
                 </span>
               )}
             </div>
-            
+
             <div className="list-price-section">
-              <Price 
+              <Price
                 priceYER={listing.currentBidYER || listing.priceYER || 0}
                 originalPrice={listing.originalPrice}
                 originalCurrency={listing.originalCurrency}
@@ -200,9 +200,7 @@ function ListListingCard({ listing }) {
           <div className="list-footer">
             <span className="list-views">👁️ {Number(listing.views || 0).toLocaleString('ar-YE')} مشاهدة</span>
             <span className="list-time">⏱️ {formatRelative(listing.createdAt)}</span>
-            {listing.auctionEnabled && (
-              <span className="list-auction">⚡ مزاد نشط</span>
-            )}
+            {listing.auctionEnabled && <span className="list-auction">⚡ مزاد نشط</span>}
           </div>
         </div>
       </div>
@@ -210,7 +208,7 @@ function ListListingCard({ listing }) {
   );
 }
 
-// ✅ مكون شريط البحث
+// ✅ شريط البحث (مطابق للستايل الجديد)
 function SearchBar({ search, setSearch, suggestions }) {
   const [open, setOpen] = useState(false);
   const searchRef = useRef(null);
@@ -218,64 +216,47 @@ function SearchBar({ search, setSearch, suggestions }) {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (searchRef.current && !searchRef.current.contains(e.target)) {
-        setOpen(false);
-      }
+      if (searchRef.current && !searchRef.current.contains(e.target)) setOpen(false);
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const handleSearch = () => {
-    if (search.trim()) {
-      setOpen(false);
-      // يمكن إضافة منطق البحث هنا
-    }
+    if (search.trim()) setOpen(false);
   };
 
-  const handleSuggestionClick = (suggestion) => {
-    setSearch(suggestion);
+  const handleSuggestionClick = (s) => {
+    setSearch(s);
     setOpen(false);
     inputRef.current?.focus();
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    } else if (e.key === 'Escape') {
-      setOpen(false);
-    }
+    if (e.key === 'Enter') handleSearch();
+    if (e.key === 'Escape') setOpen(false);
   };
 
   return (
-    <div className="search-wrapper" ref={searchRef}>
-      <div className="search-container">
-        <div className="search-input-wrapper">
-          <span className="search-icon" aria-hidden="true">🔍</span>
-          <input
-            ref={inputRef}
-            className="search-input focus-ring"
-            type="search"
-            value={search}
-            onChange={(e) => {
-              const v = e.target.value;
-              setSearch(v);
-              setOpen(!!v.trim());
-            }}
-            onKeyDown={handleKeyDown}
-            onFocus={() => setOpen(!!search.trim())}
-            placeholder="ابحث عن سيارات، عقارات، جوالات..."
-            aria-label="بحث في الإعلانات"
-          />
-        </div>
-        <button 
-          className="search-button focus-ring" 
-          type="button" 
-          onClick={handleSearch}
-          aria-label="بحث"
-        >
-          بحث
+    <div className="search-bar-container" ref={searchRef}>
+      <div className="search-bar-wrapper">
+        <input
+          ref={inputRef}
+          className="search-input focus-ring"
+          type="search"
+          value={search}
+          onChange={(e) => {
+            const v = e.target.value;
+            setSearch(v);
+            setOpen(!!v.trim());
+          }}
+          onKeyDown={handleKeyDown}
+          onFocus={() => setOpen(!!search.trim())}
+          placeholder="ابحث عن سيارات، عقارات، جوالات..."
+          aria-label="بحث في الإعلانات"
+        />
+        <button className="search-button focus-ring" type="button" onClick={handleSearch} aria-label="بحث">
+          🔍 بحث
         </button>
       </div>
 
@@ -300,7 +281,6 @@ function SearchBar({ search, setSearch, suggestions }) {
   );
 }
 
-// ✅ المكون الرئيسي للصفحة الرئيسية
 export default function HomePage() {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -316,23 +296,15 @@ export default function HomePage() {
     setError('');
 
     try {
-      const listingsQuery = query(
-        collection(db, 'listings'),
-        orderBy('createdAt', 'desc'),
-        limit(100)
-      );
+      const listingsQuery = query(collection(db, 'listings'), orderBy('createdAt', 'desc'), limit(100));
 
       const unsubscribe = onSnapshot(
         listingsQuery,
         (snapshot) => {
-          const data = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          })).filter(listing => 
-            listing.isActive !== false && 
-            listing.hidden !== true
-          );
-          
+          const data = snapshot.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter((l) => l.isActive !== false && l.hidden !== true);
+
           setListings(data);
           setLoading(false);
         },
@@ -351,175 +323,136 @@ export default function HomePage() {
     }
   }, []);
 
-  // ✅ اقتراحات البحث الذكي
+  // ✅ اقتراحات البحث
   const suggestions = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return [];
 
     const results = new Set();
-    const allListings = listings.slice(0, 50);
+    const sample = listings.slice(0, 50);
 
-    // اقتراحات من العناوين
-    allListings.forEach(l => {
+    sample.forEach((l) => {
       const title = safeText(l.title).toLowerCase();
       if (title.includes(q)) results.add(l.title);
     });
 
-    // اقتراحات من المدن
-    allListings.forEach(l => {
+    sample.forEach((l) => {
       const city = safeText(l.city).toLowerCase();
       if (city.includes(q)) results.add(l.city);
     });
 
-    // اقتراحات من الأقسام
-    CATEGORY_CONFIG.forEach(cat => {
-      if (cat.label.toLowerCase().includes(q) || cat.key.includes(q)) {
-        results.add(cat.label);
-      }
+    CATEGORY_CONFIG.forEach((cat) => {
+      if (cat.label.toLowerCase().includes(q) || cat.key.includes(q)) results.add(cat.label);
     });
 
     return Array.from(results).slice(0, 8);
   }, [search, listings]);
 
-  // ✅ فلترة الإعلانات بناءً على البحث والقسم
+  // ✅ فلترة الإعلانات
   const filteredListings = useMemo(() => {
     const q = search.trim().toLowerCase();
     const catSelected = String(selectedCategory || 'all').toLowerCase();
 
-    return listings.filter((listing) => {
-      // فلترة حسب القسم
+    return listings.filter((l) => {
       if (catSelected !== 'all') {
-        const cat = String(listing.category || '').toLowerCase();
+        const cat = String(l.category || '').toLowerCase();
         if (cat !== catSelected) return false;
       }
 
-      // إذا لم يكن هناك بحث، عرض الكل
       if (!q) return true;
 
-      // البحث في جميع الحقول
-      const title = safeText(listing.title).toLowerCase();
-      const city = safeText(listing.city).toLowerCase();
-      const locationLabel = safeText(listing.locationLabel).toLowerCase();
-      const description = safeText(listing.description).toLowerCase();
-      const category = String(listing.category || '').toLowerCase();
+      const title = safeText(l.title).toLowerCase();
+      const city = safeText(l.city).toLowerCase();
+      const locationLabel = safeText(l.locationLabel).toLowerCase();
+      const description = safeText(l.description).toLowerCase();
+      const category = String(l.category || '').toLowerCase();
 
-      return (
-        title.includes(q) ||
-        city.includes(q) ||
-        locationLabel.includes(q) ||
-        description.includes(q) ||
-        category.includes(q)
-      );
+      return title.includes(q) || city.includes(q) || locationLabel.includes(q) || description.includes(q) || category.includes(q);
     });
   }, [listings, search, selectedCategory]);
 
-  // ✅ تغيير وضع العرض
   const handleViewModeChange = (mode) => {
     setViewMode(mode);
-    // حفظ التفضيل في localStorage
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('preferredViewMode', mode);
-    }
+    if (typeof window !== 'undefined') localStorage.setItem('preferredViewMode', mode);
   };
 
-  // ✅ إعادة المحاولة عند حدوث خطأ
-  const handleRetry = () => {
-    window.location.reload();
-  };
+  const handleRetry = () => window.location.reload();
 
   return (
     <div className="home-page" dir="rtl">
       <Header />
 
-      {/* Hero Section */}
-      <section className="hero-section" aria-label="القسم الرئيسي">
+      {/* ✅ Hero الجديد */}
+      <section className="home-hero-section" aria-label="القسم الرئيسي">
         <div className="hero-container">
           <div className="hero-content">
             <h1 className="hero-title">سوق اليمن</h1>
-            <p className="hero-subtitle">
-              أكبر منصة للإعلانات والمزادات في اليمن - بيع وشراء كل شيء
-            </p>
-            
-            <SearchBar 
-              search={search} 
-              setSearch={setSearch} 
-              suggestions={suggestions} 
-            />
+            <p className="hero-subtitle">أكبر منصة للإعلانات والمزادات في اليمن - بيع وشراء كل شيء</p>
+
+            <SearchBar search={search} setSearch={setSearch} suggestions={suggestions} />
           </div>
         </div>
       </section>
 
-      {/* Main Content */}
+      {/* ✅ شريط الأقسام الجديد */}
+      <div className="categories-scroll-container" aria-label="أقسام الإعلانات">
+        <div className="categories-wrapper" role="tablist">
+          {CATEGORY_CONFIG.map((c) => {
+            const isActive = selectedCategory === c.key;
+            return (
+              <button
+                key={c.key}
+                type="button"
+                className={`category-button focus-ring ${isActive ? 'active' : ''}`}
+                onClick={() => setSelectedCategory(c.key)}
+                role="tab"
+                aria-selected={isActive}
+              >
+                <span className="category-icon" aria-hidden="true">{c.icon}</span>
+                <span className="category-label">{c.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <main className="main-content" role="main">
         <div className="container">
-          {/* Categories Bar */}
-          <div className="categories-container" aria-label="أقسام الإعلانات">
-            <div className="categories-scroll" role="tablist">
-              {CATEGORY_CONFIG.map((category) => {
-                const isActive = selectedCategory === category.key;
-                return (
-                  <button
-                    key={category.key}
-                    type="button"
-                    className={`category-button focus-ring ${isActive ? 'active' : ''}`}
-                    onClick={() => setSelectedCategory(category.key)}
-                    role="tab"
-                    aria-selected={isActive}
-                    aria-controls={`category-${category.key}`}
-                  >
-                    <span className="category-button-icon" aria-hidden="true">{category.icon}</span>
-                    <span className="category-button-label">{category.label}</span>
-                  </button>
-                );
-              })}
+          {/* Header/Toolbar */}
+          <div className="content-header">
+            <div className="view-toggle" role="group" aria-label="طريقة العرض">
+              <button
+                type="button"
+                className={`view-toggle-button focus-ring ${viewMode === 'grid' ? 'active' : ''}`}
+                onClick={() => handleViewModeChange('grid')}
+                aria-pressed={viewMode === 'grid'}
+              >
+                ◼️◼️ شبكة
+              </button>
+              <button
+                type="button"
+                className={`view-toggle-button focus-ring ${viewMode === 'list' ? 'active' : ''}`}
+                onClick={() => handleViewModeChange('list')}
+                aria-pressed={viewMode === 'list'}
+              >
+                ☰ قائمة
+              </button>
+              <button
+                type="button"
+                className={`view-toggle-button focus-ring ${viewMode === 'map' ? 'active' : ''}`}
+                onClick={() => handleViewModeChange('map')}
+                aria-pressed={viewMode === 'map'}
+              >
+                🗺️ خريطة
+              </button>
+            </div>
+
+            <div className="results-count" aria-live="polite">
+              {filteredListings.length} إعلان
             </div>
           </div>
 
-          {/* Toolbar */}
-          <div className="toolbar">
-            <div className="toolbar-left">
-              <div className="view-toggle" role="group" aria-label="طريقة العرض">
-                <button
-                  type="button"
-                  className={`view-toggle-button focus-ring ${viewMode === 'grid' ? 'active' : ''}`}
-                  onClick={() => handleViewModeChange('grid')}
-                  aria-pressed={viewMode === 'grid'}
-                  title="عرض شبكي"
-                >
-                  <span className="view-toggle-icon" aria-hidden="true">◼️◼️</span>
-                  <span className="view-toggle-label">شبكة</span>
-                </button>
-                <button
-                  type="button"
-                  className={`view-toggle-button focus-ring ${viewMode === 'list' ? 'active' : ''}`}
-                  onClick={() => handleViewModeChange('list')}
-                  aria-pressed={viewMode === 'list'}
-                  title="عرض قائمة"
-                >
-                  <span className="view-toggle-icon" aria-hidden="true">☰</span>
-                  <span className="view-toggle-label">قائمة</span>
-                </button>
-                <button
-                  type="button"
-                  className={`view-toggle-button focus-ring ${viewMode === 'map' ? 'active' : ''}`}
-                  onClick={() => handleViewModeChange('map')}
-                  aria-pressed={viewMode === 'map'}
-                  title="عرض خريطة"
-                >
-                  <span className="view-toggle-icon" aria-hidden="true">🗺️</span>
-                  <span className="view-toggle-label">خريطة</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="toolbar-right">
-              <span className="results-count" aria-live="polite">
-                <span className="results-number">{filteredListings.length}</span> إعلان
-              </span>
-            </div>
-          </div>
-
-          {/* Content Area */}
+          {/* Content */}
           {loading ? (
             <div className="loading-container" aria-live="polite" aria-busy="true">
               <div className="spinner" aria-hidden="true"></div>
@@ -530,11 +463,7 @@ export default function HomePage() {
               <div className="error-icon" aria-hidden="true">⚠️</div>
               <h3>حدث خطأ</h3>
               <p>{error}</p>
-              <button 
-                className="retry-button focus-ring"
-                onClick={handleRetry}
-                aria-label="إعادة المحاولة"
-              >
+              <button className="retry-button focus-ring" onClick={handleRetry}>
                 إعادة المحاولة
               </button>
             </div>
@@ -542,16 +471,8 @@ export default function HomePage() {
             <div className="empty-state">
               <div className="empty-icon" aria-hidden="true">📭</div>
               <h3>لا توجد إعلانات</h3>
-              <p>
-                {search || selectedCategory !== 'all' 
-                  ? 'لا توجد إعلانات مطابقة لبحثك حالياً.'
-                  : 'لا توجد إعلانات منشورة حالياً.'}
-              </p>
-              <Link 
-                href="/add" 
-                className="add-listing-link focus-ring"
-                aria-label="إضافة إعلان جديد"
-              >
+              <p>{search || selectedCategory !== 'all' ? 'لا توجد إعلانات مطابقة لبحثك حالياً.' : 'لا توجد إعلانات منشورة حالياً.'}</p>
+              <Link href="/add" className="add-listing-link focus-ring">
                 ➕ أضف أول إعلان
               </Link>
             </div>
@@ -561,42 +482,31 @@ export default function HomePage() {
             </div>
           ) : viewMode === 'grid' ? (
             <div className="grid-view" role="list" aria-label="قائمة الإعلانات">
-              {filteredListings.map((listing) => (
-                <GridListingCard key={listing.id} listing={listing} />
+              {filteredListings.map((l) => (
+                <GridListingCard key={l.id} listing={l} />
               ))}
             </div>
           ) : (
             <div className="list-view" role="list" aria-label="قائمة الإعلانات">
-              {filteredListings.map((listing) => (
-                <ListListingCard key={listing.id} listing={listing} />
+              {filteredListings.map((l) => (
+                <ListListingCard key={l.id} listing={l} />
               ))}
             </div>
           )}
         </div>
       </main>
 
-      {/* Floating Add Button */}
-      <Link 
-        href="/add" 
-        className="floating-add-button focus-ring"
-        aria-label="إضافة إعلان جديد"
-        title="أضف إعلان جديد"
-      >
+      {/* زر إضافة عائم */}
+      <Link href="/add" className="floating-add-button focus-ring" aria-label="إضافة إعلان جديد" title="أضف إعلان جديد">
         <span className="floating-add-icon" aria-hidden="true">➕</span>
         <span className="floating-add-text">أضف إعلان</span>
       </Link>
 
-      {/* إضافة أنماط CSS إضافية للعناصر المخفية */}
       <style jsx>{`
         .hidden { display: none !important; }
         .map-view { height: 500px; border-radius: 12px; overflow: hidden; margin-bottom: 2.5rem; }
-        .list-category-label { margin-right: 4px; }
-        .results-number { font-weight: 700; color: var(--color-primary-light); }
-        .view-toggle-label { font-size: 0.875rem; }
         @media (max-width: 768px) {
           .map-view { height: 400px; }
-          .view-toggle-label { display: none; }
-          .view-toggle-button { padding: 0.5rem; }
         }
       `}</style>
     </div>
