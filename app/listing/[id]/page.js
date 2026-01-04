@@ -1,4 +1,4 @@
-// app/listing/[id]/page.js
+// app/listing/[id]/page.js - النسخة المحسنة
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -10,8 +10,17 @@ import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import { logListingView } from '@/lib/analytics';
 import Link from 'next/link';
+import './listing.css'; // استيراد CSS
 
-const ListingMap = dynamic(() => import('@/components/Map/ListingMap'), { ssr: false });
+const ListingMap = dynamic(() => import('@/components/Map/ListingMap'), { 
+  ssr: false,
+  loading: () => (
+    <div className="map-placeholder">
+      <div className="map-icon">🗺️</div>
+      <p>جاري تحميل الخريطة...</p>
+    </div>
+  )
+});
 
 // نفس بريد الأدمن المستخدم في لوحة التحكم
 const ADMIN_EMAIL = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'mansouralbarout@gmail.com').toLowerCase();
@@ -66,11 +75,34 @@ async function bumpViewOnce(listingId) {
   });
 }
 
+function formatDate(date) {
+  if (!date) return 'غير معروف';
+  try {
+    const d = date.toDate ? date.toDate() : new Date(date);
+    return new Intl.DateTimeFormat('ar-YE', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(d);
+  } catch {
+    return 'غير معروف';
+  }
+}
+
+function getInitials(email) {
+  if (!email) return '؟';
+  const parts = email.split('@')[0];
+  return parts.charAt(0).toUpperCase();
+}
+
 export default function ListingDetails({ params }) {
   const { id } = params;
   const { user } = useAuth();
   const [listing, setListing] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!id) return;
@@ -79,15 +111,24 @@ export default function ListingDetails({ params }) {
       .doc(id)
       .onSnapshot(
         (doc) => {
-          setListing(doc.exists ? { id: doc.id, ...doc.data() } : null);
+          if (doc.exists) {
+            setListing({ id: doc.id, ...doc.data() });
+            setError(null);
+          } else {
+            setListing(null);
+          }
           setLoading(false);
         },
-        () => setLoading(false)
+        (err) => {
+          console.error('خطأ في جلب الإعلان:', err);
+          setError('حدث خطأ في تحميل الإعلان');
+          setLoading(false);
+        }
       );
     return () => unsub();
   }, [id]);
 
-  // ✅ الحل الأساسي: زيادة المشاهدات مباشرة
+  // ✅ زيادة المشاهدات
   useEffect(() => {
     if (!id) return;
     bumpViewOnce(id).catch((e) => {
@@ -95,7 +136,7 @@ export default function ListingDetails({ params }) {
     });
   }, [id]);
 
-  // (اختياري) نتركه موجود لو عندك تسجيلات تحليلية أخرى
+  // تسجيلات تحليلية
   useEffect(() => {
     if (!id) return;
     logListingView(id, user).catch(() => {});
@@ -108,23 +149,76 @@ export default function ListingDetails({ params }) {
     return null;
   }, [listing]);
 
+  const categoryIcon = (category) => {
+    const icons = {
+      'cars': '🚗',
+      'real_estate': '🏡',
+      'mobiles': '📱',
+      'electronics': '💻',
+      'motorcycles': '🏍️',
+      'heavy_equipment': '🚜',
+      'solar': '☀️',
+      'networks': '📡',
+      'maintenance': '🛠️',
+      'furniture': '🛋️',
+      'animals': '🐑',
+      'jobs': '💼',
+      'services': '🧰',
+    };
+    return icons[category] || '📋';
+  };
+
   if (loading) {
     return (
-      <div className="container">
-        <div className="card muted">جاري التحميل...</div>
+      <div className="listing-details-page">
+        <div className="container">
+          <div className="loading-state">
+            <div className="spinner"></div>
+            <p className="state-message">جاري تحميل تفاصيل الإعلان...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="listing-details-page">
+        <div className="container">
+          <div className="error-state">
+            <div className="state-icon">⚠️</div>
+            <h2 className="state-title">حدث خطأ</h2>
+            <p className="state-message">{error}</p>
+            <button 
+              className="retry-button"
+              onClick={() => window.location.reload()}
+            >
+              إعادة المحاولة
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (!listing) {
     return (
-      <div className="container">
-        <div className="card">الإعلان غير موجود</div>
+      <div className="listing-details-page">
+        <div className="container">
+          <div className="not-found-state">
+            <div className="state-icon">📭</div>
+            <h2 className="state-title">الإعلان غير موجود</h2>
+            <p className="state-message">قد يكون الإعلان قد تم حذفه أو أنه غير متاح.</p>
+            <Link href="/" className="retry-button">
+              ← العودة للرئيسية
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
 
-  const img = (listing.images && listing.images[0]) || listing.image || null;
+  const img = (Array.isArray(listing.images) && listing.images[0]) || listing.image || null;
   const sellerUid = listing.userId;
 
   const isAdmin = !!user?.email && String(user.email).toLowerCase() === ADMIN_EMAIL;
@@ -135,167 +229,235 @@ export default function ListingDetails({ params }) {
   // 🚫 إخفاء الإعلان عن الزوار إذا كان مخفي ولم يكن المشاهد أدمن أو صاحب الإعلان
   if (listing.hidden && !isAdmin && !isOwner) {
     return (
-      <div className="container">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <Link className="btn" href="/">
-            ← رجوع
-          </Link>
-        </div>
-        <div className="card" style={{ marginTop: 12 }}>
-          هذا الإعلان غير متاح حالياً
+      <div className="listing-details-page">
+        <div className="container">
+          <div className="hidden-state">
+            <div className="state-icon">🔒</div>
+            <h2 className="state-title">الإعلان غير متاح</h2>
+            <p className="state-message">هذا الإعلان مخفي حالياً ولا يمكن الوصول إليه.</p>
+            <Link href="/" className="retry-button">
+              ← العودة للرئيسية
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="container">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <Link className="btn" href="/">
-          ← رجوع
-        </Link>
-        <span className="badge">👁️ {Number(listing.views || 0)}</span>
-      </div>
-
-      {/* تنبيه للأدمن/صاحب الإعلان إذا كان الإعلان مخفي */}
-      {listing.hidden && (isAdmin || isOwner) ? (
-        <div
-          className="card"
-          style={{
-            marginTop: 10,
-            background: '#fef2f2',
-            border: '1px solid #fecaca',
-            color: '#7f1d1d',
-            fontSize: 14,
-          }}
-        >
-          هذا الإعلان <b>مخفي</b> حالياً عن الزوار، ولا يظهر في القوائم العامة.
+    <div className="listing-details-page">
+      <div className="container">
+        {/* Header Bar */}
+        <div className="header-bar">
+          <Link href="/" className="back-button">
+            <span>←</span>
+            <span>العودة للرئيسية</span>
+          </Link>
+          <div className="views-badge">
+            <span>👁️</span>
+            <span>{Number(listing.views || 0).toLocaleString('ar')} مشاهدة</span>
+          </div>
         </div>
-      ) : null}
 
-      <div className="listingLayout" style={{ marginTop: 12 }}>
-        {/* التفاصيل */}
-        <div className="card">
-          {img ? (
-            <img
-              src={img}
-              alt={listing.title || 'img'}
-              style={{
-                height: 320,
-                width: '100%',
-                objectFit: 'cover',
-                borderRadius: 14,
-              }}
-            />
-          ) : null}
-
-          <div
-            style={{
-              marginTop: 10,
-              fontWeight: 900,
-              fontSize: 22,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              flexWrap: 'wrap',
-            }}
-          >
-            {listing.title || 'بدون عنوان'}
-            {listing.hidden && (isAdmin || isOwner) ? (
-              <span
-                className="badge"
-                style={{
-                  background: '#fee2e2',
-                  color: '#b91c1c',
-                  fontSize: 11,
-                }}
-              >
-                مخفي
-              </span>
-            ) : null}
+        {/* Hidden Alert for Admin/Owner */}
+        {listing.hidden && (isAdmin || isOwner) && (
+          <div className="hidden-alert">
+            ⚠️ هذا الإعلان <strong>مخفي</strong> حالياً عن الزوار، ولا يظهر في القوائم العامة.
           </div>
+        )}
 
-          <div className="muted" style={{ marginTop: 4 }}>
-            {listing.city || ''}
-          </div>
-
-          <div style={{ marginTop: 10 }}>
-            <Price priceYER={listing.currentBidYER || listing.priceYER || 0} />
-          </div>
-
-          <hr />
-
-          <div style={{ fontWeight: 800, marginBottom: 6 }}>الوصف</div>
-          <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
-            {listing.description || '—'}
-          </div>
-
-          {/* ✅ التعليقات */}
-          <div style={{ marginTop: 12 }}>
-            <CommentsBox listingId={listing.id} />
-          </div>
-
-          <hr />
-
-          <div className="row">
-            {listing.phone ? (
-              <a className="btn btnPrimary" href={`tel:${listing.phone}`}>
-                اتصال
-              </a>
-            ) : null}
-
-            {listing.phone && listing.isWhatsapp ? (
-              <a
-                className="btn"
-                href={`https://wa.me/${String(listing.phone).replace(/\D/g, '')}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                واتساب
-              </a>
-            ) : null}
-
-            {chatId ? (
-              <Link
-                className="btn"
-                href={`/chat/${encodeURIComponent(chatId)}?listingId=${encodeURIComponent(
-                  listing.id
-                )}&otherUid=${encodeURIComponent(sellerUid || '')}`}
-              >
-                بدء محادثة
-              </Link>
+        <div className="listing-layout">
+          {/* Main Content */}
+          <div className="main-card">
+            {/* Listing Image */}
+            {img ? (
+              <img
+                src={img}
+                alt={listing.title || 'صورة الإعلان'}
+                className="listing-image"
+              />
             ) : (
-              <span className="muted" style={{ fontSize: 12 }}>
-                سجل دخول لبدء محادثة
-              </span>
+              <div className="image-placeholder">🖼️</div>
             )}
+
+            <div className="listing-content">
+              {/* Listing Header */}
+              <div className="listing-header">
+                <div className="listing-title-row">
+                  <h1 className="listing-title">{listing.title || 'بدون عنوان'}</h1>
+                  {listing.auctionEnabled && (
+                    <span className="listing-badge">
+                      ⚡ مزاد
+                    </span>
+                  )}
+                </div>
+
+                <div className="listing-location">
+                  <span>📍</span>
+                  <span>{listing.city || listing.locationLabel || 'غير محدد'}</span>
+                </div>
+
+                <div className="listing-meta">
+                  <span className="meta-item">
+                    📅 {formatDate(listing.createdAt)}
+                  </span>
+                  {listing.category && (
+                    <span className="meta-item">
+                      {categoryIcon(listing.category)} {listing.category}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Price Section */}
+              <div className="price-section">
+                <div className="price-title">السعر:</div>
+                <div className="price-amount">
+                  <Price priceYER={listing.currentBidYER || listing.priceYER || 0} />
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className="description-section">
+                <h2 className="section-title">وصف الإعلان</h2>
+                <div className="listing-description">
+                  {listing.description || 'لا يوجد وصف للإعلان.'}
+                </div>
+              </div>
+
+              {/* Contact Section - بأيقونات احترافية */}
+              <div className="contact-section">
+                <h2 className="section-title">التواصل مع البائع</h2>
+                <div className="contact-buttons">
+                  {/* زر الاتصال */}
+                  {listing.phone && (
+                    <a className="contact-button call" href={`tel:${listing.phone}`}>
+                      <div className="button-content">
+                        <div className="button-icon">📞</div>
+                        <div className="button-text">
+                          <div className="button-label">اتصال مباشر</div>
+                          <div className="button-subtext">اتصل بالبائع الآن</div>
+                        </div>
+                      </div>
+                    </a>
+                  )}
+
+                  {/* زر الواتساب */}
+                  {listing.phone && listing.isWhatsapp && (
+                    <a
+                      className="contact-button whatsapp"
+                      href={`https://wa.me/${String(listing.phone).replace(/\D/g, '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <div className="button-content">
+                        <div className="button-icon">💬</div>
+                        <div className="button-text">
+                          <div className="button-label">مراسلة على واتساب</div>
+                          <div className="button-subtext">تواصل فوري</div>
+                        </div>
+                      </div>
+                    </a>
+                  )}
+
+                  {/* زر المحادثة */}
+                  {chatId ? (
+                    <Link
+                      className="contact-button chat"
+                      href={`/chat/${encodeURIComponent(chatId)}?listingId=${encodeURIComponent(
+                        listing.id
+                      )}&otherUid=${encodeURIComponent(sellerUid || '')}`}
+                    >
+                      <div className="button-content">
+                        <div className="button-icon">💭</div>
+                        <div className="button-text">
+                          <div className="button-label">بدء محادثة</div>
+                          <div className="button-subtext">مراسلة خاصة داخل الموقع</div>
+                        </div>
+                      </div>
+                    </Link>
+                  ) : (
+                    <div className="contact-button login">
+                      <div className="button-content">
+                        <div className="button-icon">🔒</div>
+                        <div className="button-text">
+                          <div className="button-label">تسجيل الدخول مطلوب</div>
+                          <div className="button-subtext">سجل دخول لبدء المحادثة</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Comments */}
+              <div className="comments-section">
+                <CommentsBox listingId={listing.id} />
+              </div>
+            </div>
+          </div>
+
+          {/* Sidebar */}
+          <div className="sidebar">
+            {/* Seller Info */}
+            <div className="sidebar-card">
+              <div className="seller-info">
+                <div className="seller-header">
+                  <div className="seller-avatar">
+                    {getInitials(listing.userEmail)}
+                  </div>
+                  <div className="seller-details">
+                    <h3 className="seller-name">
+                      {listing.userEmail?.split('@')[0] || 'مستخدم'}
+                    </h3>
+                    <p className="seller-email">
+                      {listing.userEmail || 'بريد غير معروف'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="user-badges">
+                  {isOwner && (
+                    <div className="user-badge owner">
+                      <span>👤</span>
+                      <span>أنت صاحب هذا الإعلان</span>
+                    </div>
+                  )}
+                  {isAdmin && (
+                    <div className="user-badge admin">
+                      <span>⚡</span>
+                      <span>أنت مسؤول النظام</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Auction Box */}
+            <div className="sidebar-card">
+              <h3 className="section-title">المزاد</h3>
+              <AuctionBox listingId={listing.id} listing={listing} />
+            </div>
+
+            {/* Map */}
+            <div className="sidebar-card">
+              <div className="map-section">
+                <h3 className="section-title">الموقع</h3>
+                {coords ? (
+                  <div className="map-container">
+                    <ListingMap coords={coords} label={listing.locationLabel || listing.city || ''} />
+                  </div>
+                ) : (
+                  <div className="map-placeholder">
+                    <div className="map-icon">📍</div>
+                    <p>لا يوجد موقع متاح</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
-
-        {/* العمود الجانبي */}
-        <div className="sideCol" style={{ display: 'grid', gap: 12 }}>
-          <AuctionBox listingId={listing.id} listing={listing} />
-          <ListingMap coords={coords} label={listing.locationLabel || listing.city || ''} />
-        </div>
       </div>
-
-      <style jsx>{`
-        .listingLayout {
-          display: grid;
-          gap: 12px;
-          grid-template-columns: 1.4fr 1fr;
-          align-items: start;
-        }
-
-        @media (max-width: 768px) {
-          .listingLayout {
-            grid-template-columns: 1fr;
-          }
-          .sideCol {
-            order: 2;
-          }
-        }
-      `}</style>
     </div>
   );
 }
