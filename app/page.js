@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import Price from '@/components/Price';
-import Header from '@/components/Header';
 import { db } from '@/lib/firebaseClient';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import './home.css'; // ✅ الستايل الجديد للصفحة الرئيسية فقط
@@ -66,7 +65,7 @@ function formatRelative(ts) {
   }
 }
 
-// ✅ بطاقة الشبكة (تستخدم نفس كلاساتك القديمة لأنها موجودة في home.css الطويل عندك)
+// ✅ مكون بطاقة العرض الشبكي
 function GridListingCard({ listing }) {
   const img = (Array.isArray(listing.images) && listing.images[0]) || null;
   const catKey = String(listing.category || '').toLowerCase();
@@ -86,11 +85,12 @@ function GridListingCard({ listing }) {
               loading="lazy"
               onError={(e) => {
                 e.currentTarget.style.display = 'none';
-                const fb = e.currentTarget.parentElement?.querySelector('.img-fallback');
-                if (fb) fb.style.display = 'flex';
+                const fallback = e.currentTarget.parentElement?.querySelector('.img-fallback');
+                if (fallback) fallback.classList.remove('hidden');
               }}
             />
           ) : null}
+
           <div className={`img-fallback ${img ? 'hidden' : ''}`}>
             {catObj?.icon || '🖼️'}
           </div>
@@ -104,7 +104,7 @@ function GridListingCard({ listing }) {
               {listing.title || 'بدون عنوان'}
             </h3>
             {catObj && (
-              <span className="category-badge">
+              <span className="category-badge" title={catObj.label}>
                 <span className="category-icon">{catObj.icon}</span>
               </span>
             )}
@@ -127,7 +127,9 @@ function GridListingCard({ listing }) {
           </div>
 
           <div className="listing-footer">
-            <span className="views-count">👁️ {Number(listing.views || 0).toLocaleString('ar-YE')}</span>
+            <span className="views-count">
+              👁️ {Number(listing.views || 0).toLocaleString('ar-YE')}
+            </span>
             <span className="time-ago">⏱️ {formatRelative(listing.createdAt)}</span>
           </div>
         </div>
@@ -136,7 +138,7 @@ function GridListingCard({ listing }) {
   );
 }
 
-// ✅ بطاقة القائمة
+// ✅ مكون بطاقة العرض القائمة
 function ListListingCard({ listing }) {
   const img = (Array.isArray(listing.images) && listing.images[0]) || null;
   const catKey = String(listing.category || '').toLowerCase();
@@ -156,8 +158,8 @@ function ListListingCard({ listing }) {
               loading="lazy"
               onError={(e) => {
                 e.currentTarget.style.display = 'none';
-                const fb = e.currentTarget.parentElement?.querySelector('.list-img-fallback');
-                if (fb) fb.style.display = 'flex';
+                const fallback = e.currentTarget.parentElement?.querySelector('.list-img-fallback');
+                if (fallback) fallback.classList.remove('hidden');
               }}
             />
           ) : null}
@@ -172,6 +174,7 @@ function ListListingCard({ listing }) {
               <h3 className="list-title" title={listing.title || ''}>
                 {listing.title || 'بدون عنوان'}
               </h3>
+
               {catObj && (
                 <span className="list-category">
                   <span className="list-category-icon">{catObj.icon}</span>
@@ -198,7 +201,9 @@ function ListListingCard({ listing }) {
           <p className="list-description">{shortDesc}</p>
 
           <div className="list-footer">
-            <span className="list-views">👁️ {Number(listing.views || 0).toLocaleString('ar-YE')} مشاهدة</span>
+            <span className="list-views">
+              👁️ {Number(listing.views || 0).toLocaleString('ar-YE')} مشاهدة
+            </span>
             <span className="list-time">⏱️ {formatRelative(listing.createdAt)}</span>
             {listing.auctionEnabled && <span className="list-auction">⚡ مزاد نشط</span>}
           </div>
@@ -208,7 +213,7 @@ function ListListingCard({ listing }) {
   );
 }
 
-// ✅ شريط البحث (مطابق للستايل الجديد)
+// ✅ شريط البحث
 function SearchBar({ search, setSearch, suggestions }) {
   const [open, setOpen] = useState(false);
   const searchRef = useRef(null);
@@ -226,37 +231,42 @@ function SearchBar({ search, setSearch, suggestions }) {
     if (search.trim()) setOpen(false);
   };
 
-  const handleSuggestionClick = (s) => {
-    setSearch(s);
+  const handleSuggestionClick = (suggestion) => {
+    setSearch(suggestion);
     setOpen(false);
     inputRef.current?.focus();
   };
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') handleSearch();
-    if (e.key === 'Escape') setOpen(false);
+    else if (e.key === 'Escape') setOpen(false);
   };
 
   return (
-    <div className="search-bar-container" ref={searchRef}>
-      <div className="search-bar-wrapper">
-        <input
-          ref={inputRef}
-          className="search-input focus-ring"
-          type="search"
-          value={search}
-          onChange={(e) => {
-            const v = e.target.value;
-            setSearch(v);
-            setOpen(!!v.trim());
-          }}
-          onKeyDown={handleKeyDown}
-          onFocus={() => setOpen(!!search.trim())}
-          placeholder="ابحث عن سيارات، عقارات، جوالات..."
-          aria-label="بحث في الإعلانات"
-        />
+    <div className="search-wrapper" ref={searchRef}>
+      <div className="search-container">
+        <div className="search-input-wrapper">
+          <span className="search-icon" aria-hidden="true">
+            🔍
+          </span>
+          <input
+            ref={inputRef}
+            className="search-input focus-ring"
+            type="search"
+            value={search}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSearch(v);
+              setOpen(!!v.trim());
+            }}
+            onKeyDown={handleKeyDown}
+            onFocus={() => setOpen(!!search.trim())}
+            placeholder="ابحث عن سيارات، عقارات، جوالات..."
+            aria-label="بحث في الإعلانات"
+          />
+        </div>
         <button className="search-button focus-ring" type="button" onClick={handleSearch} aria-label="بحث">
-          🔍 بحث
+          بحث
         </button>
       </div>
 
@@ -264,14 +274,16 @@ function SearchBar({ search, setSearch, suggestions }) {
         <div className="suggestions-dropdown" role="listbox">
           {suggestions.map((s, i) => (
             <button
-              key={i}
+              key={`${s}-${i}`}
               className="suggestion-item focus-ring"
               type="button"
               onClick={() => handleSuggestionClick(s)}
               role="option"
               aria-selected={search === s}
             >
-              <span className="suggestion-icon" aria-hidden="true">🔍</span>
+              <span className="suggestion-icon" aria-hidden="true">
+                🔍
+              </span>
               <span className="suggestion-text">{s}</span>
             </button>
           ))}
@@ -289,6 +301,14 @@ export default function HomePage() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [viewMode, setViewMode] = useState('grid'); // grid | list | map
+
+  // ✅ تحميل وضع العرض من localStorage (حتى لا يرجع دائمًا Grid)
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('preferredViewMode');
+      if (v === 'grid' || v === 'list' || v === 'map') setViewMode(v);
+    } catch {}
+  }, []);
 
   // ✅ جلب الإعلانات من Firebase
   useEffect(() => {
@@ -329,14 +349,14 @@ export default function HomePage() {
     if (!q) return [];
 
     const results = new Set();
-    const sample = listings.slice(0, 50);
+    const allListings = listings.slice(0, 50);
 
-    sample.forEach((l) => {
+    allListings.forEach((l) => {
       const title = safeText(l.title).toLowerCase();
       if (title.includes(q)) results.add(l.title);
     });
 
-    sample.forEach((l) => {
+    allListings.forEach((l) => {
       const city = safeText(l.city).toLowerCase();
       if (city.includes(q)) results.add(l.city);
     });
@@ -348,42 +368,48 @@ export default function HomePage() {
     return Array.from(results).slice(0, 8);
   }, [search, listings]);
 
-  // ✅ فلترة الإعلانات
+  // ✅ فلترة الإعلانات حسب البحث والقسم
   const filteredListings = useMemo(() => {
     const q = search.trim().toLowerCase();
     const catSelected = String(selectedCategory || 'all').toLowerCase();
 
-    return listings.filter((l) => {
+    return listings.filter((listing) => {
       if (catSelected !== 'all') {
-        const cat = String(l.category || '').toLowerCase();
+        const cat = String(listing.category || '').toLowerCase();
         if (cat !== catSelected) return false;
       }
 
       if (!q) return true;
 
-      const title = safeText(l.title).toLowerCase();
-      const city = safeText(l.city).toLowerCase();
-      const locationLabel = safeText(l.locationLabel).toLowerCase();
-      const description = safeText(l.description).toLowerCase();
-      const category = String(l.category || '').toLowerCase();
+      const title = safeText(listing.title).toLowerCase();
+      const city = safeText(listing.city).toLowerCase();
+      const locationLabel = safeText(listing.locationLabel).toLowerCase();
+      const description = safeText(listing.description).toLowerCase();
+      const category = String(listing.category || '').toLowerCase();
 
-      return title.includes(q) || city.includes(q) || locationLabel.includes(q) || description.includes(q) || category.includes(q);
+      return (
+        title.includes(q) ||
+        city.includes(q) ||
+        locationLabel.includes(q) ||
+        description.includes(q) ||
+        category.includes(q)
+      );
     });
   }, [listings, search, selectedCategory]);
 
   const handleViewModeChange = (mode) => {
     setViewMode(mode);
-    if (typeof window !== 'undefined') localStorage.setItem('preferredViewMode', mode);
+    try {
+      localStorage.setItem('preferredViewMode', mode);
+    } catch {}
   };
-
-  const handleRetry = () => window.location.reload();
 
   return (
     <div className="home-page" dir="rtl">
-      <Header />
+      {/* ✅ ملاحظة: الهيدر موجود في layout، لا تكرره هنا */}
 
-      {/* ✅ Hero الجديد */}
-      <section className="home-hero-section" aria-label="القسم الرئيسي">
+      {/* Hero Section */}
+      <section className="hero-section" aria-label="القسم الرئيسي">
         <div className="hero-container">
           <div className="hero-content">
             <h1 className="hero-title">سوق اليمن</h1>
@@ -394,61 +420,79 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ✅ شريط الأقسام الجديد */}
-      <div className="categories-scroll-container" aria-label="أقسام الإعلانات">
-        <div className="categories-wrapper" role="tablist">
-          {CATEGORY_CONFIG.map((c) => {
-            const isActive = selectedCategory === c.key;
-            return (
-              <button
-                key={c.key}
-                type="button"
-                className={`category-button focus-ring ${isActive ? 'active' : ''}`}
-                onClick={() => setSelectedCategory(c.key)}
-                role="tab"
-                aria-selected={isActive}
-              >
-                <span className="category-icon" aria-hidden="true">{c.icon}</span>
-                <span className="category-label">{c.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <main className="main-content" role="main">
+      <main role="main">
         <div className="container">
-          {/* Header/Toolbar */}
-          <div className="content-header">
-            <div className="view-toggle" role="group" aria-label="طريقة العرض">
-              <button
-                type="button"
-                className={`view-toggle-button focus-ring ${viewMode === 'grid' ? 'active' : ''}`}
-                onClick={() => handleViewModeChange('grid')}
-                aria-pressed={viewMode === 'grid'}
-              >
-                ◼️◼️ شبكة
-              </button>
-              <button
-                type="button"
-                className={`view-toggle-button focus-ring ${viewMode === 'list' ? 'active' : ''}`}
-                onClick={() => handleViewModeChange('list')}
-                aria-pressed={viewMode === 'list'}
-              >
-                ☰ قائمة
-              </button>
-              <button
-                type="button"
-                className={`view-toggle-button focus-ring ${viewMode === 'map' ? 'active' : ''}`}
-                onClick={() => handleViewModeChange('map')}
-                aria-pressed={viewMode === 'map'}
-              >
-                🗺️ خريطة
-              </button>
+          {/* Categories */}
+          <div className="categories-container" aria-label="أقسام الإعلانات">
+            <div className="categories-scroll" role="tablist">
+              {CATEGORY_CONFIG.map((category) => {
+                const isActive = selectedCategory === category.key;
+                return (
+                  <button
+                    key={category.key}
+                    type="button"
+                    className={`category-button focus-ring ${isActive ? 'active' : ''}`}
+                    onClick={() => setSelectedCategory(category.key)}
+                    role="tab"
+                    aria-selected={isActive}
+                  >
+                    <span className="category-button-icon" aria-hidden="true">
+                      {category.icon}
+                    </span>
+                    <span className="category-button-label">{category.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Toolbar */}
+          <div className="toolbar">
+            <div className="toolbar-left">
+              <div className="view-toggle" role="group" aria-label="طريقة العرض">
+                <button
+                  type="button"
+                  className={`view-toggle-button focus-ring ${viewMode === 'grid' ? 'active' : ''}`}
+                  onClick={() => handleViewModeChange('grid')}
+                  aria-pressed={viewMode === 'grid'}
+                  title="عرض شبكي"
+                >
+                  <span className="view-toggle-icon" aria-hidden="true">
+                    ◼️◼️
+                  </span>
+                  <span className="view-toggle-label">شبكة</span>
+                </button>
+                <button
+                  type="button"
+                  className={`view-toggle-button focus-ring ${viewMode === 'list' ? 'active' : ''}`}
+                  onClick={() => handleViewModeChange('list')}
+                  aria-pressed={viewMode === 'list'}
+                  title="عرض قائمة"
+                >
+                  <span className="view-toggle-icon" aria-hidden="true">
+                    ☰
+                  </span>
+                  <span className="view-toggle-label">قائمة</span>
+                </button>
+                <button
+                  type="button"
+                  className={`view-toggle-button focus-ring ${viewMode === 'map' ? 'active' : ''}`}
+                  onClick={() => handleViewModeChange('map')}
+                  aria-pressed={viewMode === 'map'}
+                  title="عرض خريطة"
+                >
+                  <span className="view-toggle-icon" aria-hidden="true">
+                    🗺️
+                  </span>
+                  <span className="view-toggle-label">خريطة</span>
+                </button>
+              </div>
             </div>
 
-            <div className="results-count" aria-live="polite">
-              {filteredListings.length} إعلان
+            <div className="toolbar-right">
+              <span className="results-count" aria-live="polite">
+                <span className="results-number">{filteredListings.length}</span> إعلان
+              </span>
             </div>
           </div>
 
@@ -460,16 +504,20 @@ export default function HomePage() {
             </div>
           ) : error ? (
             <div className="error-container">
-              <div className="error-icon" aria-hidden="true">⚠️</div>
+              <div className="error-icon" aria-hidden="true">
+                ⚠️
+              </div>
               <h3>حدث خطأ</h3>
               <p>{error}</p>
-              <button className="retry-button focus-ring" onClick={handleRetry}>
+              <button className="retry-button focus-ring" onClick={() => window.location.reload()}>
                 إعادة المحاولة
               </button>
             </div>
           ) : filteredListings.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-icon" aria-hidden="true">📭</div>
+              <div className="empty-icon" aria-hidden="true">
+                📭
+              </div>
               <h3>لا توجد إعلانات</h3>
               <p>{search || selectedCategory !== 'all' ? 'لا توجد إعلانات مطابقة لبحثك حالياً.' : 'لا توجد إعلانات منشورة حالياً.'}</p>
               <Link href="/add" className="add-listing-link focus-ring">
@@ -482,31 +530,56 @@ export default function HomePage() {
             </div>
           ) : viewMode === 'grid' ? (
             <div className="grid-view" role="list" aria-label="قائمة الإعلانات">
-              {filteredListings.map((l) => (
-                <GridListingCard key={l.id} listing={l} />
+              {filteredListings.map((listing) => (
+                <GridListingCard key={listing.id} listing={listing} />
               ))}
             </div>
           ) : (
             <div className="list-view" role="list" aria-label="قائمة الإعلانات">
-              {filteredListings.map((l) => (
-                <ListListingCard key={l.id} listing={l} />
+              {filteredListings.map((listing) => (
+                <ListListingCard key={listing.id} listing={listing} />
               ))}
             </div>
           )}
         </div>
       </main>
 
-      {/* زر إضافة عائم */}
+      {/* Floating Add Button */}
       <Link href="/add" className="floating-add-button focus-ring" aria-label="إضافة إعلان جديد" title="أضف إعلان جديد">
-        <span className="floating-add-icon" aria-hidden="true">➕</span>
+        <span className="floating-add-icon" aria-hidden="true">
+          ➕
+        </span>
         <span className="floating-add-text">أضف إعلان</span>
       </Link>
 
+      {/* إضافات صغيرة مكملة */}
       <style jsx>{`
-        .hidden { display: none !important; }
-        .map-view { height: 500px; border-radius: 12px; overflow: hidden; margin-bottom: 2.5rem; }
+        .hidden {
+          display: none !important;
+        }
+        .map-view {
+          height: 500px;
+          border-radius: 12px;
+          overflow: hidden;
+          margin-bottom: 2.5rem;
+        }
+        .list-category-label {
+          margin-right: 4px;
+        }
+        .results-number {
+          font-weight: 700;
+          color: var(--color-primary-light);
+        }
         @media (max-width: 768px) {
-          .map-view { height: 400px; }
+          .map-view {
+            height: 400px;
+          }
+          .view-toggle-label {
+            display: none;
+          }
+          .view-toggle-button {
+            padding: 0.5rem;
+          }
         }
       `}</style>
     </div>
