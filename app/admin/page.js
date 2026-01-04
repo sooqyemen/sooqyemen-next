@@ -5,7 +5,6 @@ import Header from '@/components/Header';
 import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import Link from 'next/link';
-import './admin.css';
 
 // إعداد إيميلات الأدمن
 const RAW_ENV_ADMIN = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
@@ -129,7 +128,10 @@ export default function AdminPage() {
 
   // حذف إعلان
   const deleteListing = async (id) => {
-    if (!isAdmin) return alert('ليست لديك صلاحية حذف الإعلانات');
+    if (!isAdmin) {
+      alert('ليست لديك صلاحية حذف الإعلانات');
+      return;
+    }
     if (!confirm('هل أنت متأكد من حذف هذا الإعلان؟')) return;
 
     try {
@@ -142,10 +144,13 @@ export default function AdminPage() {
   };
 
   // حظر مستخدم
-  const blockUser = async (uid, emailForMsg) => {
-    if (!isAdmin) return alert('ليست لديك صلاحية حظر المستخدمين');
+  const blockUser = async (uid, userEmailForMsg) => {
+    if (!isAdmin) {
+      alert('ليست لديك صلاحية حظر المستخدمين');
+      return;
+    }
     if (!uid) return alert('لا يوجد UID لهذا الإعلان');
-    if (!confirm(`هل تريد حظر المستخدم ${emailForMsg || uid}؟`)) return;
+    if (!confirm(`هل تريد حظر المستخدم ${userEmailForMsg || uid}؟`)) return;
 
     try {
       await db
@@ -154,7 +159,7 @@ export default function AdminPage() {
         .set(
           {
             uid,
-            userEmail: emailForMsg || null,
+            userEmail: userEmailForMsg || null,
             blockedAt: firebase.firestore.FieldValue.serverTimestamp(),
             blockedBy: user?.email || null,
           },
@@ -169,10 +174,11 @@ export default function AdminPage() {
 
   // إخفاء / إظهار إعلان
   const toggleListingHidden = async (listing) => {
-    if (!isAdmin) return alert('ليست لديك صلاحية تعديل حالة الإعلانات');
+    if (!isAdmin) {
+      alert('ليست لديك صلاحية تعديل حالة الإعلانات');
+      return;
+    }
     if (!listing?.id) return;
-
-
 
     const newState = !listing.hidden;
     try {
@@ -189,7 +195,10 @@ export default function AdminPage() {
 
   // إضافة قسم
   const addCategory = async () => {
-    if (!isAdmin) return alert('ليست لديك صلاحية إضافة الأقسام');
+    if (!isAdmin) {
+      alert('ليست لديك صلاحية إضافة الأقسام');
+      return;
+    }
 
     const name = newCatName.trim();
     const slug = newCatSlug.trim().toLowerCase().replace(/\s+/g, '-');
@@ -197,7 +206,7 @@ export default function AdminPage() {
     if (!name) return alert('يرجى إدخال اسم القسم');
     if (!slug) return alert('يرجى إدخال الرابط (Slug) للقسم');
 
-    // التحقق من عدم تكرار الاسم أو الرابط (مقارنة حساسة/غير حساسة)
+    // التحقق من عدم التكرار
     const nameL = name.toLowerCase();
     const existingCategory = categories.find((c) => {
       const cSlug = String(c.slug || '').toLowerCase();
@@ -227,12 +236,15 @@ export default function AdminPage() {
     }
   };
 
-  // تفعيل / إخفاء قسم (✅ إصلاح التبديل الصحيح حتى لو active كانت undefined)
+  // تفعيل / إخفاء قسم ✅ (تصحيح: undefined تعتبر نشط)
   const toggleCategory = async (category) => {
-    if (!isAdmin) return alert('ليست لديك صلاحية تعديل الأقسام');
+    if (!isAdmin) {
+      alert('ليست لديك صلاحية تعديل الأقسام');
+      return;
+    }
 
     try {
-      const currentActive = category?.active !== false; // undefined تعتبر "نشط"
+      const currentActive = category?.active !== false; // undefined = نشط
       const newActive = !currentActive;
 
       await db
@@ -252,7 +264,10 @@ export default function AdminPage() {
 
   // حذف قسم
   const deleteCategory = async (category) => {
-    if (!isAdmin) return alert('ليست لديك صلاحية حذف الأقسام');
+    if (!isAdmin) {
+      alert('ليست لديك صلاحية حذف الأقسام');
+      return;
+    }
     if (!confirm('هل أنت متأكد من حذف هذا القسم؟')) return;
 
     try {
@@ -433,10 +448,7 @@ export default function AdminPage() {
                               {listing.hidden ? '👁️ إظهار' : '👁️‍🗨️ إخفاء'}
                             </button>
 
-                            <button
-                              className="action-button block-btn"
-                              onClick={() => blockUser(listing.userId, listing.userEmail)}
-                            >
+                            <button className="action-button block-btn" onClick={() => blockUser(listing.userId, listing.userEmail)}>
                               🚫 حظر
                             </button>
 
