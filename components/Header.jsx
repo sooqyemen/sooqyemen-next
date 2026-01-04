@@ -31,7 +31,7 @@ export default function Header() {
     } else {
       document.body.style.overflow = '';
     }
-    
+
     return () => {
       document.body.style.overflow = '';
     };
@@ -55,7 +55,8 @@ export default function Header() {
     <>
       <header className="header">
         <div className="header-inner">
-          
+
+          {/* ✅ Mobile */}
           <div className="mobile-nav">
             <button
               className="menu-btn"
@@ -69,8 +70,8 @@ export default function Header() {
               سوق اليمن
             </Link>
 
-            <Link 
-              href="/add" 
+            <Link
+              href="/add"
               className="add-btn-mobile"
               aria-label="أضف إعلان جديد"
             >
@@ -78,6 +79,7 @@ export default function Header() {
             </Link>
           </div>
 
+          {/* ✅ Desktop */}
           <div className="desktop-nav">
             <Link href="/" className="logo">
               سوق اليمن
@@ -90,9 +92,10 @@ export default function Header() {
               <Link href="/listings" className="nav-link">
                 الإعلانات
               </Link>
-              <Link href="/categories" className="nav-link">
-                الفئات
-              </Link>
+
+              {/* ❌ حذفنا الفئات من الأعلى */}
+              {/* <Link href="/categories" className="nav-link">الفئات</Link> */}
+
               {isAdmin && (
                 <Link href="/admin" className="nav-link admin-link">
                   لوحة الإدارة
@@ -108,12 +111,12 @@ export default function Header() {
                   <Link href="/add" className="add-btn-desktop">
                     + أضف إعلان
                   </Link>
-                  
+
                   <div className="user-menu">
                     <span className="user-greeting">
                       أهلاً، {user.name || user.email?.split('@')[0]}
                     </span>
-                    
+
                     <div className="dropdown">
                       <Link href="/my-listings" className="dropdown-item">
                         📋 إعلاناتي
@@ -160,13 +163,13 @@ export default function Header() {
 
       <div className="header-spacer" />
 
-      <div 
+      <div
         className={`side-menu-backdrop ${menuOpen ? 'open' : ''}`}
         onClick={closeMenu}
         aria-hidden="true"
       />
 
-      <aside 
+      <aside
         className={`side-menu ${menuOpen ? 'open' : ''}`}
         aria-hidden={!menuOpen}
       >
@@ -187,7 +190,7 @@ export default function Header() {
               </div>
             )}
           </div>
-          
+
           <button
             className="close-menu-btn"
             onClick={closeMenu}
@@ -200,7 +203,7 @@ export default function Header() {
         <nav className="side-menu-nav">
           <div className="menu-section">
             <h3 className="section-title">التنقل الرئيسي</h3>
-            
+
             <Link href="/" className="menu-item" onClick={closeMenu}>
               <span className="item-icon">🏠</span>
               <span className="item-text">الرئيسية</span>
@@ -245,7 +248,7 @@ export default function Header() {
 
           <div className="menu-section">
             <h3 className="section-title">حسابك</h3>
-            
+
             {loading ? (
               <div className="loading-item">
                 <span className="loading-spinner" />
@@ -257,7 +260,7 @@ export default function Header() {
                   <span className="item-icon">👤</span>
                   <span className="item-text">الملف الشخصي</span>
                 </Link>
-                
+
                 <button
                   className="menu-item logout-menu-item"
                   onClick={handleLogout}
@@ -277,7 +280,7 @@ export default function Header() {
                   <span className="item-icon">🔑</span>
                   <span className="item-text">تسجيل الدخول</span>
                 </Link>
-                
+
                 <Link href="/register" className="menu-item" onClick={closeMenu}>
                   <span className="item-icon">📝</span>
                   <span className="item-text">إنشاء حساب</span>
@@ -288,17 +291,17 @@ export default function Header() {
 
           <div className="menu-section">
             <h3 className="section-title">المزيد</h3>
-            
+
             <Link href="/about" className="menu-item" onClick={closeMenu}>
               <span className="item-icon">ℹ️</span>
               <span className="item-text">عن المنصة</span>
             </Link>
-            
+
             <Link href="/help" className="menu-item" onClick={closeMenu}>
               <span className="item-icon">❓</span>
               <span className="item-text">مساعدة ودعم</span>
             </Link>
-            
+
             <Link href="/privacy" className="menu-item" onClick={closeMenu}>
               <span className="item-icon">🔒</span>
               <span className="item-text">سياسة الخصوصية</span>
