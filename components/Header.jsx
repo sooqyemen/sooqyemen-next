@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/useAuth';
 import { useEffect, useState } from 'react';
 
+// إيميلات المدراء
 const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
 
 export default function Header() {
@@ -12,13 +13,15 @@ export default function Header() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
 
+  // التحقق إذا كان المستخدم مديراً
   const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase());
 
-  // (اختياري) محاكاة — خله false دائمًا لو ما عندك نظام رسائل غير مقروءة الحقيقي
+  // (اختياري) إذا ما عندك نظام رسائل غير مقروءة حقيقي خله false
   useEffect(() => {
     if (user) setHasUnreadMessages(false);
   }, [user]);
 
+  // قفل سكرول الصفحة عندما تكون القائمة مفتوحة
   useEffect(() => {
     document.body.style.overflow = menuOpen ? 'hidden' : '';
     return () => {
@@ -46,7 +49,11 @@ export default function Header() {
         <div className="header-inner">
           {/* Mobile */}
           <div className="mobile-nav">
-            <button className="menu-btn" onClick={() => setMenuOpen(true)} aria-label="فتح القائمة">
+            <button
+              className="menu-btn"
+              onClick={() => setMenuOpen(true)}
+              aria-label="فتح القائمة"
+            >
               <span className="menu-icon">☰</span>
             </button>
 
@@ -69,6 +76,7 @@ export default function Header() {
               <Link href="/" className="nav-link">
                 الرئيسية
               </Link>
+
               <Link href="/listings" className="nav-link">
                 الإعلانات
               </Link>
@@ -93,7 +101,9 @@ export default function Header() {
                   </Link>
 
                   <div className="user-menu">
-                    <span className="user-greeting">أهلاً، {user.name || user.email?.split('@')[0]}</span>
+                    <span className="user-greeting">
+                      أهلاً، {user.name || user.email?.split('@')[0]}
+                    </span>
 
                     <div className="dropdown">
                       <Link href="/my-listings" className="dropdown-item">
@@ -142,7 +152,7 @@ export default function Header() {
         </div>
       </header>
 
-      {/* هذا spacer مهم لأن الهيدر fixed */}
+      {/* Spacer لأن الهيدر fixed */}
       <div className="header-spacer" />
 
       <div
@@ -234,9 +244,15 @@ export default function Header() {
                   <span className="item-text">الملف الشخصي</span>
                 </Link>
 
-                <button className="menu-item logout-menu-item" onClick={handleLogout} disabled={isLoggingOut}>
+                <button
+                  className="menu-item logout-menu-item"
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                >
                   <span className="item-icon">{isLoggingOut ? '⏳' : '🚪'}</span>
-                  <span className="item-text">{isLoggingOut ? 'جاري تسجيل الخروج…' : 'تسجيل الخروج'}</span>
+                  <span className="item-text">
+                    {isLoggingOut ? 'جاري تسجيل الخروج…' : 'تسجيل الخروج'}
+                  </span>
                 </button>
               </>
             ) : (
