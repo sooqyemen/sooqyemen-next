@@ -26,7 +26,6 @@ export default function RootLayout({ children }) {
       <body>
         <AuthProvider>
           <Header />
-          {/* لا تضع className="main-content" هنا عشان ما تتعارك مع CSS الخاص بصفحة الرئيسية */}
           <main>{children}</main>
           <div className="safe-area-bottom" />
         </AuthProvider>
