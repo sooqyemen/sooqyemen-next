@@ -1,6 +1,4 @@
-// 📁 /app/layout.js
 import './globals.css';
-import './home.css';
 import { AuthProvider } from '@/lib/useAuth';
 import Header from '@/components/Header';
 
