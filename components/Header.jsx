@@ -19,7 +19,6 @@ export default function Header() {
   // محاكاة تحقق من الرسائل غير المقروءة
   useEffect(() => {
     if (user) {
-      // محاكاة: 30% فرصة أن يكون هناك رسائل غير مقروءة
       const hasMessages = Math.random() > 0.7;
       setHasUnreadMessages(hasMessages);
     }
@@ -38,7 +37,6 @@ export default function Header() {
     };
   }, [menuOpen]);
 
-  // إغلاق القائمة عند الضغط على زر الخروج
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
@@ -51,18 +49,14 @@ export default function Header() {
     }
   };
 
-  // إغلاق القائمة عند النقر على رابط
   const closeMenu = () => setMenuOpen(false);
 
   return (
     <>
-      {/* ========== الهيدر الرئيسي ========== */}
       <header className="header">
         <div className="header-inner">
           
-          {/* ========== تصميم الجوال ========== */}
           <div className="mobile-nav">
-            {/* زر القائمة - على اليمين (لأن العربية من اليمين لليسار) */}
             <button
               className="menu-btn"
               onClick={() => setMenuOpen(true)}
@@ -71,12 +65,10 @@ export default function Header() {
               <span className="menu-icon">☰</span>
             </button>
 
-            {/* العنوان بالوسط */}
             <Link href="/" className="site-title">
               سوق اليمن
             </Link>
 
-            {/* زر إضافة إعلان - على اليسار */}
             <Link 
               href="/add" 
               className="add-btn-mobile"
@@ -86,14 +78,11 @@ export default function Header() {
             </Link>
           </div>
 
-          {/* ========== تصميم الديسكتوب ========== */}
           <div className="desktop-nav">
-            {/* الشعار */}
             <Link href="/" className="logo">
               سوق اليمن
             </Link>
 
-            {/* روابط التنقل */}
             <nav className="nav-links">
               <Link href="/" className="nav-link">
                 الرئيسية
@@ -111,7 +100,6 @@ export default function Header() {
               )}
             </nav>
 
-            {/* الجزء الأيمن: أزرار المستخدم */}
             <div className="user-actions">
               {loading ? (
                 <div className="loading-text">جاري التحميل…</div>
@@ -170,10 +158,8 @@ export default function Header() {
         </div>
       </header>
 
-      {/* ========== مسافة الهيدر ========== */}
       <div className="header-spacer" />
 
-      {/* ========== قائمة الجوال الجانبية ========== */}
       <div 
         className={`side-menu-backdrop ${menuOpen ? 'open' : ''}`}
         onClick={closeMenu}
@@ -212,7 +198,6 @@ export default function Header() {
         </div>
 
         <nav className="side-menu-nav">
-          {/* روابط رئيسية */}
           <div className="menu-section">
             <h3 className="section-title">التنقل الرئيسي</h3>
             
@@ -258,7 +243,6 @@ export default function Header() {
             )}
           </div>
 
-          {/* روابط الحساب */}
           <div className="menu-section">
             <h3 className="section-title">حسابك</h3>
             
@@ -302,7 +286,6 @@ export default function Header() {
             )}
           </div>
 
-          {/* روابط إضافية */}
           <div className="menu-section">
             <h3 className="section-title">المزيد</h3>
             
