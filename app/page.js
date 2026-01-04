@@ -7,7 +7,7 @@ import Link from 'next/link';
 import Price from '@/components/Price';
 import { db } from '@/lib/firebaseClient';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import './home.css'; // ✅ الستايل الجديد للصفحة الرئيسية فقط
+import './home.css';
 
 // تحميل ديناميكي للخريطة (تجنب SSR لمشاكل Leaflet)
 const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
@@ -84,18 +84,18 @@ function GridListingCard({ listing }) {
               className="listing-img"
               loading="lazy"
               onError={(e) => {
-                e.currentTarget.style.display = 'none';
-                const fallback = e.currentTarget.parentElement?.querySelector('.img-fallback');
-                if (fallback) fallback.classList.remove('hidden');
+                e.target.style.display = 'none';
+                e.target.parentElement.querySelector('.img-fallback').style.display = 'flex';
               }}
             />
           ) : null}
-
           <div className={`img-fallback ${img ? 'hidden' : ''}`}>
             {catObj?.icon || '🖼️'}
           </div>
 
-          {listing.auctionEnabled && <div className="auction-badge">⚡ مزاد</div>}
+          {listing.auctionEnabled && (
+            <div className="auction-badge">⚡ مزاد</div>
+          )}
         </div>
 
         <div className="card-content">
@@ -104,7 +104,7 @@ function GridListingCard({ listing }) {
               {listing.title || 'بدون عنوان'}
             </h3>
             {catObj && (
-              <span className="category-badge" title={catObj.label}>
+              <span className="category-badge">
                 <span className="category-icon">{catObj.icon}</span>
               </span>
             )}
@@ -127,9 +127,7 @@ function GridListingCard({ listing }) {
           </div>
 
           <div className="listing-footer">
-            <span className="views-count">
-              👁️ {Number(listing.views || 0).toLocaleString('ar-YE')}
-            </span>
+            <span className="views-count">👁️ {Number(listing.views || 0).toLocaleString('ar-YE')}</span>
             <span className="time-ago">⏱️ {formatRelative(listing.createdAt)}</span>
           </div>
         </div>
@@ -157,9 +155,8 @@ function ListListingCard({ listing }) {
               className="list-img"
               loading="lazy"
               onError={(e) => {
-                e.currentTarget.style.display = 'none';
-                const fallback = e.currentTarget.parentElement?.querySelector('.list-img-fallback');
-                if (fallback) fallback.classList.remove('hidden');
+                e.target.style.display = 'none';
+                e.target.parentElement.querySelector('.list-img-fallback').style.display = 'flex';
               }}
             />
           ) : null}
@@ -174,7 +171,6 @@ function ListListingCard({ listing }) {
               <h3 className="list-title" title={listing.title || ''}>
                 {listing.title || 'بدون عنوان'}
               </h3>
-
               {catObj && (
                 <span className="list-category">
                   <span className="list-category-icon">{catObj.icon}</span>
@@ -201,11 +197,11 @@ function ListListingCard({ listing }) {
           <p className="list-description">{shortDesc}</p>
 
           <div className="list-footer">
-            <span className="list-views">
-              👁️ {Number(listing.views || 0).toLocaleString('ar-YE')} مشاهدة
-            </span>
+            <span className="list-views">👁️ {Number(listing.views || 0).toLocaleString('ar-YE')} مشاهدة</span>
             <span className="list-time">⏱️ {formatRelative(listing.createdAt)}</span>
-            {listing.auctionEnabled && <span className="list-auction">⚡ مزاد نشط</span>}
+            {listing.auctionEnabled && (
+              <span className="list-auction">⚡ مزاد نشط</span>
+            )}
           </div>
         </div>
       </div>
@@ -213,7 +209,7 @@ function ListListingCard({ listing }) {
   );
 }
 
-// ✅ شريط البحث
+// ✅ مكون شريط البحث
 function SearchBar({ search, setSearch, suggestions }) {
   const [open, setOpen] = useState(false);
   const searchRef = useRef(null);
@@ -221,7 +217,9 @@ function SearchBar({ search, setSearch, suggestions }) {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (searchRef.current && !searchRef.current.contains(e.target)) setOpen(false);
+      if (searchRef.current && !searchRef.current.contains(e.target)) {
+        setOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -246,9 +244,7 @@ function SearchBar({ search, setSearch, suggestions }) {
     <div className="search-wrapper" ref={searchRef}>
       <div className="search-container">
         <div className="search-input-wrapper">
-          <span className="search-icon" aria-hidden="true">
-            🔍
-          </span>
+          <span className="search-icon" aria-hidden="true">🔍</span>
           <input
             ref={inputRef}
             className="search-input focus-ring"
@@ -274,16 +270,14 @@ function SearchBar({ search, setSearch, suggestions }) {
         <div className="suggestions-dropdown" role="listbox">
           {suggestions.map((s, i) => (
             <button
-              key={`${s}-${i}`}
+              key={i}
               className="suggestion-item focus-ring"
               type="button"
               onClick={() => handleSuggestionClick(s)}
               role="option"
               aria-selected={search === s}
             >
-              <span className="suggestion-icon" aria-hidden="true">
-                🔍
-              </span>
+              <span className="suggestion-icon" aria-hidden="true">🔍</span>
               <span className="suggestion-text">{s}</span>
             </button>
           ))}
@@ -293,6 +287,7 @@ function SearchBar({ search, setSearch, suggestions }) {
   );
 }
 
+// ✅ الصفحة الرئيسية
 export default function HomePage() {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -302,28 +297,24 @@ export default function HomePage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [viewMode, setViewMode] = useState('grid'); // grid | list | map
 
-  // ✅ تحميل وضع العرض من localStorage (حتى لا يرجع دائمًا Grid)
-  useEffect(() => {
-    try {
-      const v = localStorage.getItem('preferredViewMode');
-      if (v === 'grid' || v === 'list' || v === 'map') setViewMode(v);
-    } catch {}
-  }, []);
-
   // ✅ جلب الإعلانات من Firebase
   useEffect(() => {
     setLoading(true);
     setError('');
 
     try {
-      const listingsQuery = query(collection(db, 'listings'), orderBy('createdAt', 'desc'), limit(100));
+      const listingsQuery = query(
+        collection(db, 'listings'),
+        orderBy('createdAt', 'desc'),
+        limit(100)
+      );
 
       const unsubscribe = onSnapshot(
         listingsQuery,
         (snapshot) => {
           const data = snapshot.docs
-            .map((d) => ({ id: d.id, ...d.data() }))
-            .filter((l) => l.isActive !== false && l.hidden !== true);
+            .map((doc) => ({ id: doc.id, ...doc.data() }))
+            .filter((listing) => listing.isActive !== false && listing.hidden !== true);
 
           setListings(data);
           setLoading(false);
@@ -343,7 +334,7 @@ export default function HomePage() {
     }
   }, []);
 
-  // ✅ اقتراحات البحث
+  // ✅ اقتراحات البحث الذكي
   const suggestions = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return [];
@@ -368,7 +359,7 @@ export default function HomePage() {
     return Array.from(results).slice(0, 8);
   }, [search, listings]);
 
-  // ✅ فلترة الإعلانات حسب البحث والقسم
+  // ✅ فلترة الإعلانات
   const filteredListings = useMemo(() => {
     const q = search.trim().toLowerCase();
     const catSelected = String(selectedCategory || 'all').toLowerCase();
@@ -399,16 +390,15 @@ export default function HomePage() {
 
   const handleViewModeChange = (mode) => {
     setViewMode(mode);
-    try {
-      localStorage.setItem('preferredViewMode', mode);
-    } catch {}
+    if (typeof window !== 'undefined') localStorage.setItem('preferredViewMode', mode);
   };
+
+  const handleRetry = () => window.location.reload();
 
   return (
     <div className="home-page" dir="rtl">
-      {/* ✅ ملاحظة: الهيدر موجود في layout، لا تكرره هنا */}
+      {/* ✅ لا يوجد Header هنا لأن الهيدر في layout */}
 
-      {/* Hero Section */}
       <section className="hero-section" aria-label="القسم الرئيسي">
         <div className="hero-container">
           <div className="hero-content">
@@ -420,9 +410,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      <main role="main">
+      <main className="main-content" role="main">
         <div className="container">
-          {/* Categories */}
           <div className="categories-container" aria-label="أقسام الإعلانات">
             <div className="categories-scroll" role="tablist">
               {CATEGORY_CONFIG.map((category) => {
@@ -435,10 +424,9 @@ export default function HomePage() {
                     onClick={() => setSelectedCategory(category.key)}
                     role="tab"
                     aria-selected={isActive}
+                    aria-controls={`category-${category.key}`}
                   >
-                    <span className="category-button-icon" aria-hidden="true">
-                      {category.icon}
-                    </span>
+                    <span className="category-button-icon" aria-hidden="true">{category.icon}</span>
                     <span className="category-button-label">{category.label}</span>
                   </button>
                 );
@@ -446,7 +434,6 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Toolbar */}
           <div className="toolbar">
             <div className="toolbar-left">
               <div className="view-toggle" role="group" aria-label="طريقة العرض">
@@ -457,11 +444,10 @@ export default function HomePage() {
                   aria-pressed={viewMode === 'grid'}
                   title="عرض شبكي"
                 >
-                  <span className="view-toggle-icon" aria-hidden="true">
-                    ◼️◼️
-                  </span>
+                  <span className="view-toggle-icon" aria-hidden="true">◼️◼️</span>
                   <span className="view-toggle-label">شبكة</span>
                 </button>
+
                 <button
                   type="button"
                   className={`view-toggle-button focus-ring ${viewMode === 'list' ? 'active' : ''}`}
@@ -469,11 +455,10 @@ export default function HomePage() {
                   aria-pressed={viewMode === 'list'}
                   title="عرض قائمة"
                 >
-                  <span className="view-toggle-icon" aria-hidden="true">
-                    ☰
-                  </span>
+                  <span className="view-toggle-icon" aria-hidden="true">☰</span>
                   <span className="view-toggle-label">قائمة</span>
                 </button>
+
                 <button
                   type="button"
                   className={`view-toggle-button focus-ring ${viewMode === 'map' ? 'active' : ''}`}
@@ -481,9 +466,7 @@ export default function HomePage() {
                   aria-pressed={viewMode === 'map'}
                   title="عرض خريطة"
                 >
-                  <span className="view-toggle-icon" aria-hidden="true">
-                    🗺️
-                  </span>
+                  <span className="view-toggle-icon" aria-hidden="true">🗺️</span>
                   <span className="view-toggle-label">خريطة</span>
                 </button>
               </div>
@@ -496,7 +479,6 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Content */}
           {loading ? (
             <div className="loading-container" aria-live="polite" aria-busy="true">
               <div className="spinner" aria-hidden="true"></div>
@@ -504,23 +486,23 @@ export default function HomePage() {
             </div>
           ) : error ? (
             <div className="error-container">
-              <div className="error-icon" aria-hidden="true">
-                ⚠️
-              </div>
+              <div className="error-icon" aria-hidden="true">⚠️</div>
               <h3>حدث خطأ</h3>
               <p>{error}</p>
-              <button className="retry-button focus-ring" onClick={() => window.location.reload()}>
+              <button className="retry-button focus-ring" onClick={handleRetry} aria-label="إعادة المحاولة">
                 إعادة المحاولة
               </button>
             </div>
           ) : filteredListings.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-icon" aria-hidden="true">
-                📭
-              </div>
+              <div className="empty-icon" aria-hidden="true">📭</div>
               <h3>لا توجد إعلانات</h3>
-              <p>{search || selectedCategory !== 'all' ? 'لا توجد إعلانات مطابقة لبحثك حالياً.' : 'لا توجد إعلانات منشورة حالياً.'}</p>
-              <Link href="/add" className="add-listing-link focus-ring">
+              <p>
+                {search || selectedCategory !== 'all'
+                  ? 'لا توجد إعلانات مطابقة لبحثك حالياً.'
+                  : 'لا توجد إعلانات منشورة حالياً.'}
+              </p>
+              <Link href="/add" className="add-listing-link focus-ring" aria-label="إضافة إعلان جديد">
                 ➕ أضف أول إعلان
               </Link>
             </div>
@@ -544,42 +526,26 @@ export default function HomePage() {
         </div>
       </main>
 
-      {/* Floating Add Button */}
-      <Link href="/add" className="floating-add-button focus-ring" aria-label="إضافة إعلان جديد" title="أضف إعلان جديد">
-        <span className="floating-add-icon" aria-hidden="true">
-          ➕
-        </span>
+      <Link
+        href="/add"
+        className="floating-add-button focus-ring"
+        aria-label="إضافة إعلان جديد"
+        title="أضف إعلان جديد"
+      >
+        <span className="floating-add-icon" aria-hidden="true">➕</span>
         <span className="floating-add-text">أضف إعلان</span>
       </Link>
 
-      {/* إضافات صغيرة مكملة */}
       <style jsx>{`
-        .hidden {
-          display: none !important;
-        }
-        .map-view {
-          height: 500px;
-          border-radius: 12px;
-          overflow: hidden;
-          margin-bottom: 2.5rem;
-        }
-        .list-category-label {
-          margin-right: 4px;
-        }
-        .results-number {
-          font-weight: 700;
-          color: var(--color-primary-light);
-        }
+        .hidden { display: none !important; }
+        .map-view { height: 500px; border-radius: 12px; overflow: hidden; margin-bottom: 2.5rem; }
+        .list-category-label { margin-right: 4px; }
+        .results-number { font-weight: 700; color: var(--color-primary-light); }
+        .view-toggle-label { font-size: 0.875rem; }
         @media (max-width: 768px) {
-          .map-view {
-            height: 400px;
-          }
-          .view-toggle-label {
-            display: none;
-          }
-          .view-toggle-button {
-            padding: 0.5rem;
-          }
+          .map-view { height: 400px; }
+          .view-toggle-label { display: none; }
+          .view-toggle-button { padding: 0.5rem; }
         }
       `}</style>
     </div>
