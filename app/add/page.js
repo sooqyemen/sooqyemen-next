@@ -1,203 +1,171 @@
-// app/edit-listing/[id]/page.js
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
-
 import { db, firebase, storage } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import { toYER, useRates } from '@/lib/rates';
+import Link from 'next/link';
+import Image from 'next/image';
 
 const LocationPicker = dynamic(
   () => import('@/components/Map/LocationPicker'),
   { ssr: false }
 );
 
-// ✅ إيميلات المدراء (نفس الهيدر)
-const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
+const DEFAULT_CATEGORIES = [
+  { slug: 'cars', name: 'سيارات' },
+  { slug: 'real_estate', name: 'عقارات' },
+  { slug: 'mobiles', name: 'جوالات' },
+  { slug: 'jobs', name: 'وظائف' },
+  { slug: 'solar', name: 'طاقة شمسية' },
+  { slug: 'furniture', name: 'أثاث' },
+  { slug: 'animals', name: 'حيوانات وطيور' },
+  { slug: 'networks', name: 'نت وشبكات' },
+  { slug: 'electronics', name: 'إلكترونيات' },
+  { slug: 'services', name: 'خدمات' },
+  { slug: 'maintenance', name: 'صيانة' },
+];
 
-const MAX_IMAGES = 10;
-
-export default function EditListingPage() {
-  const { id } = useParams();
-  const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+export default function AddPage() {
+  const { user, loading } = useAuth();
   const rates = useRates();
 
-  const userEmail = user?.email ? String(user.email).toLowerCase() : null;
-  const isAdmin = !!userEmail && ADMIN_EMAILS.includes(userEmail);
-
-  const [docLoading, setDocLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
-  const [data, setData] = useState(null);
-  const isOwner = !!user?.uid && !!data?.userId && user.uid === data.userId;
-  const canEdit = !!user && (isAdmin || isOwner);
-
-  // ====== Form State ======
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [city, setCity] = useState('');
   const [category, setCategory] = useState('solar');
   const [phone, setPhone] = useState('');
   const [isWhatsapp, setIsWhatsapp] = useState(true);
-
   const [currency, setCurrency] = useState('YER');
   const [price, setPrice] = useState('');
-
   const [coords, setCoords] = useState(null);
   const [locationLabel, setLocationLabel] = useState('');
-
-  // صور موجودة + صور جديدة
-  const [existingImages, setExistingImages] = useState([]); // urls
-  const [removedExisting, setRemovedExisting] = useState([]); // urls to delete
-  const [newImages, setNewImages] = useState([]); // File[]
-  const [newPreviews, setNewPreviews] = useState([]); // dataUrl[]
-
-  // حالة الإعلان (اختياري)
-  const [status, setStatus] = useState('active'); // active | sold
-
+  const [images, setImages] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
+  const [auctionEnabled, setAuctionEnabled] = useState(false);
+  const [auctionMinutes, setAuctionMinutes] = useState('60');
+  const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
-  // ====== Load doc ======
+  const [cats, setCats] = useState(DEFAULT_CATEGORIES);
+  const [catsLoading, setCatsLoading] = useState(true);
+
+  // ✅ تحميل الأقسام من Firestore
   useEffect(() => {
-    if (!id) return;
+    const unsub = db.collection('categories').onSnapshot(
+      (snap) => {
+        const arr = snap.docs
+          .map((d) => {
+            const data = d.data() || {};
+            return {
+              slug: d.id,
+              name: String(data.name || '').trim(),
+              active: data.active,
+            };
+          })
+          .filter((c) => c.slug && c.name && c.active !== false);
 
-    let mounted = true;
-    setDocLoading(true);
+        arr.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
-    db.collection('listings')
-      .doc(id)
-      .get()
-      .then((snap) => {
-        if (!mounted) return;
-
-        if (!snap.exists) {
-          alert('الإعلان غير موجود');
-          router.replace('/my-listings');
-          return;
-        }
-
-        const d = { id, ...snap.data() };
-        setData(d);
-
-        setTitle(String(d.title || ''));
-        setDesc(String(d.description || ''));
-        setCity(String(d.city || ''));
-        setCategory(String(d.category || 'solar'));
-        setPhone(String(d.phone || ''));
-        setIsWhatsapp(d.isWhatsapp !== false);
-
-        // عملة + سعر أصلي
-        const origCur = String(d.originalCurrency || 'YER');
-        const origPrice = d.originalPrice ?? '';
-        setCurrency(['YER', 'SAR', 'USD'].includes(origCur) ? origCur : 'YER');
-        setPrice(origPrice !== '' ? String(origPrice) : (d.priceYER ? String(d.priceYER) : ''));
-
-        // موقع
-        const c = d.coords;
-        if (Array.isArray(c) && c.length === 2) {
-          setCoords([Number(c[0]), Number(c[1])]);
+        if (arr.length) {
+          setCats(arr);
+          if (!arr.some((x) => x.slug === category)) {
+            setCategory(arr[0].slug);
+          }
         } else {
-          setCoords(null);
+          setCats(DEFAULT_CATEGORIES);
+          if (!DEFAULT_CATEGORIES.some((x) => x.slug === category)) {
+            setCategory(DEFAULT_CATEGORIES[0].slug);
+          }
         }
-        setLocationLabel(String(d.locationLabel || ''));
 
-        // صور
-        setExistingImages(Array.isArray(d.images) ? d.images.filter(Boolean) : []);
-        setRemovedExisting([]);
-        setNewImages([]);
-        setNewPreviews([]);
+        setCatsLoading(false);
+      },
+      (err) => {
+        console.error('Failed to load categories:', err);
+        setCats(DEFAULT_CATEGORIES);
+        setCatsLoading(false);
+      }
+    );
 
-        // حالة
-        setStatus(String(d.status || 'active') === 'sold' ? 'sold' : 'active');
+    return () => unsub();
+  }, []);
 
-        setDocLoading(false);
-      })
-      .catch((e) => {
-        console.error('Load listing error:', e);
-        alert('تعذر تحميل الإعلان');
-        setDocLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [id, router]);
-
-  // ====== Previews for new images ======
+  // ✅ معاينة الصور
   useEffect(() => {
-    if (!newImages.length) {
-      setNewPreviews([]);
+    if (images.length === 0) {
+      setImagePreviews([]);
       return;
     }
+
     const previews = [];
-    newImages.forEach((file) => {
+    images.forEach((file) => {
       const reader = new FileReader();
       reader.onloadend = () => {
         previews.push(reader.result);
-        if (previews.length === newImages.length) setNewPreviews([...previews]);
+        if (previews.length === images.length) {
+          setImagePreviews([...previews]);
+        }
       };
       reader.readAsDataURL(file);
     });
-  }, [newImages]);
+  }, [images]);
 
-  // ====== Validation ======
-  const validate = () => {
-    const e = {};
+  // ✅ التحقق من الأخطاء
+  const validateForm = () => {
+    const newErrors = {};
 
-    if (!title.trim()) e.title = 'الرجاء إدخال عنوان للإعلان';
-    else if (title.trim().length < 5) e.title = 'العنوان يجب أن يكون 5 أحرف على الأقل';
-
-    if (!desc.trim()) e.desc = 'الرجاء إدخال وصف للإعلان';
-    else if (desc.trim().length < 10) e.desc = 'الوصف يجب أن يكون 10 أحرف على الأقل';
-
-    if (!city.trim()) e.city = 'الرجاء إدخال المدينة';
-
-    if (!price || isNaN(price) || Number(price) <= 0) e.price = 'الرجاء إدخال سعر صحيح';
-
-    if (phone && !/^[0-9]{9,15}$/.test(String(phone).replace(/\D/g, ''))) {
-      e.phone = 'رقم الهاتف غير صحيح';
+    if (!title.trim()) {
+      newErrors.title = 'الرجاء إدخال عنوان للإعلان';
+    } else if (title.length < 5) {
+      newErrors.title = 'العنوان يجب أن يكون 5 أحرف على الأقل';
     }
 
-    const keptExisting = existingImages.length;
-    const total = keptExisting + newImages.length;
-    if (total > MAX_IMAGES) e.images = `الحد الأقصى للصور هو ${MAX_IMAGES}`;
+    if (!desc.trim()) {
+      newErrors.desc = 'الرجاء إدخال وصف للإعلان';
+    } else if (desc.length < 10) {
+      newErrors.desc = 'الوصف يجب أن يكون 10 أحرف على الأقل';
+    }
 
-    setErrors(e);
-    return Object.keys(e).length === 0;
+    if (!city.trim()) {
+      newErrors.city = 'الرجاء إدخال المدينة';
+    }
+
+    if (!price || isNaN(price) || Number(price) <= 0) {
+      newErrors.price = 'الرجاء إدخال سعر صحيح';
+    }
+
+    if (phone && !/^[0-9]{9,15}$/.test(phone.replace(/\D/g, ''))) {
+      newErrors.phone = 'رقم الهاتف غير صحيح';
+    }
+
+    if (auctionEnabled && (!auctionMinutes || Number(auctionMinutes) < 1)) {
+      newErrors.auctionMinutes = 'مدة المزاد يجب أن تكون دقيقة واحدة على الأقل';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
-  // ====== Helpers ======
   const onPick = (c, lbl) => {
     setCoords(c);
     setLocationLabel(lbl || '');
-    if (errors.location) setErrors((p) => ({ ...p, location: undefined }));
+    if (errors.location) {
+      setErrors(prev => ({ ...prev, location: undefined }));
+    }
   };
 
-  const handleRemoveExistingImage = (url) => {
-    setExistingImages((prev) => prev.filter((x) => x !== url));
-    setRemovedExisting((prev) => (prev.includes(url) ? prev : [...prev, url]));
-  };
-
-  const handleRemoveNewImage = (index) => {
-    setNewImages((prev) => {
-      const copy = [...prev];
-      copy.splice(index, 1);
-      return copy;
-    });
-  };
-
-  const uploadNewImages = async () => {
-    if (!newImages.length) return [];
+  const uploadImages = async () => {
+    if (!images.length) return [];
     const out = [];
 
-    for (const file of newImages) {
-      const safeName = String(file.name || 'img').replace(/[^a-zA-Z0-9._-]/g, '_');
+    for (const file of images) {
+      const safeName = String(file.name || 'img').replace(
+        /[^a-zA-Z0-9._-]/g,
+        '_'
+      );
       const path = `listings/${user.uid}/${Date.now()}_${safeName}`;
       const ref = storage.ref().child(path);
       await ref.put(file);
@@ -208,46 +176,45 @@ export default function EditListingPage() {
     return out;
   };
 
-  const bestEffortDeleteStorageUrl = async (url) => {
-    try {
-      // ✅ compat: storage.refFromURL
-      const ref = storage.refFromURL(url);
-      await ref.delete();
-    } catch (e) {
-      // لا نوقف العملية لو فشل الحذف (قد تكون الصورة قديمة/صلاحيات)
-      console.warn('Storage delete failed:', url, e);
-    }
+  const handleRemoveImage = (index) => {
+    const newImages = [...images];
+    const newPreviews = [...imagePreviews];
+    newImages.splice(index, 1);
+    newPreviews.splice(index, 1);
+    setImages(newImages);
+    setImagePreviews(newPreviews);
   };
 
-  // ====== Save ======
-  const save = async () => {
+  const submit = async () => {
     setSubmitAttempted(true);
-
+    
     if (!user) {
-      alert('يرجى تسجيل الدخول');
-      return;
-    }
-    if (!canEdit) {
-      alert('ليست لديك صلاحية تعديل هذا الإعلان');
-      return;
-    }
-    if (!validate()) {
-      alert('يرجى تصحيح الأخطاء قبل الحفظ');
+      alert('يرجى تسجيل الدخول أولاً');
       return;
     }
 
-    setSaving(true);
+    if (!validateForm()) {
+      alert('يرجى تصحيح الأخطاء قبل المتابعة');
+      return;
+    }
+
+    setBusy(true);
     try {
       const priceYER = toYER(price, currency, rates);
 
-      const uploaded = await uploadNewImages();
-      const finalImages = [...existingImages, ...uploaded].slice(0, MAX_IMAGES);
+      const imageUrls = await uploadImages();
 
-      const payload = {
+      const endAt = auctionEnabled
+        ? firebase.firestore.Timestamp.fromMillis(
+            Date.now() + Math.max(1, Number(auctionMinutes || 60)) * 60 * 1000
+          )
+        : null;
+
+      await db.collection('listings').add({
         title: title.trim(),
         description: desc.trim(),
         city: city.trim(),
-        category: String(category || 'solar'),
+        category,
         phone: phone.trim() || null,
         isWhatsapp: !!isWhatsapp,
 
@@ -256,603 +223,1323 @@ export default function EditListingPage() {
         originalCurrency: currency,
         currencyBase: 'YER',
 
-        coords: coords ? [Number(coords[0]), Number(coords[1])] : null,
+        coords: coords ? [coords[0], coords[1]] : null,
         locationLabel: locationLabel || null,
 
-        images: finalImages,
+        images: imageUrls,
 
-        // ✅ status (مفيد لملفك الشخصي + إعلاناتي)
-        status: status === 'sold' ? 'sold' : 'active',
+        userId: user.uid,
+        userEmail: user.email || null,
+        userName: user.displayName || null,
 
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      };
+        views: 0,
+        likes: 0,
+        isActive: true,
 
-      await db.collection('listings').doc(id).update(payload);
+        auctionEnabled: !!auctionEnabled,
+        auctionEndAt: endAt,
+        currentBidYER: auctionEnabled ? Number(priceYER) : null,
 
-      // بعد حفظ الدوك: نحاول نحذف الصور التي أزلتها من التخزين
-      if (removedExisting.length) {
-        await Promise.all(removedExisting.map(bestEffortDeleteStorageUrl));
-        setRemovedExisting([]);
-      }
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
 
-      // نظّف صور جديدة
-      setNewImages([]);
-      setNewPreviews([]);
-
-      alert('✅ تم حفظ التعديلات');
-      router.push(isAdmin ? '/admin' : '/my-listings');
+      alert('🎉 تم نشر الإعلان بنجاح!');
+      window.location.href = '/';
     } catch (e) {
-      console.error('Save error:', e);
-      alert('❌ فشل الحفظ، حاول مرة أخرى');
+      console.error(e);
+      alert('❌ حدث خطأ أثناء النشر. يرجى المحاولة مرة أخرى.');
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
   };
 
-  // ====== Delete listing (حقيقي) ======
-  const deleteListing = async () => {
-    if (!user) return;
-    if (!canEdit) return;
-
-    const ok = confirm('⚠️ هل أنت متأكد من حذف الإعلان نهائياً؟ سيتم حذف الصور أيضاً إن أمكن.');
-    if (!ok) return;
-
-    setDeleting(true);
-    try {
-      const urls = Array.isArray(existingImages) ? existingImages : [];
-      await db.collection('listings').doc(id).delete();
-
-      // Best effort delete all images
-      await Promise.all(urls.map(bestEffortDeleteStorageUrl));
-
-      alert('🗑️ تم حذف الإعلان نهائياً');
-      router.push(isAdmin ? '/admin' : '/my-listings');
-    } catch (e) {
-      console.error('Delete listing error:', e);
-      alert('❌ تعذر حذف الإعلان (قد تكون الصلاحيات تمنع ذلك)');
-    } finally {
-      setDeleting(false);
-    }
-  };
-
+  // ✅ السعر المحول
   const convertedPrice = useMemo(() => {
     if (!price || isNaN(price)) return null;
+    const priceNum = Number(price);
     if (currency === 'YER') return null;
+    
     try {
       const yer = toYER(price, currency, rates);
-      return Math.round(yer).toLocaleString('ar-YE');
+      return {
+        YER: Math.round(yer).toLocaleString('ar-YE'),
+        SAR: currency === 'SAR' ? null : toYER(priceNum, 'SAR', rates)?.toLocaleString('ar-SA'),
+        USD: currency === 'USD' ? null : toYER(priceNum, 'USD', rates)?.toLocaleString('en-US'),
+      };
     } catch {
       return null;
     }
   }, [price, currency, rates]);
 
-  // ====== Guards ======
-  if (authLoading || docLoading) {
+  if (loading) {
     return (
-      <div className="wrap">
-        <div className="card center">
-          <div className="spinner" />
-          <p>جاري تحميل الإعلان…</p>
+      <div className="add-page-layout">
+        <div className="loading-container">
+          <div className="loading-spinner-large" />
+          <p>جاري تحميل الصفحة...</p>
         </div>
-        <style jsx>{styles}</style>
       </div>
     );
   }
 
-  if (!user) {
+  if (!loading && !user) {
     return (
-      <div className="wrap">
-        <div className="card">
-          <h2 style={{ marginTop: 0 }}>🔒 تسجيل الدخول مطلوب</h2>
-          <p>يجب تسجيل الدخول لتعديل الإعلان.</p>
-          <div className="row">
-            <Link className="btn primary" href="/login">تسجيل الدخول</Link>
-            <Link className="btn" href="/">العودة للرئيسية</Link>
+      <div className="add-page-layout">
+        <div className="auth-required-card">
+          <div className="lock-icon-large">🔒</div>
+          <h2>تسجيل الدخول مطلوب</h2>
+          <p>يجب عليك تسجيل الدخول لإضافة إعلان جديد</p>
+          <div className="auth-actions">
+            <Link href="/login" className="btn-primary auth-btn">
+              تسجيل الدخول
+            </Link>
+            <Link href="/register" className="btn-secondary auth-btn">
+              إنشاء حساب جديد
+            </Link>
+            <Link href="/" className="back-home-btn">
+              ← العودة للرئيسية
+            </Link>
           </div>
         </div>
-        <style jsx>{styles}</style>
       </div>
     );
   }
 
-  if (!data) {
-    return (
-      <div className="wrap">
-        <div className="card">
-          <h2 style={{ marginTop: 0 }}>غير موجود</h2>
-          <p>الإعلان غير موجود.</p>
-          <Link className="btn" href="/my-listings">إعلاناتي</Link>
-        </div>
-        <style jsx>{styles}</style>
-      </div>
-    );
-  }
-
-  if (!canEdit) {
-    return (
-      <div className="wrap">
-        <div className="card">
-          <h2 style={{ marginTop: 0 }}>🛑 غير مصرح</h2>
-          <p>ليست لديك صلاحية تعديل هذا الإعلان.</p>
-          <div className="row">
-            <Link className="btn" href="/">الرئيسية</Link>
-            <Link className="btn" href="/my-listings">إعلاناتي</Link>
-          </div>
-        </div>
-        <style jsx>{styles}</style>
-      </div>
-    );
-  }
-
-  // ====== UI ======
   return (
-    <div className="wrap">
-      <div className="hero">
-        <div>
-          <h1>تعديل الإعلان</h1>
-          <p className="muted">
-            عدّل بيانات إعلانك، الصور، والموقع بسهولة.
-          </p>
+    <div className="add-page-layout">
+      {/* رأس الصفحة */}
+      <div className="page-header add-page-header">
+        <h1>إضافة إعلان جديد</h1>
+        <p className="page-subtitle">أضف إعلانك ليجده الآلاف من المشترين</p>
+      </div>
+
+      {/* نصائح سريعة */}
+      <div className="form-tips">
+        <div className="tip-item">
+          <span className="tip-icon">📸</span>
+          <span>أضف صور واضحة وجودة عالية</span>
         </div>
-        <div className="heroActions">
-          <button className="btn" onClick={() => router.back()}>← رجوع</button>
-          <button
-            className="btn danger"
-            onClick={deleteListing}
-            disabled={deleting}
-            title="حذف نهائي"
-          >
-            {deleting ? 'جاري الحذف…' : '🗑️ حذف نهائي'}
-          </button>
+        <div className="tip-item">
+          <span className="tip-icon">📝</span>
+          <span>اكتب وصفاً مفصلاً ودقيقاً</span>
+        </div>
+        <div className="tip-item">
+          <span className="tip-icon">💰</span>
+          <span>حدد سعراً مناسباً ومنافساً</span>
+        </div>
+        <div className="tip-item">
+          <span className="tip-icon">📍</span>
+          <span>اختر الموقع الدقيق لإعلانك</span>
         </div>
       </div>
 
-      <div className="grid">
-        {/* Form */}
-        <div className="card">
-          <h2 className="secTitle">معلومات الإعلان</h2>
-
-          <div className="field">
-            <label className="label req">العنوان</label>
+      <div className="form-grid">
+        {/* العمود الأيسر: النموذج */}
+        <div className="form-container">
+          <h2 className="form-section-title">معلومات الإعلان</h2>
+          
+          {/* العنوان */}
+          <div className="form-group">
+            <label className="form-label required">عنوان الإعلان</label>
             <input
-              className={`input ${errors.title ? 'err' : ''}`}
+              className={`form-input ${errors.title ? 'error' : ''}`}
               value={title}
               onChange={(e) => {
                 setTitle(e.target.value);
-                if (submitAttempted) setErrors((p) => ({ ...p, title: undefined }));
+                if (submitAttempted) {
+                  setErrors(prev => ({ ...prev, title: undefined }));
+                }
               }}
+              placeholder="مثال: لابتوب ماك بوك برو 2023 بحالة ممتازة"
               maxLength={100}
-              placeholder="عنوان الإعلان"
             />
-            {errors.title && <div className="errMsg">{errors.title}</div>}
+            <div className="form-helper">
+              <span>أكتب عنواناً واضحاً وجذاباً</span>
+              <span className="char-count">{title.length}/100</span>
+            </div>
+            {errors.title && <div className="form-error">{errors.title}</div>}
           </div>
 
-          <div className="field">
-            <label className="label req">الوصف</label>
+          {/* الوصف */}
+          <div className="form-group">
+            <label className="form-label required">وصف الإعلان</label>
             <textarea
-              className={`input ${errors.desc ? 'err' : ''}`}
+              className={`form-textarea ${errors.desc ? 'error' : ''}`}
               value={desc}
               onChange={(e) => {
                 setDesc(e.target.value);
-                if (submitAttempted) setErrors((p) => ({ ...p, desc: undefined }));
+                if (submitAttempted) {
+                  setErrors(prev => ({ ...prev, desc: undefined }));
+                }
               }}
+              placeholder="صف إعلانك بالتفصيل: الحالة، المواصفات، السبب البيع، إلخ..."
               rows={6}
               maxLength={2000}
-              placeholder="وصف الإعلان"
             />
-            {errors.desc && <div className="errMsg">{errors.desc}</div>}
+            <div className="form-helper">
+              <span>التفاصيل تساعد على زيادة المبيعات</span>
+              <span className="char-count">{desc.length}/2000</span>
+            </div>
+            {errors.desc && <div className="form-error">{errors.desc}</div>}
           </div>
 
-          <div className="row2">
-            <div className="field">
-              <label className="label req">المدينة</label>
+          {/* المدينة والقسم */}
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label required">المدينة</label>
               <input
-                className={`input ${errors.city ? 'err' : ''}`}
+                className={`form-input ${errors.city ? 'error' : ''}`}
                 value={city}
                 onChange={(e) => {
                   setCity(e.target.value);
-                  if (submitAttempted) setErrors((p) => ({ ...p, city: undefined }));
+                  if (submitAttempted) {
+                    setErrors(prev => ({ ...prev, city: undefined }));
+                  }
                 }}
                 placeholder="مثال: صنعاء"
               />
-              {errors.city && <div className="errMsg">{errors.city}</div>}
+              {errors.city && <div className="form-error">{errors.city}</div>}
             </div>
 
-            <div className="field">
-              <label className="label">القسم</label>
-              <input
-                className="input"
+            <div className="form-group">
+              <label className="form-label required">القسم</label>
+              <select
+                className="form-select"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                placeholder="مثال: solar"
-              />
-              <div className="help">نفس قيمة القسم في إضافة الإعلان</div>
-            </div>
-          </div>
-
-          <div className="row2">
-            <div className="field">
-              <label className="label req">السعر</label>
-              <input
-                className={`input ${errors.price ? 'err' : ''}`}
-                value={price}
-                onChange={(e) => {
-                  const v = e.target.value.replace(/[^0-9.]/g, '');
-                  setPrice(v);
-                  if (submitAttempted) setErrors((p) => ({ ...p, price: undefined }));
-                }}
-                inputMode="decimal"
-                placeholder="مثال: 100000"
-              />
-              {errors.price && <div className="errMsg">{errors.price}</div>}
-            </div>
-
-            <div className="field">
-              <label className="label req">العملة</label>
-              <div className="pillRow">
-                {['YER', 'SAR', 'USD'].map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    className={`pill ${currency === c ? 'active' : ''}`}
-                    onClick={() => setCurrency(c)}
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
-              {convertedPrice && (
-                <div className="help">سيتم الحفظ كـ <b>{convertedPrice}</b> ريال يمني (priceYER)</div>
+                disabled={catsLoading}
+              >
+                {catsLoading ? (
+                  <option>جاري تحميل الأقسام...</option>
+                ) : (
+                  cats.map((c) => (
+                    <option key={c.slug} value={c.slug}>
+                      {c.name}
+                    </option>
+                  ))
+                )}
+              </select>
+              {!catsLoading && cats.length === 0 && (
+                <div className="form-warning">⚠️ لا توجد أقسام متاحة</div>
               )}
             </div>
           </div>
 
-          <div className="row2">
-            <div className="field">
-              <label className="label">رقم الجوال</label>
+          {/* السعر والعملة */}
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label required">السعر</label>
               <input
-                className={`input ${errors.phone ? 'err' : ''}`}
+                className={`form-input ${errors.price ? 'error' : ''}`}
+                value={price}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/[^0-9.]/g, '');
+                  setPrice(value);
+                  if (submitAttempted) {
+                    setErrors(prev => ({ ...prev, price: undefined }));
+                  }
+                }}
+                placeholder="مثال: 100000"
+                inputMode="decimal"
+              />
+              {errors.price && <div className="form-error">{errors.price}</div>}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label required">العملة</label>
+              <div className="currency-selector">
+                {['YER', 'SAR', 'USD'].map((curr) => (
+                  <button
+                    key={curr}
+                    type="button"
+                    className={`currency-btn ${currency === curr ? 'active' : ''}`}
+                    onClick={() => setCurrency(curr)}
+                  >
+                    {curr}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* السعر المحول */}
+          {convertedPrice && (
+            <div className="price-conversion">
+              <span className="conversion-label">السعر المحول:</span>
+              <div className="converted-prices">
+                {convertedPrice.YER && (
+                  <span className="converted-price">
+                    <strong>{convertedPrice.YER}</strong> ريال يمني
+                  </span>
+                )}
+                {convertedPrice.SAR && (
+                  <span className="converted-price">
+                    ≈ {convertedPrice.SAR} ريال سعودي
+                  </span>
+                )}
+                {convertedPrice.USD && (
+                  <span className="converted-price">
+                    ≈ ${convertedPrice.USD} دولار أمريكي
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* رقم الهاتف وواتساب */}
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">رقم الهاتف</label>
+              <input
+                className={`form-input ${errors.phone ? 'error' : ''}`}
                 value={phone}
                 onChange={(e) => {
-                  const v = e.target.value.replace(/\D/g, '');
-                  setPhone(v);
-                  if (submitAttempted) setErrors((p) => ({ ...p, phone: undefined }));
+                  const value = e.target.value.replace(/\D/g, '');
+                  setPhone(value);
+                  if (submitAttempted) {
+                    setErrors(prev => ({ ...prev, phone: undefined }));
+                  }
                 }}
+                placeholder="مثال: 770000000"
                 inputMode="tel"
                 maxLength={15}
-                placeholder="مثال: 770000000"
               />
-              {errors.phone && <div className="errMsg">{errors.phone}</div>}
+              {errors.phone && <div className="form-error">{errors.phone}</div>}
             </div>
 
-            <div className="field">
-              <label className="label">طريقة التواصل</label>
-              <div className="pillRow">
+            <div className="form-group">
+              <label className="form-label">طريقة التواصل</label>
+              <div className="communication-toggle">
                 <button
                   type="button"
-                  className={`pill ${isWhatsapp ? 'active' : ''}`}
+                  className={`toggle-btn ${isWhatsapp ? 'active' : ''}`}
                   onClick={() => setIsWhatsapp(true)}
                 >
-                  💬 واتساب
+                  <span className="toggle-icon">💬</span>
+                  واتساب
                 </button>
                 <button
                   type="button"
-                  className={`pill ${!isWhatsapp ? 'active' : ''}`}
+                  className={`toggle-btn ${!isWhatsapp ? 'active' : ''}`}
                   onClick={() => setIsWhatsapp(false)}
                 >
-                  📞 مكالمة
+                  <span className="toggle-icon">📞</span>
+                  مكالمة
                 </button>
               </div>
             </div>
           </div>
 
-          <div className="row2">
-            <div className="field">
-              <label className="label">حالة الإعلان</label>
-              <div className="pillRow">
-                <button
-                  type="button"
-                  className={`pill ${status === 'active' ? 'active' : ''}`}
-                  onClick={() => setStatus('active')}
-                >
-                  ✅ نشط
-                </button>
-                <button
-                  type="button"
-                  className={`pill ${status === 'sold' ? 'active' : ''}`}
-                  onClick={() => setStatus('sold')}
-                >
-                  💰 تم البيع
-                </button>
-              </div>
-              <div className="help">هذه تضيف/تحدث الحقل <b>status</b> داخل الإعلان</div>
-            </div>
-
-            <div className="field">
-              <label className="label">وصف الموقع</label>
+          {/* الصور */}
+          <div className="form-group">
+            <label className="form-label">صور الإعلان (اختياري)</label>
+            <div className="image-upload-area">
               <input
-                className="input"
-                value={locationLabel}
-                onChange={(e) => setLocationLabel(e.target.value)}
-                placeholder="مثال: بجوار المستشفى…"
-              />
-            </div>
-          </div>
-
-          {/* Images */}
-          <div className="field">
-            <label className="label">الصور</label>
-
-            {errors.images && <div className="errMsg">{errors.images}</div>}
-
-            {!!existingImages.length && (
-              <>
-                <div className="subTitle">الصور الحالية</div>
-                <div className="imgs">
-                  {existingImages.map((url) => (
-                    <div key={url} className="imgBox">
-                      <img src={url} alt="صورة" className="img" />
-                      <button
-                        type="button"
-                        className="x"
-                        onClick={() => handleRemoveExistingImage(url)}
-                        aria-label="حذف"
-                        title="حذف من الإعلان"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-
-            <div className="subTitle">إضافة صور جديدة</div>
-            <div className="upload">
-              <input
-                id="upl"
                 type="file"
                 accept="image/*"
                 multiple
                 onChange={(e) => {
                   const files = Array.from(e.target.files || []);
-                  const remain = MAX_IMAGES - existingImages.length - newImages.length;
-                  if (files.length > remain) {
-                    alert(`يمكنك إضافة ${remain} صور فقط (الحد ${MAX_IMAGES})`);
+                  if (images.length + files.length > 10) {
+                    alert('يمكنك رفع 10 صور كحد أقصى');
                     return;
                   }
-                  setNewImages((prev) => [...prev, ...files]);
+                  setImages(prev => [...prev, ...files]);
                 }}
+                id="image-upload"
+                className="image-upload-input"
               />
-              <label htmlFor="upl" className="uploadBtn">📷 اختر صور</label>
-              <div className="help">حد أقصى {MAX_IMAGES} صور للإعلان</div>
+              <label htmlFor="image-upload" className="image-upload-label">
+                <span className="upload-icon">📷</span>
+                <span>اختر الصور</span>
+                <span className="upload-hint">يمكنك رفع حتى 10 صور</span>
+              </label>
             </div>
 
-            {!!newPreviews.length && (
-              <div className="imgs">
-                {newPreviews.map((p, idx) => (
-                  <div key={idx} className="imgBox">
-                    <img src={p} alt={`new-${idx}`} className="img" />
+            {/* معاينة الصور */}
+            {imagePreviews.length > 0 && (
+              <div className="image-previews">
+                {imagePreviews.map((preview, index) => (
+                  <div key={index} className="image-preview">
+                    <img 
+                      src={preview} 
+                      alt={`معاينة ${index + 1}`}
+                      className="preview-img"
+                    />
                     <button
                       type="button"
-                      className="x"
-                      onClick={() => handleRemoveNewImage(idx)}
-                      aria-label="حذف"
+                      className="remove-image-btn"
+                      onClick={() => handleRemoveImage(index)}
+                      aria-label="حذف الصورة"
                     >
                       ×
                     </button>
+                    <span className="image-number">{index + 1}</span>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          <div className="footerRow">
-            <button className="btn" onClick={() => router.back()}>إلغاء</button>
-            <button className="btn primary" onClick={save} disabled={saving}>
-              {saving ? 'جاري الحفظ…' : '💾 حفظ التعديلات'}
-            </button>
+          {/* المزاد */}
+          <div className="auction-section">
+            <div className="auction-header">
+              <div className="auction-title">
+                <span className="auction-icon">⚡</span>
+                <span>تفعيل نظام المزاد</span>
+              </div>
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  checked={auctionEnabled}
+                  onChange={(e) => setAuctionEnabled(e.target.checked)}
+                />
+                <span className="slider"></span>
+              </label>
+            </div>
+            
+            {auctionEnabled && (
+              <div className="auction-details">
+                <div className="form-group">
+                  <label className="form-label">مدة المزاد</label>
+                  <div className="auction-time-input">
+                    <input
+                      className={`form-input ${errors.auctionMinutes ? 'error' : ''}`}
+                      value={auctionMinutes}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '');
+                        setAuctionMinutes(value);
+                        if (submitAttempted) {
+                          setErrors(prev => ({ ...prev, auctionMinutes: undefined }));
+                        }
+                      }}
+                      inputMode="numeric"
+                      maxLength={4}
+                    />
+                    <span className="auction-unit">دقيقة</span>
+                  </div>
+                  {errors.auctionMinutes && (
+                    <div className="form-error">{errors.auctionMinutes}</div>
+                  )}
+                  <div className="auction-note">
+                    ⏱️ سينتهي المزاد بعد {auctionMinutes} دقيقة من النشر
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Map */}
-        <div className="card">
-          <h2 className="secTitle">📍 موقع الإعلان</h2>
-          <p className="muted">اسحب المؤشر لتحديد الموقع الدقيق</p>
-          <div className="map">
+        {/* العمود الأيمن: الخريطة */}
+        <div className="map-container">
+          <div className="map-header">
+            <h2 className="form-section-title">
+              <span className="map-icon">📍</span>
+              موقع الإعلان
+            </h2>
+            <p className="map-subtitle">اسحب المؤشر لتحديد الموقع الدقيق</p>
+          </div>
+          
+          <div className="map-wrapper">
             <LocationPicker value={coords} onChange={onPick} />
           </div>
-          <div className="help">
-            {coords ? `Lat: ${coords[0]} — Lng: ${coords[1]}` : 'لم يتم تحديد موقع بعد'}
+
+          {locationLabel && (
+            <div className="location-info">
+              <div className="location-label">
+                <span className="location-icon">🏷️</span>
+                {locationLabel}
+              </div>
+            </div>
+          )}
+
+          {!coords && (
+            <div className="location-hint">
+              <div className="hint-icon">💡</div>
+              <p>تحديد الموقع يساعد المشترين في الوصول إليك بسهولة</p>
+            </div>
+          )}
+
+          {/* زر النشر في الجوال */}
+          <div className="mobile-submit-section">
+            <button
+              className="submit-btn-large"
+              onClick={submit}
+              disabled={!user || busy}
+            >
+              {busy ? (
+                <>
+                  <span className="loading-spinner-small"></span>
+                  جاري النشر...
+                </>
+              ) : (
+                '📢 نشر الإعلان'
+              )}
+            </button>
+            
+            <div className="form-notes">
+              <p className="note-item">✅ سيتم مراجعة إعلانك قبل النشر</p>
+              <p className="note-item">📞 يمكنك تعديل الإعلان لاحقاً</p>
+              <p className="note-item">🛡️ معلوماتك محمية وآمنة</p>
+            </div>
           </div>
         </div>
       </div>
 
-      <style jsx>{styles}</style>
+      {/* زر النشر (للشاشات الكبيرة) */}
+      <div className="desktop-submit-section">
+        <div className="submit-actions">
+          <button
+            className="submit-btn-large"
+            onClick={submit}
+            disabled={!user || busy}
+          >
+            {busy ? (
+              <>
+                <span className="loading-spinner-small"></span>
+                جاري النشر...
+              </>
+            ) : (
+              '📢 نشر الإعلان الآن'
+            )}
+          </button>
+          
+          <Link href="/" className="cancel-link">
+            ❌ إلغاء والعودة
+          </Link>
+        </div>
+        
+        <div className="final-notes">
+          <p>بعد النشر، يمكنك متابعة إعلانك من قسم <strong>"إعلاناتي"</strong></p>
+        </div>
+      </div>
+
+      <style jsx>{`
+        /* تحسينات خاصة بصفحة الإضافة */
+        .add-page-layout {
+          min-height: calc(100vh - 60px);
+          padding: 20px 16px;
+          max-width: 1400px;
+          margin: 0 auto;
+          width: 100%;
+        }
+
+        .add-page-header {
+          text-align: center;
+          padding: 30px 20px;
+          background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+          color: white;
+          margin-bottom: 30px;
+          border-radius: 20px;
+          box-shadow: 0 8px 25px rgba(79, 70, 229, 0.2);
+        }
+
+        .add-page-header h1 {
+          font-size: 32px;
+          margin-bottom: 10px;
+          font-weight: 900;
+        }
+
+        .form-tips {
+          display: flex;
+          justify-content: center;
+          flex-wrap: wrap;
+          gap: 15px;
+          margin-bottom: 30px;
+          padding: 15px;
+          background: #f8fafc;
+          border-radius: 12px;
+          border: 1px solid #e2e8f0;
+        }
+
+        .tip-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 15px;
+          background: white;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 500;
+          color: #475569;
+          border: 1px solid #e2e8f0;
+        }
+
+        .tip-icon {
+          font-size: 16px;
+        }
+
+        .form-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 30px;
+          margin-bottom: 40px;
+        }
+
+        @media (max-width: 1024px) {
+          .form-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        .form-container {
+          background: white;
+          border-radius: 20px;
+          padding: 30px;
+          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+          border: 1px solid #e2e8f0;
+        }
+
+        .form-section-title {
+          font-size: 22px;
+          color: #1e293b;
+          margin-bottom: 25px;
+          padding-bottom: 15px;
+          border-bottom: 2px solid #f1f5f9;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .form-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 20px;
+          margin-bottom: 20px;
+        }
+
+        @media (max-width: 768px) {
+          .form-row {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        .form-label {
+          display: block;
+          margin-bottom: 8px;
+          font-weight: 600;
+          color: #1e293b;
+          font-size: 15px;
+        }
+
+        .form-label.required::after {
+          content: ' *';
+          color: #dc2626;
+        }
+
+        .form-input, .form-textarea, .form-select {
+          width: 100%;
+          padding: 14px 16px;
+          border: 2px solid #e2e8f0;
+          border-radius: 10px;
+          font-size: 16px;
+          transition: all 0.2s ease;
+          background: #f8fafc;
+          color: #1e293b;
+        }
+
+        .form-input:focus, .form-textarea:focus, .form-select:focus {
+          outline: none;
+          border-color: #4f46e5;
+          background: white;
+          box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+
+        .form-input.error, .form-textarea.error {
+          border-color: #dc2626;
+          background: #fef2f2;
+        }
+
+        .form-helper {
+          display: flex;
+          justify-content: space-between;
+          margin-top: 6px;
+          font-size: 13px;
+          color: #64748b;
+        }
+
+        .char-count {
+          font-weight: 500;
+        }
+
+        .form-error {
+          color: #dc2626;
+          font-size: 13px;
+          margin-top: 6px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .form-error::before {
+          content: '⚠️';
+        }
+
+        .form-warning {
+          color: #f59e0b;
+          font-size: 13px;
+          margin-top: 6px;
+          background: #fef3c7;
+          padding: 8px 12px;
+          border-radius: 8px;
+          border: 1px solid #fde68a;
+        }
+
+        /* محدد العملة */
+        .currency-selector {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .currency-btn {
+          padding: 10px 20px;
+          border: 2px solid #e2e8f0;
+          background: #f8fafc;
+          border-radius: 8px;
+          font-weight: 600;
+          color: #64748b;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          flex: 1;
+          text-align: center;
+          min-width: 80px;
+        }
+
+        .currency-btn:hover {
+          background: #f1f5f9;
+          border-color: #cbd5e1;
+        }
+
+        .currency-btn.active {
+          background: #4f46e5;
+          color: white;
+          border-color: #4f46e5;
+        }
+
+        /* تحويل السعر */
+        .price-conversion {
+          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+          padding: 15px 20px;
+          border-radius: 10px;
+          margin: 20px 0;
+          border: 1px solid #e2e8f0;
+        }
+
+        .conversion-label {
+          display: block;
+          font-weight: 600;
+          color: #475569;
+          margin-bottom: 8px;
+          font-size: 14px;
+        }
+
+        .converted-prices {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .converted-price {
+          color: #1e293b;
+          font-size: 15px;
+        }
+
+        .converted-price strong {
+          color: #4f46e5;
+        }
+
+        /* محدد التواصل */
+        .communication-toggle {
+          display: flex;
+          gap: 10px;
+          margin-top: 8px;
+        }
+
+        .toggle-btn {
+          flex: 1;
+          padding: 12px 16px;
+          border: 2px solid #e2e8f0;
+          background: #f8fafc;
+          border-radius: 8px;
+          font-weight: 600;
+          color: #64748b;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        }
+
+        .toggle-btn:hover {
+          background: #f1f5f9;
+          border-color: #cbd5e1;
+        }
+
+        .toggle-btn.active {
+          background: #4f46e5;
+          color: white;
+          border-color: #4f46e5;
+        }
+
+        .toggle-icon {
+          font-size: 18px;
+        }
+
+        /* رفع الصور */
+        .image-upload-area {
+          margin-top: 8px;
+        }
+
+        .image-upload-input {
+          display: none;
+        }
+
+        .image-upload-label {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 40px 20px;
+          border: 2px dashed #cbd5e1;
+          border-radius: 12px;
+          background: #f8fafc;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          text-align: center;
+        }
+
+        .image-upload-label:hover {
+          background: #f1f5f9;
+          border-color: #94a3b8;
+        }
+
+        .upload-icon {
+          font-size: 40px;
+          margin-bottom: 10px;
+          opacity: 0.6;
+        }
+
+        .upload-hint {
+          font-size: 13px;
+          color: #94a3b8;
+          margin-top: 5px;
+        }
+
+        /* معاينة الصور */
+        .image-previews {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+          gap: 10px;
+          margin-top: 15px;
+        }
+
+        .image-preview {
+          position: relative;
+          aspect-ratio: 1;
+          border-radius: 8px;
+          overflow: hidden;
+          border: 2px solid #e2e8f0;
+        }
+
+        .preview-img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .remove-image-btn {
+          position: absolute;
+          top: 5px;
+          left: 5px;
+          width: 24px;
+          height: 24px;
+          background: rgba(239, 68, 68, 0.9);
+          color: white;
+          border: none;
+          border-radius: 50%;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 16px;
+          font-weight: bold;
+          transition: all 0.2s ease;
+        }
+
+        .remove-image-btn:hover {
+          background: #dc2626;
+          transform: scale(1.1);
+        }
+
+        .image-number {
+          position: absolute;
+          bottom: 5px;
+          left: 5px;
+          background: rgba(0, 0, 0, 0.6);
+          color: white;
+          padding: 2px 8px;
+          border-radius: 10px;
+          font-size: 12px;
+        }
+
+        /* قسم المزاد */
+        .auction-section {
+          background: #f8fafc;
+          padding: 20px;
+          border-radius: 12px;
+          margin-top: 30px;
+          border: 1px solid #e2e8f0;
+        }
+
+        .auction-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 15px;
+        }
+
+        .auction-title {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-weight: 600;
+          color: #1e293b;
+          font-size: 16px;
+        }
+
+        .auction-icon {
+          font-size: 20px;
+        }
+
+        .switch {
+          position: relative;
+          display: inline-block;
+          width: 60px;
+          height: 30px;
+        }
+
+        .switch input {
+          opacity: 0;
+          width: 0;
+          height: 0;
+        }
+
+        .slider {
+          position: absolute;
+          cursor: pointer;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: #cbd5e1;
+          transition: .4s;
+          border-radius: 34px;
+        }
+
+        .slider:before {
+          position: absolute;
+          content: "";
+          height: 22px;
+          width: 22px;
+          left: 4px;
+          bottom: 4px;
+          background-color: white;
+          transition: .4s;
+          border-radius: 50%;
+        }
+
+        input:checked + .slider {
+          background-color: #4f46e5;
+        }
+
+        input:checked + .slider:before {
+          transform: translateX(30px);
+        }
+
+        .auction-details {
+          padding-top: 15px;
+          border-top: 1px solid #e2e8f0;
+        }
+
+        .auction-time-input {
+          display: flex;
+          gap: 10px;
+          align-items: center;
+        }
+
+        .auction-unit {
+          color: #64748b;
+          font-weight: 500;
+          min-width: 60px;
+        }
+
+        .auction-note {
+          margin-top: 10px;
+          padding: 10px;
+          background: #e0e7ff;
+          border-radius: 8px;
+          color: #3730a3;
+          font-size: 14px;
+          border: 1px solid #c7d2fe;
+        }
+
+        /* الخريطة */
+        .map-container {
+          background: white;
+          border-radius: 20px;
+          padding: 30px;
+          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+          border: 1px solid #e2e8f0;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .map-header {
+          margin-bottom: 20px;
+        }
+
+        .map-subtitle {
+          color: #64748b;
+          font-size: 14px;
+          margin-top: 5px;
+        }
+
+        .map-wrapper {
+          flex: 1;
+          min-height: 400px;
+          border-radius: 12px;
+          overflow: hidden;
+          border: 1px solid #e2e8f0;
+          margin-bottom: 20px;
+        }
+
+        .location-info {
+          margin-top: 15px;
+          padding: 12px 16px;
+          background: #f0f9ff;
+          border-radius: 8px;
+          border: 1px solid #bae6fd;
+        }
+
+        .location-label {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: #0369a1;
+          font-weight: 500;
+        }
+
+        .location-hint {
+          margin-top: 15px;
+          padding: 15px;
+          background: #f8fafc;
+          border-radius: 10px;
+          text-align: center;
+          border: 1px solid #e2e8f0;
+        }
+
+        .hint-icon {
+          font-size: 24px;
+          margin-bottom: 8px;
+        }
+
+        .location-hint p {
+          color: #475569;
+          font-size: 14px;
+          margin: 0;
+        }
+
+        /* أزرار النشر */
+        .mobile-submit-section {
+          display: none;
+          margin-top: 30px;
+        }
+
+        .desktop-submit-section {
+          margin-top: 40px;
+          padding-top: 30px;
+          border-top: 2px solid #f1f5f9;
+        }
+
+        @media (max-width: 1024px) {
+          .mobile-submit-section {
+            display: block;
+          }
+          .desktop-submit-section {
+            display: none;
+          }
+        }
+
+        .submit-actions {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 20px;
+        }
+
+        .submit-btn-large {
+          width: 100%;
+          max-width: 400px;
+          padding: 18px 30px;
+          background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+          color: white;
+          border: none;
+          border-radius: 12px;
+          font-size: 18px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+        }
+
+        .submit-btn-large:hover:not(:disabled) {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 25px rgba(79, 70, 229, 0.3);
+        }
+
+        .submit-btn-large:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
+        }
+
+        .cancel-link {
+          color: #64748b;
+          text-decoration: none;
+          font-weight: 600;
+          transition: color 0.2s ease;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .cancel-link:hover {
+          color: #dc2626;
+        }
+
+        /* ملاحظات */
+        .form-notes, .final-notes {
+          margin-top: 20px;
+          padding: 15px;
+          background: #f8fafc;
+          border-radius: 10px;
+          border: 1px solid #e2e8f0;
+        }
+
+        .note-item {
+          color: #475569;
+          font-size: 14px;
+          margin: 8px 0;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .final-notes {
+          text-align: center;
+          margin-top: 20px;
+          background: #e0e7ff;
+          border-color: #c7d2fe;
+          color: #3730a3;
+        }
+
+        /* التحميل */
+        .loading-container {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-height: 300px;
+          gap: 20px;
+        }
+
+        .loading-spinner-large {
+          width: 60px;
+          height: 60px;
+          border: 4px solid #f1f5f9;
+          border-top-color: #4f46e5;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+
+        .loading-spinner-small {
+          width: 20px;
+          height: 20px;
+          border: 2px solid rgba(255, 255, 255, 0.3);
+          border-top-color: white;
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+
+        /* صفحة تسجيل الدخول المطلوب */
+        .auth-required-card {
+          max-width: 500px;
+          margin: 50px auto;
+          background: white;
+          padding: 40px;
+          border-radius: 20px;
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+          text-align: center;
+          border: 1px solid #e2e8f0;
+        }
+
+        .lock-icon-large {
+          font-size: 70px;
+          margin-bottom: 20px;
+          opacity: 0.7;
+        }
+
+        .auth-required-card h2 {
+          color: #1e293b;
+          margin-bottom: 10px;
+          font-size: 24px;
+        }
+
+        .auth-required-card p {
+          color: #64748b;
+          margin-bottom: 30px;
+        }
+
+        .auth-actions {
+          display: flex;
+          flex-direction: column;
+          gap: 15px;
+          margin-top: 25px;
+        }
+
+        .auth-btn {
+          padding: 14px;
+          border-radius: 10px;
+          text-decoration: none;
+          font-weight: 600;
+          transition: all 0.2s ease;
+          text-align: center;
+        }
+
+        .btn-primary.auth-btn {
+          background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+          color: white;
+        }
+
+        .btn-primary.auth-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(79, 70, 229, 0.3);
+        }
+
+        .btn-secondary.auth-btn {
+          background: #f8fafc;
+          color: #4f46e5;
+          border: 2px solid #e2e8f0;
+        }
+
+        .btn-secondary.auth-btn:hover {
+          background: #f1f5f9;
+          border-color: #cbd5e1;
+        }
+
+        .back-home-btn {
+          color: #64748b;
+          text-decoration: none;
+          font-size: 14px;
+          margin-top: 10px;
+          display: inline-block;
+        }
+
+        .back-home-btn:hover {
+          color: #4f46e5;
+        }
+
+        /* تحسينات للجوال */
+        @media (max-width: 768px) {
+          .add-page-layout {
+            padding: 12px 10px;
+          }
+
+          .add-page-header {
+            padding: 25px 15px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+          }
+
+          .add-page-header h1 {
+            font-size: 24px;
+          }
+
+          .form-tips {
+            padding: 12px;
+            gap: 10px;
+            margin-bottom: 20px;
+          }
+
+          .tip-item {
+            padding: 6px 10px;
+            font-size: 12px;
+          }
+
+          .form-container, .map-container {
+            padding: 20px;
+            border-radius: 16px;
+          }
+
+          .form-section-title {
+            font-size: 18px;
+            margin-bottom: 20px;
+          }
+
+          .currency-btn {
+            padding: 8px 12px;
+            font-size: 14px;
+          }
+
+          .image-upload-label {
+            padding: 30px 15px;
+          }
+
+          .upload-icon {
+            font-size: 32px;
+          }
+
+          .submit-btn-large {
+            padding: 16px 20px;
+            font-size: 16px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .add-page-header {
+            padding: 20px 12px;
+          }
+
+          .add-page-header h1 {
+            font-size: 20px;
+          }
+
+          .form-row {
+            grid-template-columns: 1fr;
+            gap: 15px;
+          }
+
+          .currency-selector {
+            flex-direction: column;
+          }
+
+          .communication-toggle {
+            flex-direction: column;
+          }
+
+          .image-previews {
+            grid-template-columns: repeat(3, 1fr);
+          }
+        }
+      `}</style>
     </div>
   );
 }
-
-const styles = `
-.wrap{
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 18px 14px 40px;
-}
-.hero{
-  display:flex;
-  justify-content:space-between;
-  align-items:flex-start;
-  gap:12px;
-  padding:16px;
-  border:1px solid rgba(0,0,0,.08);
-  border-radius:16px;
-  background: linear-gradient(135deg, rgba(79,70,229,.08), rgba(124,58,237,.08));
-  margin-bottom: 14px;
-}
-.hero h1{margin:0 0 6px; font-size:1.4rem; font-weight:900; color:#0f172a;}
-.muted{color:#64748b; margin:0; line-height:1.6;}
-.heroActions{display:flex; gap:10px; flex-wrap:wrap;}
-
-.grid{
-  display:grid;
-  grid-template-columns: 1.2fr .8fr;
-  gap:14px;
-}
-@media (max-width: 980px){
-  .grid{grid-template-columns: 1fr;}
-}
-
-.card{
-  background:#fff;
-  border:1px solid rgba(0,0,0,.08);
-  border-radius:16px;
-  padding:16px;
-  box-shadow: 0 8px 26px rgba(0,0,0,.05);
-}
-.center{display:flex; flex-direction:column; align-items:center; gap:10px; padding:28px;}
-.spinner{
-  width:44px; height:44px;
-  border:3px solid rgba(0,0,0,.08);
-  border-top:3px solid rgba(79,70,229,1);
-  border-radius:50%;
-  animation: spin 1s linear infinite;
-}
-@keyframes spin{to{transform:rotate(360deg)}}
-
-.secTitle{margin:0 0 10px; font-size:1.05rem; font-weight:900; color:#0f172a;}
-
-.field{margin-top:12px;}
-.label{display:block; font-weight:700; color:#0f172a; margin-bottom:8px;}
-.label.req::after{content:" *"; color:#dc2626;}
-.input{
-  width:100%;
-  padding:12px 12px;
-  border-radius:12px;
-  border:2px solid #e2e8f0;
-  background:#f8fafc;
-  outline:none;
-  transition:.15s ease;
-  font-size:15px;
-}
-.input:focus{
-  border-color:#4f46e5;
-  background:#fff;
-  box-shadow:0 0 0 3px rgba(79,70,229,.12);
-}
-.input.err{border-color:#dc2626; background:#fef2f2;}
-.errMsg{
-  margin-top:8px;
-  color:#dc2626;
-  font-weight:600;
-  font-size:13px;
-}
-.help{margin-top:8px; font-size:13px; color:#64748b; line-height:1.6;}
-.row2{
-  display:grid;
-  grid-template-columns: 1fr 1fr;
-  gap:12px;
-}
-@media (max-width: 640px){
-  .row2{grid-template-columns: 1fr;}
-}
-
-.pillRow{display:flex; gap:10px; flex-wrap:wrap;}
-.pill{
-  padding:10px 14px;
-  border-radius:999px;
-  border:2px solid #e2e8f0;
-  background:#f8fafc;
-  color:#64748b;
-  font-weight:800;
-  cursor:pointer;
-  transition:.15s ease;
-}
-.pill.active{
-  background:#4f46e5;
-  border-color:#4f46e5;
-  color:#fff;
-}
-.pill:hover{transform: translateY(-1px);}
-
-.subTitle{margin-top:10px; font-weight:900; color:#0f172a; font-size:.95rem;}
-.imgs{
-  margin-top:10px;
-  display:grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-  gap:10px;
-}
-.imgBox{
-  position:relative;
-  border-radius:12px;
-  overflow:hidden;
-  border:1px solid rgba(0,0,0,.08);
-  aspect-ratio: 1;
-}
-.img{width:100%; height:100%; object-fit:cover; display:block;}
-.x{
-  position:absolute;
-  top:6px; left:6px;
-  width:26px; height:26px;
-  border-radius:999px;
-  border:none;
-  background: rgba(239,68,68,.92);
-  color:#fff;
-  font-size:18px;
-  font-weight:900;
-  cursor:pointer;
-  display:flex; align-items:center; justify-content:center;
-}
-.x:hover{background:#dc2626}
-
-.upload{margin-top:10px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;}
-.upload input{display:none;}
-.uploadBtn{
-  padding:10px 14px;
-  border-radius:12px;
-  background:#0f172a;
-  color:#fff;
-  font-weight:900;
-  cursor:pointer;
-}
-.uploadBtn:hover{opacity:.92}
-
-.map{
-  margin-top:10px;
-  height: 420px;
-  border-radius:14px;
-  overflow:hidden;
-  border:1px solid rgba(0,0,0,.08);
-}
-
-.footerRow{
-  margin-top:16px;
-  display:flex;
-  gap:10px;
-  justify-content:flex-end;
-  flex-wrap:wrap;
-}
-
-.btn{
-  padding:10px 14px;
-  border-radius:12px;
-  border:1px solid rgba(0,0,0,.12);
-  background:#fff;
-  font-weight:900;
-  cursor:pointer;
-  text-decoration:none;
-  color:#0f172a;
-}
-.btn.primary{
-  background:#4f46e5;
-  color:#fff;
-  border-color:#4f46e5;
-}
-.btn.primary:disabled{opacity:.75; cursor:not-allowed;}
-.btn.danger{
-  background:#fef2f2;
-  border-color:#fecaca;
-  color:#dc2626;
-}
-.btn.danger:disabled{opacity:.7; cursor:not-allowed;}
-`;
