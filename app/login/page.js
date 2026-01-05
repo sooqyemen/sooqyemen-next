@@ -1,18 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-
 import { auth, googleProvider } from '@/lib/firebaseClient';
-import { useAuth } from '@/lib/useAuth';
-
-// أمان بسيط ضد روابط خارجية في next
-function safeNextPath(p) {
-  if (!p) return '/';
-  if (p.startsWith('/') && !p.startsWith('//')) return p;
-  return '/';
-}
 
 function mapAuthError(err) {
   const code = err?.code || '';
@@ -21,363 +12,324 @@ function mapAuthError(err) {
     return 'البريد الإلكتروني أو كلمة المرور غير صحيحة';
   }
   if (code === 'auth/wrong-password') return 'كلمة المرور غير صحيحة';
+  if (code === 'auth/too-many-requests')
+    return 'تم تعطيل المحاولة مؤقتاً بسبب كثرة المحاولات. جرّب لاحقاً';
   if (code === 'auth/invalid-email') return 'صيغة البريد الإلكتروني غير صحيحة';
-  if (code === 'auth/too-many-requests') {
-    return 'محاولات كثيرة. حاول لاحقاً.';
-  }
-  if (code === 'auth/unauthorized-domain') {
-    return 'الدومين غير مسموح به في إعدادات Firebase.';
-  }
-  if (code === 'auth/popup-blocked') {
-    return 'المتصفح منع نافذة تسجيل الدخول. اسمح بالنوافذ المنبثقة وحاول مرة أخرى.';
-  }
-  if (code === 'auth/popup-closed-by-user') {
-    return 'تم إغلاق نافذة جوجل قبل إكمال العملية.';
-  }
-  if (code === 'auth/operation-not-allowed') {
-    return 'طريقة تسجيل الدخول غير مفعلة في Firebase.';
-  }
+  if (code === 'auth/invalid-api-key')
+    return 'مشكلة في إعدادات Firebase (API Key غير صحيحة)';
+  if (code === 'auth/operation-not-allowed')
+    return 'تسجيل الدخول بالبريد/جوجل غير مفعّل في إعدادات Firebase';
+  if (code === 'auth/unauthorized-domain')
+    return 'الدومين الحالي غير مسموح به في Firebase (Authorized domains)';
+  if (code === 'auth/popup-blocked')
+    return 'المتصفح منع نافذة تسجيل الدخول. سنحوّل لطريقة أخرى…';
+  if (code === 'auth/network-request-failed')
+    return 'مشكلة اتصال بالإنترنت. تأكد من الشبكة ثم أعد المحاولة';
 
-  return 'حدث خطأ غير متوقع، حاول مرة أخرى.';
+  return 'حدث خطأ غير متوقع، حاول مرة أخرى';
 }
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const nextParam = searchParams?.get('next') || '/';
-  const nextPath = useMemo(() => safeNextPath(nextParam), [nextParam]);
+  const sp = useSearchParams();
 
-  const { user, loading: authLoading } = useAuth();
+  const nextPath = useMemo(() => {
+    const n = sp?.get('next');
+    // حماية بسيطة: لا نسمح بروابط خارجية
+    if (!n) return '/';
+    if (n.startsWith('http')) return '/';
+    if (!n.startsWith('/')) return '/';
+    return n;
+  }, [sp]);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
+  const [debug, setDebug] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetMsg, setResetMsg] = useState('');
 
-  const [busyEmail, setBusyEmail] = useState(false);
-  const [busyGoogle, setBusyGoogle] = useState(false);
-
-  // إذا المستخدم مسجّل دخول بالفعل → حوله
-  useEffect(() => {
-    if (authLoading) return;
-    if (user) router.replace(nextPath);
-  }, [user, authLoading, router, nextPath]);
-
-  const handleEmailLogin = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setDebug('');
+    setResetMsg('');
 
-    const cleanEmail = String(email || '').trim();
-    const cleanPass = String(password || '');
-
-    if (!cleanEmail || !cleanPass) {
-      setError('أدخل البريد الإلكتروني وكلمة المرور');
+    if (!email.trim() || !password) {
+      setError('الرجاء إدخال البريد وكلمة المرور');
       return;
     }
 
-    setBusyEmail(true);
+    setLoading(true);
     try {
-      // مشروعك غالباً يستخدم compat
-      if (typeof auth?.signInWithEmailAndPassword === 'function') {
-        await auth.signInWithEmailAndPassword(cleanEmail, cleanPass);
-      } else {
-        // fallback نادر لو auth modular
-        const { signInWithEmailAndPassword } = await import('firebase/auth');
-        await signInWithEmailAndPassword(auth, cleanEmail, cleanPass);
-      }
+      const cred = await auth.signInWithEmailAndPassword(
+        email.trim(),
+        password
+      );
 
+      // نجاح
+      const u = cred?.user;
+      if (!u) throw new Error('No user returned');
       router.replace(nextPath);
     } catch (err) {
-      console.error('LOGIN_ERROR', err);
-      setError(mapAuthError(err));
+      const msg = mapAuthError(err);
+      setError(msg);
+
+      // Debug اختياري: لو تبغاه خله، أو احذف هالسطرين
+      setDebug(`${err?.code || 'no-code'}: ${err?.message || ''}`);
+
+      // إذا Popup blocked — نحاول Redirect كحل أفضل للجوال
+      if (err?.code === 'auth/popup-blocked') {
+        try {
+          await auth.signInWithRedirect(googleProvider);
+        } catch (e2) {
+          setError('فشل التحويل لتسجيل الدخول. جرّب لاحقاً');
+          setDebug(`${e2?.code || 'no-code'}: ${e2?.message || ''}`);
+        }
+      }
     } finally {
-      setBusyEmail(false);
+      setLoading(false);
     }
   };
 
-  const handleGoogleLogin = async () => {
+  const handleGoogle = async () => {
     setError('');
-    setBusyGoogle(true);
+    setDebug('');
+    setResetMsg('');
 
+    // لو ما كان provider موجود (احتياط)
+    if (!googleProvider) {
+      setError('تسجيل الدخول عبر Google غير جاهز حالياً');
+      return;
+    }
+
+    setLoading(true);
     try {
-      if (!googleProvider) {
-        setError('googleProvider غير موجود في firebaseClient');
-        return;
-      }
-
-      if (typeof auth?.signInWithPopup === 'function') {
-        await auth.signInWithPopup(googleProvider);
-      } else {
-        const { signInWithPopup } = await import('firebase/auth');
-        await signInWithPopup(auth, googleProvider);
-      }
-
+      await auth.signInWithPopup(googleProvider);
       router.replace(nextPath);
     } catch (err) {
-      console.error('GOOGLE_LOGIN_ERROR', err);
-      setError(mapAuthError(err));
+      const msg = mapAuthError(err);
+      setError(msg);
+      setDebug(`${err?.code || 'no-code'}: ${err?.message || ''}`);
+
+      // على الجوال أحياناً popup ما يشتغل → Redirect
+      if (err?.code === 'auth/popup-blocked' || err?.code === 'auth/popup-closed-by-user') {
+        try {
+          await auth.signInWithRedirect(googleProvider);
+        } catch (e2) {
+          setError('فشل تسجيل الدخول بواسطة Google');
+          setDebug(`${e2?.code || 'no-code'}: ${e2?.message || ''}`);
+        }
+      }
     } finally {
-      setBusyGoogle(false);
+      setLoading(false);
     }
   };
 
-  if (authLoading) {
-    return (
-      <div className="wrap" dir="rtl">
-        <div className="card">
-          <div className="spinner" />
-          <p className="muted">جاري التحميل...</p>
-        </div>
+  const handleResetPassword = async () => {
+    setError('');
+    setDebug('');
+    setResetMsg('');
 
-        <style jsx>{styles}</style>
-      </div>
-    );
-  }
+    const em = email.trim();
+    if (!em) {
+      setError('اكتب بريدك أولاً ثم اضغط “نسيت كلمة المرور؟”');
+      return;
+    }
 
-  // منع الوميض إذا user موجود (useEffect سيحوّل)
-  if (user) {
-    return (
-      <div className="wrap" dir="rtl">
-        <div className="card">
-          <div className="spinner" />
-          <p className="muted">جاري تحويلك...</p>
-        </div>
-
-        <style jsx>{styles}</style>
-      </div>
-    );
-  }
+    setResetLoading(true);
+    try {
+      await auth.sendPasswordResetEmail(em);
+      setResetMsg('✅ تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك');
+    } catch (err) {
+      setError(mapAuthError(err));
+      setDebug(`${err?.code || 'no-code'}: ${err?.message || ''}`);
+    } finally {
+      setResetLoading(false);
+    }
+  };
 
   return (
-    <div className="wrap" dir="rtl">
-      <div className="card">
-        <div className="head">
-          <h1>تسجيل الدخول</h1>
-          <p className="muted">أهلاً بك مجدداً في سوق اليمن</p>
+    <div
+      style={{
+        minHeight: 'calc(100vh - 60px)',
+        padding: '90px 16px 40px',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'flex-start',
+      }}
+    >
+      <div
+        className="card"
+        style={{
+          width: '100%',
+          maxWidth: 420,
+          borderRadius: 16,
+          padding: 18,
+        }}
+      >
+        <div style={{ textAlign: 'center', marginBottom: 14 }}>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900 }}>
+            تسجيل الدخول
+          </h1>
+          <p className="muted" style={{ margin: '6px 0 0', fontSize: 13 }}>
+            أهلاً بك مجدداً في سوق اليمن
+          </p>
         </div>
 
-        {error && (
-          <div className="errorBox">
-            <span className="errorIcon">⚠️</span>
-            <span>{error}</span>
+        {error ? (
+          <div
+            style={{
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              color: '#b91c1c',
+              padding: '10px 12px',
+              borderRadius: 12,
+              fontSize: 13,
+              marginBottom: 10,
+            }}
+          >
+            {error}
           </div>
-        )}
+        ) : null}
 
-        <form onSubmit={handleEmailLogin} className="form">
-          <label className="label">البريد الإلكتروني</label>
+        {resetMsg ? (
+          <div
+            style={{
+              background: '#ecfdf5',
+              border: '1px solid #a7f3d0',
+              color: '#065f46',
+              padding: '10px 12px',
+              borderRadius: 12,
+              fontSize: 13,
+              marginBottom: 10,
+            }}
+          >
+            {resetMsg}
+          </div>
+        ) : null}
+
+        {/* Debug — إذا ما تبغاه احذف البلوك كامل */}
+        {debug ? (
+          <div
+            style={{
+              fontSize: 11,
+              color: '#64748b',
+              marginBottom: 12,
+              wordBreak: 'break-word',
+            }}
+          >
+            Debug: {debug}
+          </div>
+        ) : null}
+
+        <form onSubmit={handleLogin}>
+          <label className="muted" style={{ fontSize: 13 }}>
+            البريد الإلكتروني
+          </label>
           <input
             className="input"
             type="email"
-            autoComplete="email"
-            placeholder="name@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            placeholder="name@example.com"
+            autoComplete="email"
+            style={{ marginBottom: 10 }}
             required
           />
 
-          <label className="label rowBetween">
-            <span>كلمة المرور</span>
-            <button
-              type="button"
-              className="linkBtn"
-              onClick={() => setShowPass((v) => !v)}
-            >
-              {showPass ? 'إخفاء' : 'إظهار'}
-            </button>
+          <label className="muted" style={{ fontSize: 13 }}>
+            كلمة المرور
           </label>
-
           <input
             className="input"
-            type={showPass ? 'text' : 'password'}
-            autoComplete="current-password"
-            placeholder="••••••••"
+            type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            autoComplete="current-password"
+            style={{ marginBottom: 10 }}
             required
           />
 
-          <div className="rowBetween small">
-            <span />
-            <Link className="link" href="/forgot-password">
-              نسيت كلمة المرور؟
+          <div
+            className="row"
+            style={{
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 10,
+              marginBottom: 10,
+              flexWrap: 'wrap',
+            }}
+          >
+            <button
+              type="button"
+              onClick={handleResetPassword}
+              disabled={resetLoading || loading}
+              className="btn"
+              style={{ background: '#f1f5f9' }}
+            >
+              {resetLoading ? 'جاري الإرسال…' : 'نسيت كلمة المرور؟'}
+            </button>
+
+            <Link href="/register" className="muted" style={{ fontSize: 13 }}>
+              إنشاء حساب جديد
             </Link>
           </div>
 
-          <button className="btnPrimary" type="submit" disabled={busyEmail || busyGoogle}>
-            {busyEmail ? 'جاري التحقق...' : 'دخول'}
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn btnPrimary"
+            style={{
+              width: '100%',
+              justifyContent: 'center',
+              borderRadius: 12,
+              fontWeight: 900,
+            }}
+          >
+            {loading ? 'جاري التحقق…' : 'دخول'}
           </button>
         </form>
 
-        <div className="divider">
-          <span>أو</span>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            margin: '14px 0',
+          }}
+        >
+          <div style={{ height: 1, flex: 1, background: '#e2e8f0' }} />
+          <span className="muted" style={{ fontSize: 12 }}>
+            أو
+          </span>
+          <div style={{ height: 1, flex: 1, background: '#e2e8f0' }} />
         </div>
 
         <button
-          className="btnSecondary"
           type="button"
-          onClick={handleGoogleLogin}
-          disabled={busyEmail || busyGoogle}
+          onClick={handleGoogle}
+          disabled={loading}
+          className="btn"
+          style={{
+            width: '100%',
+            justifyContent: 'center',
+            borderRadius: 12,
+            background: '#fff',
+          }}
         >
-          {busyGoogle ? 'جاري فتح جوجل...' : 'تسجيل الدخول باستخدام Google'}
+          تسجيل الدخول بواسطة Google
         </button>
 
-        <p className="footer">
-          ليس لديك حساب؟{' '}
-          <Link className="link strong" href="/register">
-            إنشاء حساب جديد
+        <div style={{ marginTop: 14, textAlign: 'center' }}>
+          <Link href="/" className="muted" style={{ fontSize: 13 }}>
+            ← العودة للرئيسية
           </Link>
-        </p>
+        </div>
       </div>
-
-      <style jsx>{styles}</style>
     </div>
   );
 }
-
-const styles = `
-.wrap{
-  min-height:100vh;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:16px;
-  background:#f8fafc;
-}
-.card{
-  width:100%;
-  max-width:420px;
-  background:#fff;
-  border:1px solid #e2e8f0;
-  border-radius:16px;
-  box-shadow:0 10px 30px rgba(0,0,0,.08);
-  padding:22px;
-}
-.head{ text-align:center; margin-bottom:16px; }
-.head h1{ margin:0; font-size:22px; color:#0f172a; font-weight:900; }
-.muted{ margin:8px 0 0; color:#64748b; font-size:13px; }
-
-.errorBox{
-  display:flex;
-  gap:10px;
-  align-items:flex-start;
-  background:#fef2f2;
-  border:1px solid #fecaca;
-  color:#b91c1c;
-  padding:10px 12px;
-  border-radius:12px;
-  margin:10px 0 14px;
-  font-size:14px;
-}
-.errorIcon{ margin-top:1px; }
-
-.form{ display:flex; flex-direction:column; gap:10px; }
-.label{
-  font-size:14px;
-  font-weight:700;
-  color:#1e293b;
-}
-.rowBetween{ display:flex; align-items:center; justify-content:space-between; }
-.small{ margin-top:-6px; }
-
-.input{
-  width:100%;
-  padding:12px 12px;
-  border:2px solid #e2e8f0;
-  border-radius:12px;
-  background:#f8fafc;
-  font-size:15px;
-  outline:none;
-  transition:.15s;
-}
-.input:focus{
-  border-color:#4f46e5;
-  background:#fff;
-  box-shadow:0 0 0 3px rgba(79,70,229,.12);
-}
-
-.btnPrimary{
-  margin-top:6px;
-  width:100%;
-  padding:12px;
-  border:none;
-  border-radius:12px;
-  background:linear-gradient(135deg,#4f46e5,#7c3aed);
-  color:#fff;
-  font-weight:900;
-  cursor:pointer;
-  transition:.15s;
-}
-.btnPrimary:disabled{ opacity:.7; cursor:not-allowed; }
-
-.divider{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  margin:14px 0;
-  position:relative;
-}
-.divider::before{
-  content:"";
-  position:absolute;
-  left:0;
-  right:0;
-  top:50%;
-  height:1px;
-  background:#e2e8f0;
-}
-.divider span{
-  position:relative;
-  background:#fff;
-  padding:0 10px;
-  color:#64748b;
-  font-size:13px;
-}
-
-.btnSecondary{
-  width:100%;
-  padding:12px;
-  border:2px solid #e2e8f0;
-  border-radius:12px;
-  background:#fff;
-  color:#0f172a;
-  font-weight:800;
-  cursor:pointer;
-  transition:.15s;
-}
-.btnSecondary:hover{ background:#f8fafc; }
-.btnSecondary:disabled{ opacity:.7; cursor:not-allowed; }
-
-.footer{
-  margin:16px 0 0;
-  text-align:center;
-  color:#475569;
-  font-size:14px;
-}
-.link{
-  color:#4f46e5;
-  text-decoration:none;
-}
-.link:hover{ text-decoration:underline; }
-.strong{ font-weight:900; }
-
-.linkBtn{
-  border:none;
-  background:transparent;
-  color:#4f46e5;
-  font-weight:800;
-  cursor:pointer;
-  padding:0;
-}
-.linkBtn:hover{ text-decoration:underline; }
-
-.spinner{
-  width:42px;height:42px;
-  border:4px solid #e2e8f0;
-  border-top-color:#4f46e5;
-  border-radius:50%;
-  animation:spin .9s linear infinite;
-  margin:0 auto 10px;
-}
-@keyframes spin{ to{ transform:rotate(360deg)} }
-`;
