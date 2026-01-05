@@ -352,13 +352,7 @@ export default function AddPage() {
         <p className="page-subtitle">أضف إعلانك ليجده الآلاف من المشترين</p>
       </div>
 
-      {/* ✅ تنبيه لطيف لو الأقسام رجعت من fallback */}
-      {catsSource === 'fallback' && (
-        <div className="cats-note">
-          ⚠️ الأقسام المعروضة حالياً افتراضية. إذا أضفت أقسام في Firestore ولم تظهر،
-          راجع Security Rules وأضف سماحية قراءة `categories`.
-        </div>
-      )}
+
 
       <div className="form-tips">
         <div className="tip-item"><span className="tip-icon">📸</span><span>أضف صور واضحة وجودة عالية</span></div>
