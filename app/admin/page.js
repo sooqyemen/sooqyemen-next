@@ -2,126 +2,161 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/useAuth';
+import {
+  collection,
+  deleteDoc,
+  doc,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  updateDoc,
+} from 'firebase/firestore';
 import { db } from '@/lib/firebaseClient';
-import { collection, getCountFromServer, query, where } from 'firebase/firestore';
 
-// ✅ إيميلات المدراء (نفس اللي في الهيدر)
+// ✅ إيميلات المدراء
 const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
 
-function StatCard({ icon, label, value, sub }) {
-  return (
-    <div className="card">
-      <div className="cardTop">
-        <div className="icon">{icon}</div>
-        <div className="meta">
-          <div className="label">{label}</div>
-          <div className="value">{value ?? '—'}</div>
-        </div>
-      </div>
-      {sub ? <div className="sub">{sub}</div> : null}
-    </div>
-  );
+function fmtDate(ts) {
+  try {
+    const d = ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null;
+    if (!d || Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString('ar-YE');
+  } catch {
+    return '—';
+  }
 }
 
-function ActionCard({ title, desc, href, icon, disabled }) {
-  const content = (
-    <div className={`action ${disabled ? 'disabled' : ''}`}>
-      <div className="actionIcon">{icon}</div>
-      <div className="actionBody">
-        <div className="actionTitle">{title}</div>
-        <div className="actionDesc">{desc}</div>
-      </div>
-      <div className="actionArrow">←</div>
-    </div>
-  );
-
-  if (disabled) return <div>{content}</div>;
-  return <Link href={href} className="actionLink">{content}</Link>;
+function money(n) {
+  const v = Number(n || 0);
+  return v.toLocaleString('ar-YE');
 }
 
 export default function AdminPage() {
-  const router = useRouter();
   const { user, loading } = useAuth();
 
-  const isAdmin = useMemo(() => {
-    const email = user?.email?.toLowerCase();
-    return !!email && ADMIN_EMAILS.includes(email);
-  }, [user]);
+  const isAdmin = !!user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase());
+  const [tab, setTab] = useState('listings'); // listings | users
 
-  const [stats, setStats] = useState({
-    listingsTotal: null,
-    listingsActive: null,
-    usersTotal: null,
-    chatsTotal: null,
-  });
+  const [listings, setListings] = useState([]);
+  const [users, setUsers] = useState([]);
 
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
+  const [busyId, setBusyId] = useState('');
+  const [error, setError] = useState('');
 
-  // ✅ حماية الصفحة
+  // ✅ جلب الإعلانات
   useEffect(() => {
-    if (loading) return;
-    if (!user) router.replace('/login');
-  }, [loading, user, router]);
-
-  useEffect(() => {
-    if (loading) return;
-    if (!user) return;
     if (!isAdmin) return;
 
-    let mounted = true;
-    const load = async () => {
-      setBusy(true);
-      setErr('');
+    const qy = query(collection(db, 'listings'), orderBy('createdAt', 'desc'), limit(200));
+    const unsub = onSnapshot(
+      qy,
+      (snap) => {
+        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setListings(data);
+      },
+      (e) => setError(e?.message || 'فشل تحميل الإعلانات')
+    );
 
-      try {
-        // ملاحظة: قد تفشل إذا قواعد Firestore تمنع القراءة للأدمن
-        const [
-          listingsTotal,
-          listingsActive,
-          usersTotal,
-          chatsTotal,
-        ] = await Promise.all([
-          getCountFromServer(collection(db, 'listings')),
-          getCountFromServer(query(collection(db, 'listings'), where('isActive', '==', true))),
-          getCountFromServer(collection(db, 'users')),
-          getCountFromServer(collection(db, 'chats')),
-        ]);
+    return () => unsub();
+  }, [isAdmin]);
 
-        if (!mounted) return;
+  // ✅ جلب المستخدمين
+  useEffect(() => {
+    if (!isAdmin) return;
 
-        setStats({
-          listingsTotal: listingsTotal.data().count,
-          listingsActive: listingsActive.data().count,
-          usersTotal: usersTotal.data().count,
-          chatsTotal: chatsTotal.data().count,
-        });
-      } catch (e) {
-        console.error('Admin stats error:', e);
-        if (!mounted) return;
-        setErr('تعذر تحميل الإحصائيات (قد تكون الصلاحيات في Firestore تمنع القراءة).');
-      } finally {
-        if (mounted) setBusy(false);
-      }
-    };
+    // إذا مجموعتك اسمها users فهذا صحيح. إذا اسمها مختلف قلّي.
+    const qy = query(collection(db, 'users'), orderBy('createdAt', 'desc'), limit(200));
+    const unsub = onSnapshot(
+      qy,
+      (snap) => {
+        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setUsers(data);
+      },
+      (e) => setError(e?.message || 'فشل تحميل المستخدمين')
+    );
 
-    load();
-    return () => {
-      mounted = false;
-    };
-  }, [loading, user, isAdmin]);
+    return () => unsub();
+  }, [isAdmin]);
 
-  if (loading || (!loading && !user)) {
+  const stats = useMemo(() => {
+    const total = listings.length;
+    const active = listings.filter((x) => x.isActive !== false).length;
+    const hidden = listings.filter((x) => x.hidden === true).length;
+    const auctions = listings.filter((x) => x.auctionEnabled === true).length;
+    return { total, active, hidden, auctions };
+  }, [listings]);
+
+  async function toggleHidden(listingId, currentHidden) {
+    setBusyId(listingId);
+    setError('');
+    try {
+      await updateDoc(doc(db, 'listings', listingId), { hidden: !currentHidden });
+    } catch (e) {
+      setError(e?.message || 'فشل تحديث حالة الإخفاء');
+    } finally {
+      setBusyId('');
+    }
+  }
+
+  async function toggleActive(listingId, currentActive) {
+    setBusyId(listingId);
+    setError('');
+    try {
+      await updateDoc(doc(db, 'listings', listingId), { isActive: !currentActive });
+    } catch (e) {
+      setError(e?.message || 'فشل تحديث حالة التفعيل');
+    } finally {
+      setBusyId('');
+    }
+  }
+
+  async function deleteListing(listingId) {
+    const ok = window.confirm('حذف الإعلان نهائياً؟ هذا لا يمكن التراجع عنه.');
+    if (!ok) return;
+
+    setBusyId(listingId);
+    setError('');
+    try {
+      await deleteDoc(doc(db, 'listings', listingId));
+    } catch (e) {
+      setError(e?.message || 'فشل حذف الإعلان');
+    } finally {
+      setBusyId('');
+    }
+  }
+
+  async function setUserFlag(userId, key, value) {
+    setBusyId(userId);
+    setError('');
+    try {
+      await updateDoc(doc(db, 'users', userId), { [key]: value });
+    } catch (e) {
+      setError(e?.message || 'فشل تحديث المستخدم');
+    } finally {
+      setBusyId('');
+    }
+  }
+
+  if (loading) {
     return (
       <div className="wrap">
-        <div className="center">
-          <div className="spinner" />
-          <p>جاري التحميل…</p>
-        </div>
+        <div className="card">جاري التحميل…</div>
+        <Style />
+      </div>
+    );
+  }
 
-        <style jsx>{styles}</style>
+  if (!user) {
+    return (
+      <div className="wrap">
+        <div className="card">
+          <h1 className="title">لوحة الإدارة</h1>
+          <p className="muted">يجب تسجيل الدخول أولاً.</p>
+          <Link className="btn" href="/login">تسجيل الدخول</Link>
+        </div>
+        <Style />
       </div>
     );
   }
@@ -129,353 +164,262 @@ export default function AdminPage() {
   if (!isAdmin) {
     return (
       <div className="wrap">
-        <div className="panel">
-          <div className="lock">🛑</div>
-          <h1>غير مصرح</h1>
-          <p>هذه الصفحة مخصصة للمدراء فقط.</p>
-          <div className="row">
-            <Link className="btn" href="/">العودة للرئيسية</Link>
-            <Link className="btn ghost" href="/profile">الملف الشخصي</Link>
-          </div>
+        <div className="card">
+          <h1 className="title">غير مصرح</h1>
+          <p className="muted">حسابك ليس ضمن قائمة المدراء.</p>
+          <Link className="btn" href="/">العودة للرئيسية</Link>
         </div>
-
-        <style jsx>{styles}</style>
+        <Style />
       </div>
     );
   }
 
   return (
     <div className="wrap">
-      <div className="hero">
-        <div className="heroLeft">
-          <h1>لوحة الإدارة</h1>
-          <p>
-            إدارة المنصة، متابعة الإحصائيات، وتنفيذ إجراءات سريعة.
-          </p>
-          <div className="chips">
-            <span className="chip">👤 {user?.email}</span>
-            <span className="chip subtle">{busy ? '⏳ تحديث الإحصائيات…' : '✅ جاهز'}</span>
+      <div className="top">
+        <div>
+          <h1 className="title">لوحة الإدارة</h1>
+          <p className="muted">إدارة الإعلانات والمستخدمين</p>
+        </div>
+
+        <div className="tabs">
+          <button
+            className={`tab ${tab === 'listings' ? 'active' : ''}`}
+            onClick={() => setTab('listings')}
+          >
+            الإعلانات
+          </button>
+          <button
+            className={`tab ${tab === 'users' ? 'active' : ''}`}
+            onClick={() => setTab('users')}
+          >
+            المستخدمون
+          </button>
+        </div>
+      </div>
+
+      {error ? <div className="error">⚠️ {error}</div> : null}
+
+      {tab === 'listings' ? (
+        <>
+          <div className="stats">
+            <div className="stat">
+              <div className="statNum">{stats.total}</div>
+              <div className="statLbl">الإجمالي</div>
+            </div>
+            <div className="stat">
+              <div className="statNum">{stats.active}</div>
+              <div className="statLbl">نشط</div>
+            </div>
+            <div className="stat">
+              <div className="statNum">{stats.hidden}</div>
+              <div className="statLbl">مخفي</div>
+            </div>
+            <div className="stat">
+              <div className="statNum">{stats.auctions}</div>
+              <div className="statLbl">مزاد</div>
+            </div>
           </div>
-        </div>
 
-        <div className="heroRight">
-          <div className="quick">
-            <Link className="qbtn" href="/add">➕ إضافة إعلان</Link>
-            <Link className="qbtn ghost" href="/my-listings">📋 إعلاناتي</Link>
-            <Link className="qbtn ghost" href="/my-chats">💬 محادثاتي</Link>
+          <div className="tableCard">
+            <div className="tableHead">
+              <div>العنوان</div>
+              <div>السعر (YER)</div>
+              <div>المدينة</div>
+              <div>الحالة</div>
+              <div>تاريخ</div>
+              <div>إجراءات</div>
+            </div>
+
+            {listings.map((l) => {
+              const active = l.isActive !== false;
+              const hidden = l.hidden === true;
+
+              return (
+                <div className="row" key={l.id}>
+                  <div className="cell titleCell">
+                    <div className="t1">{l.title || 'بدون عنوان'}</div>
+                    <div className="t2">
+                      <Link className="link" href={`/listing/${l.id}`} target="_blank">
+                        فتح الإعلان
+                      </Link>
+                      {l.auctionEnabled ? <span className="badge">⚡ مزاد</span> : null}
+                    </div>
+                  </div>
+
+                  <div className="cell">{money(l.priceYER || l.currentBidYER || 0)}</div>
+                  <div className="cell">{l.city || '—'}</div>
+
+                  <div className="cell">
+                    <span className={`pill ${active ? 'ok' : 'off'}`}>
+                      {active ? 'نشط' : 'موقوف'}
+                    </span>
+                    <span className={`pill ${hidden ? 'warn' : 'mut'}`}>
+                      {hidden ? 'مخفي' : 'ظاهر'}
+                    </span>
+                  </div>
+
+                  <div className="cell">{fmtDate(l.createdAt)}</div>
+
+                  <div className="cell actions">
+                    <button
+                      className="btnSm"
+                      disabled={busyId === l.id}
+                      onClick={() => toggleHidden(l.id, hidden)}
+                      title="إخفاء/إظهار"
+                    >
+                      {hidden ? '👁️ إظهار' : '🙈 إخفاء'}
+                    </button>
+                    <button
+                      className="btnSm"
+                      disabled={busyId === l.id}
+                      onClick={() => toggleActive(l.id, active)}
+                      title="تفعيل/إيقاف"
+                    >
+                      {active ? '⛔ إيقاف' : '✅ تفعيل'}
+                    </button>
+                    <Link className="btnSm" href={`/admin/edit-listing/${l.id}`}>
+                      ✏️ تعديل
+                    </Link>
+                    <button
+                      className="btnSm danger"
+                      disabled={busyId === l.id}
+                      onClick={() => deleteListing(l.id)}
+                      title="حذف نهائي"
+                    >
+                      🗑️ حذف
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {listings.length === 0 ? (
+              <div className="empty">لا توجد إعلانات.</div>
+            ) : null}
           </div>
+        </>
+      ) : (
+        <div className="tableCard">
+          <div className="tableHead usersHead">
+            <div>المستخدم</div>
+            <div>البريد</div>
+            <div>تاريخ</div>
+            <div>حالة</div>
+            <div>إجراءات</div>
+          </div>
+
+          {users.map((u) => {
+            const banned = u.isBanned === true;
+            const disabled = u.isDisabled === true;
+
+            return (
+              <div className="row usersRow" key={u.id}>
+                <div className="cell">
+                  <div className="t1">{u.displayName || u.name || '—'}</div>
+                  <div className="t2">UID: {u.id}</div>
+                </div>
+
+                <div className="cell">{u.email || '—'}</div>
+                <div className="cell">{fmtDate(u.createdAt)}</div>
+
+                <div className="cell">
+                  <span className={`pill ${banned ? 'off' : 'ok'}`}>
+                    {banned ? 'محظور' : 'سليم'}
+                  </span>
+                  <span className={`pill ${disabled ? 'warn' : 'mut'}`}>
+                    {disabled ? 'معطّل' : 'مفعل'}
+                  </span>
+                </div>
+
+                <div className="cell actions">
+                  <button
+                    className="btnSm"
+                    disabled={busyId === u.id}
+                    onClick={() => setUserFlag(u.id, 'isDisabled', !disabled)}
+                    title="تعطيل/تفعيل"
+                  >
+                    {disabled ? '✅ تفعيل' : '⛔ تعطيل'}
+                  </button>
+                  <button
+                    className="btnSm danger"
+                    disabled={busyId === u.id}
+                    onClick={() => setUserFlag(u.id, 'isBanned', !banned)}
+                    title="حظر/إلغاء حظر"
+                  >
+                    {banned ? '🔓 إلغاء حظر' : '🚫 حظر'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+
+          {users.length === 0 ? <div className="empty">لا توجد بيانات مستخدمين.</div> : null}
         </div>
-      </div>
+      )}
 
-      {err ? (
-        <div className="alert">
-          <span className="alertIcon">⚠️</span>
-          <span>{err}</span>
-        </div>
-      ) : null}
-
-      <div className="grid">
-        <StatCard
-          icon="📦"
-          label="إجمالي الإعلانات"
-          value={stats.listingsTotal}
-          sub="عدد كل الإعلانات في قاعدة البيانات"
-        />
-        <StatCard
-          icon="✅"
-          label="الإعلانات النشطة"
-          value={stats.listingsActive}
-          sub="إعلانات isActive = true"
-        />
-        <StatCard
-          icon="👥"
-          label="المستخدمون"
-          value={stats.usersTotal}
-          sub="عدد حسابات المستخدمين"
-        />
-        <StatCard
-          icon="💬"
-          label="المحادثات"
-          value={stats.chatsTotal}
-          sub="عدد غرف/مستندات المحادثات"
-        />
-      </div>
-
-      <div className="sectionTitle">
-        <h2>إجراءات سريعة</h2>
-        <p>روابط جاهزة لتسهيل الإدارة</p>
-      </div>
-
-      <div className="actions">
-        <ActionCard
-          title="مراجعة الإعلانات"
-          desc="افتح صفحة الإعلانات العامة لمراجعة المحتوى"
-          href="/"
-          icon="🔎"
-        />
-        <ActionCard
-          title="إدارة الإعلانات (قريباً)"
-          desc="صفحة خاصة للمدير لتفعيل/إخفاء/حذف الإعلانات"
-          href="/admin/listings"
-          icon="🧰"
-          disabled
-        />
-        <ActionCard
-          title="إدارة المستخدمين (قريباً)"
-          desc="حظر/فك حظر، مراجعة الحسابات"
-          href="/admin/users"
-          icon="🛡️"
-          disabled
-        />
-        <ActionCard
-          title="البلاغات (قريباً)"
-          desc="استعراض بلاغات المحتوى المسيء"
-          href="/admin/reports"
-          icon="🚨"
-          disabled
-        />
-      </div>
-
-      <div className="footer">
-        <div className="note">
-          💡 إذا الإحصائيات لا تظهر: راجع قواعد Firestore (Security Rules) لأنها قد تمنع القراءة حتى لو البريد أدمن.
-        </div>
-        <div className="row">
-          <Link className="btn ghost" href="/">الرئيسية</Link>
-          <Link className="btn ghost" href="/privacy">الخصوصية</Link>
-          <Link className="btn ghost" href="/terms">الشروط</Link>
-        </div>
-      </div>
-
-      <style jsx>{styles}</style>
+      <Style />
     </div>
   );
 }
 
-const styles = `
-.wrap{
-  min-height: calc(100vh - 60px);
-  padding: 24px 16px 48px;
-  max-width: 1100px;
-  margin: 0 auto;
-}
+function Style() {
+  return (
+    <style jsx>{`
+      .wrap { padding: 16px; max-width: 1200px; margin: 0 auto; }
+      .top { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; margin: 10px 0 14px; }
+      .title { margin:0; font-size: 22px; font-weight: 900; }
+      .muted { margin: 6px 0 0; opacity: .75; }
 
-.hero{
-  display:flex;
-  gap:16px;
-  justify-content:space-between;
-  align-items:stretch;
-  padding:18px;
-  border:1px solid rgba(0,0,0,.08);
-  border-radius:16px;
-  background: linear-gradient(135deg, rgba(15,52,96,.08), rgba(59,130,246,.08));
-}
+      .card { background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:16px; }
+      .btn { display:inline-block; margin-top:10px; background:#2563eb; color:#fff; padding:10px 14px; border-radius:12px; text-decoration:none; font-weight:700; }
 
-.heroLeft h1{
-  margin:0 0 8px;
-  font-size: 1.75rem;
-  font-weight: 800;
-  color:#0f172a;
-}
-.heroLeft p{
-  margin:0 0 12px;
-  color:#475569;
-  line-height:1.6;
-  max-width: 560px;
-}
+      .tabs { display:flex; gap:8px; }
+      .tab { padding:10px 12px; border-radius:12px; background:#f3f4f6; border:1px solid #e5e7eb; font-weight:800; }
+      .tab.active { background:#111827; color:#fff; border-color:#111827; }
 
-.chips{display:flex; gap:10px; flex-wrap:wrap;}
-.chip{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  padding:8px 12px;
-  border-radius:999px;
-  background:#fff;
-  border:1px solid rgba(0,0,0,.08);
-  color:#0f172a;
-  font-weight:600;
-  font-size:.9rem;
-}
-.chip.subtle{opacity:.85}
+      .error { margin: 10px 0; background:#fff1f2; border:1px solid #fecdd3; color:#9f1239; padding:10px 12px; border-radius:12px; font-weight:700; }
 
-.heroRight{
-  display:flex;
-  align-items:center;
-}
-.quick{
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  min-width: 220px;
-}
-.qbtn{
-  display:inline-flex;
-  justify-content:center;
-  align-items:center;
-  gap:10px;
-  padding:10px 12px;
-  border-radius:12px;
-  background:#3b82f6;
-  color:#fff;
-  font-weight:700;
-  text-decoration:none;
-  border:1px solid rgba(0,0,0,.08);
-  transition: transform .15s ease, box-shadow .15s ease;
-}
-.qbtn:hover{ transform: translateY(-1px); box-shadow: 0 10px 22px rgba(59,130,246,.25); }
-.qbtn.ghost{
-  background:#fff;
-  color:#0f172a;
-}
+      .stats { display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; margin: 12px 0 14px; }
+      .stat { background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:12px; }
+      .statNum { font-weight: 900; font-size: 18px; }
+      .statLbl { opacity: .75; margin-top: 2px; font-weight:700; font-size: 13px; }
 
-.alert{
-  margin-top:14px;
-  padding:12px 14px;
-  border-radius:12px;
-  border:1px solid rgba(220,38,38,.25);
-  background: rgba(220,38,38,.08);
-  color:#991b1b;
-  display:flex;
-  gap:10px;
-  align-items:flex-start;
-}
-.alertIcon{font-size:1.1rem; margin-top:2px;}
+      .tableCard { background:#fff; border:1px solid #e5e7eb; border-radius:14px; overflow:hidden; }
+      .tableHead { display:grid; grid-template-columns: 2fr 1fr 1fr 1.3fr 1.2fr 2fr; gap:10px; padding:12px; background:#f9fafb; font-weight:900; border-bottom:1px solid #e5e7eb; }
+      .row { display:grid; grid-template-columns: 2fr 1fr 1fr 1.3fr 1.2fr 2fr; gap:10px; padding:12px; border-bottom:1px solid #f1f5f9; align-items:center; }
+      .row:last-child { border-bottom:none; }
 
-.grid{
-  margin-top:16px;
-  display:grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap:12px;
-}
+      .usersHead, .usersRow { grid-template-columns: 1.6fr 1.4fr 1fr 1.2fr 1.6fr; }
+      .usersRow { display:grid; gap:10px; }
 
-.card{
-  background:#fff;
-  border:1px solid rgba(0,0,0,.08);
-  border-radius:16px;
-  padding:14px;
-  box-shadow: 0 6px 18px rgba(0,0,0,.04);
-}
-.cardTop{display:flex; gap:12px; align-items:center;}
-.icon{
-  width:46px; height:46px;
-  border-radius:14px;
-  display:flex; align-items:center; justify-content:center;
-  background: rgba(59,130,246,.12);
-  border:1px solid rgba(59,130,246,.18);
-  font-size:1.25rem;
-}
-.meta .label{color:#64748b; font-weight:700; font-size:.9rem; margin-bottom:4px;}
-.meta .value{color:#0f172a; font-weight:900; font-size:1.35rem;}
-.sub{margin-top:10px; color:#64748b; font-size:.85rem; line-height:1.5;}
+      .cell { min-width:0; }
+      .titleCell .t1 { font-weight:900; }
+      .t2 { margin-top:6px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+      .link { color:#2563eb; font-weight:800; text-decoration:none; }
+      .badge { background:#eef2ff; border:1px solid #c7d2fe; color:#3730a3; padding:2px 8px; border-radius:999px; font-weight:900; font-size:12px; }
 
-.sectionTitle{margin-top:22px;}
-.sectionTitle h2{margin:0 0 6px; font-size:1.15rem; font-weight:900; color:#0f172a;}
-.sectionTitle p{margin:0; color:#64748b;}
+      .pill { display:inline-block; padding:4px 10px; border-radius:999px; font-weight:900; font-size:12px; margin-left:6px; border:1px solid transparent; }
+      .pill.ok { background:#ecfdf5; border-color:#a7f3d0; color:#065f46; }
+      .pill.off { background:#fff1f2; border-color:#fecdd3; color:#9f1239; }
+      .pill.warn { background:#fffbeb; border-color:#fde68a; color:#92400e; }
+      .pill.mut { background:#f3f4f6; border-color:#e5e7eb; color:#374151; }
 
-.actions{
-  margin-top:12px;
-  display:grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap:12px;
-}
-.actionLink{ text-decoration:none; color:inherit; }
-.action{
-  background:#fff;
-  border:1px solid rgba(0,0,0,.08);
-  border-radius:16px;
-  padding:14px;
-  display:flex;
-  gap:12px;
-  align-items:center;
-  transition: transform .15s ease, box-shadow .15s ease;
-}
-.action:hover{
-  transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(0,0,0,.06);
-}
-.action.disabled{
-  opacity:.55;
-  filter: grayscale(30%);
-}
-.actionIcon{
-  width:44px; height:44px;
-  border-radius:14px;
-  display:flex; align-items:center; justify-content:center;
-  background: rgba(15,52,96,.08);
-  border:1px solid rgba(0,0,0,.06);
-  font-size:1.2rem;
-  flex-shrink:0;
-}
-.actionBody{flex:1; min-width:0;}
-.actionTitle{font-weight:900; color:#0f172a; margin-bottom:4px;}
-.actionDesc{color:#64748b; font-size:.9rem; line-height:1.5;}
-.actionArrow{color:#94a3b8; font-weight:900;}
+      .actions { display:flex; gap:8px; flex-wrap:wrap; }
+      .btnSm { background:#f3f4f6; border:1px solid #e5e7eb; padding:8px 10px; border-radius:12px; font-weight:900; cursor:pointer; text-decoration:none; color:#111827; }
+      .btnSm:hover { filter: brightness(0.98); }
+      .btnSm:disabled { opacity: .6; cursor:not-allowed; }
+      .btnSm.danger { background:#fee2e2; border-color:#fecaca; color:#7f1d1d; }
 
-.footer{
-  margin-top:18px;
-  padding-top:14px;
-  border-top:1px solid rgba(0,0,0,.08);
-  display:flex;
-  justify-content:space-between;
-  gap:12px;
-  align-items:flex-start;
-  flex-wrap:wrap;
-}
-.note{color:#64748b; font-size:.9rem; max-width: 620px; line-height:1.6;}
-.row{display:flex; gap:10px; flex-wrap:wrap;}
-.btn{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  padding:10px 12px;
-  border-radius:12px;
-  border:1px solid rgba(0,0,0,.10);
-  background:#3b82f6;
-  color:#fff;
-  font-weight:800;
-  text-decoration:none;
-}
-.btn.ghost{
-  background:#fff;
-  color:#0f172a;
-}
+      .empty { padding: 18px; text-align:center; font-weight:900; opacity:.7; }
 
-.center{
-  margin-top:60px;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  gap:10px;
-  color:#64748b;
+      @media (max-width: 900px) {
+        .stats { grid-template-columns: repeat(2, 1fr); }
+        .tableHead { display:none; }
+        .row { grid-template-columns: 1fr; gap:8px; }
+        .usersRow { grid-template-columns: 1fr; }
+        .actions { justify-content:flex-start; }
+      }
+    `}</style>
+  );
 }
-.spinner{
-  width:40px; height:40px;
-  border:3px solid rgba(0,0,0,.08);
-  border-top:3px solid rgba(59,130,246,1);
-  border-radius:50%;
-  animation: spin 1s linear infinite;
-}
-@keyframes spin{to{transform:rotate(360deg)}}
-
-.panel{
-  margin-top:60px;
-  background:#fff;
-  border:1px solid rgba(0,0,0,.08);
-  border-radius:18px;
-  padding:22px;
-  text-align:center;
-  box-shadow: 0 10px 26px rgba(0,0,0,.06);
-}
-.lock{font-size:2.2rem; margin-bottom:10px;}
-
-@media (max-width: 980px){
-  .grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .hero{ flex-direction:column; }
-  .quick{ flex-direction:row; min-width: unset; flex-wrap:wrap; }
-}
-@media (max-width: 560px){
-  .grid{ grid-template-columns: 1fr; }
-  .actions{ grid-template-columns: 1fr; }
-}
-`;
