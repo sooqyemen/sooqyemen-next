@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import Price from '@/components/Price';
 import { db } from '@/lib/firebaseClient';
-import './home.css';
+// ملاحظة: لم نعد نستورد './home.css' هنا لأنّ الاستيراد العام لملفات CSS يجب أن يكون في app/layout.js
 
 // تحميل ديناميكي للخريطة (تجنب SSR لمشاكل Leaflet)
 const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
