@@ -12,6 +12,7 @@ const LocationPicker = dynamic(
   { ssr: false }
 );
 
+// ✅ الأقسام الافتراضية (تظهر لو فشل Firestore أو ما فيه أقسام)
 const DEFAULT_CATEGORIES = [
   { slug: 'cars', name: 'سيارات' },
   { slug: 'real_estate', name: 'عقارات' },
@@ -19,60 +20,15 @@ const DEFAULT_CATEGORIES = [
   { slug: 'jobs', name: 'وظائف' },
   { slug: 'solar', name: 'طاقة شمسية' },
   { slug: 'furniture', name: 'أثاث' },
+  { slug: 'clothes', name: 'ملابس' },            // ✅ جديد
+  { slug: 'motorcycles', name: 'دراجات نارية' }, // ✅ جديد
   { slug: 'animals', name: 'حيوانات وطيور' },
   { slug: 'networks', name: 'نت وشبكات' },
   { slug: 'electronics', name: 'إلكترونيات' },
   { slug: 'services', name: 'خدمات' },
   { slug: 'maintenance', name: 'صيانة' },
+  { slug: 'other', name: 'أخرى / غير مصنف' },   // ✅ جديد
 ];
-
-// ===== Helpers (FIXED) =====
-function getRateYERPer(curr, rates) {
-  if (!rates) return null;
-
-  const c = String(curr || '').toUpperCase();
-  if (c === 'YER') return 1;
-
-  // نحاول نلقطها بأي اسم محتمل داخل rates
-  const pick = (...keys) => {
-    for (const k of keys) {
-      const v = rates?.[k];
-      if (typeof v === 'number' && isFinite(v) && v > 0) return v;
-      if (typeof v === 'string' && v.trim() && isFinite(Number(v)) && Number(v) > 0) return Number(v);
-    }
-    return null;
-  };
-
-  if (c === 'USD') {
-    return pick('USD', 'usd', 'usdYER', 'USD_YER', 'usd_to_yer', 'USD_TO_YER');
-  }
-  if (c === 'SAR') {
-    return pick('SAR', 'sar', 'sarYER', 'SAR_YER', 'sar_to_yer', 'SAR_TO_YER');
-  }
-
-  return null;
-}
-
-function fromYER(yer, target, rates) {
-  const t = String(target || '').toUpperCase();
-  if (t === 'YER') return yer;
-
-  const rate = getRateYERPer(t, rates);
-  if (!rate) return null;
-
-  // تحويل من YER إلى العملة الهدف: قسمة
-  return yer / rate;
-}
-
-function fmtYER(n) {
-  return Math.round(n).toLocaleString('ar-YE');
-}
-function fmtSAR(n) {
-  return Number(n).toLocaleString('ar-SA', { maximumFractionDigits: 2 });
-}
-function fmtUSD(n) {
-  return Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 export default function AddPage() {
   const { user, loading } = useAuth();
@@ -81,23 +37,30 @@ export default function AddPage() {
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [city, setCity] = useState('');
-  const [category, setCategory] = useState('solar');
+  // ✅ مهم: لا يوجد قسم افتراضي
+  const [category, setCategory] = useState('');
   const [phone, setPhone] = useState('');
   const [isWhatsapp, setIsWhatsapp] = useState(true);
+
   const [currency, setCurrency] = useState('YER');
   const [price, setPrice] = useState('');
+
   const [coords, setCoords] = useState(null);
   const [locationLabel, setLocationLabel] = useState('');
+
   const [images, setImages] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
+
   const [auctionEnabled, setAuctionEnabled] = useState(false);
   const [auctionMinutes, setAuctionMinutes] = useState('60');
+
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const [cats, setCats] = useState(DEFAULT_CATEGORIES);
   const [catsLoading, setCatsLoading] = useState(true);
+  const [catsSource, setCatsSource] = useState('loading'); // loading | firestore | fallback
 
   // ✅ تحميل الأقسام من Firestore
   useEffect(() => {
@@ -114,17 +77,23 @@ export default function AddPage() {
           })
           .filter((c) => c.slug && c.name && c.active !== false);
 
+        // ترتيب عربي لطيف
         arr.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
         if (arr.length) {
           setCats(arr);
-          if (!arr.some((x) => x.slug === category)) {
-            setCategory(arr[0].slug);
+          setCatsSource('firestore');
+
+          // ✅ لا تختار أول قسم تلقائيًا
+          // فقط إذا القسم الحالي غير موجود (وكان المستخدم مختاره سابقًا)
+          if (category && !arr.some((x) => x.slug === category)) {
+            setCategory('');
           }
         } else {
           setCats(DEFAULT_CATEGORIES);
-          if (!DEFAULT_CATEGORIES.some((x) => x.slug === category)) {
-            setCategory(DEFAULT_CATEGORIES[0].slug);
+          setCatsSource('fallback');
+          if (category && !DEFAULT_CATEGORIES.some((x) => x.slug === category)) {
+            setCategory('');
           }
         }
 
@@ -134,6 +103,12 @@ export default function AddPage() {
         console.error('Failed to load categories:', err);
         setCats(DEFAULT_CATEGORIES);
         setCatsLoading(false);
+        setCatsSource('fallback');
+
+        // ✅ لا تفرض اختيار افتراضي
+        if (category && !DEFAULT_CATEGORIES.some((x) => x.slug === category)) {
+          setCategory('');
+        }
       }
     );
 
@@ -161,29 +136,47 @@ export default function AddPage() {
     });
   }, [images]);
 
+  // ✅ Helpers for rates (fallback إذا rates ما وصل)
+  const getYerPerUSD = () => {
+    const r = rates || {};
+    return Number(
+      r.USD ||
+      r.usd ||
+      r.usdRate ||
+      r.usdToYer ||
+      r.usd_yer ||
+      1632 // fallback
+    );
+  };
+
+  const getYerPerSAR = () => {
+    const r = rates || {};
+    return Number(
+      r.SAR ||
+      r.sar ||
+      r.sarRate ||
+      r.sarToYer ||
+      r.sar_yer ||
+      425 // fallback
+    );
+  };
+
   // ✅ التحقق من الأخطاء
   const validateForm = () => {
     const newErrors = {};
 
-    if (!title.trim()) {
-      newErrors.title = 'الرجاء إدخال عنوان للإعلان';
-    } else if (title.length < 5) {
-      newErrors.title = 'العنوان يجب أن يكون 5 أحرف على الأقل';
-    }
+    if (!title.trim()) newErrors.title = 'الرجاء إدخال عنوان للإعلان';
+    else if (title.trim().length < 5) newErrors.title = 'العنوان يجب أن يكون 5 أحرف على الأقل';
 
-    if (!desc.trim()) {
-      newErrors.desc = 'الرجاء إدخال وصف للإعلان';
-    } else if (desc.length < 10) {
-      newErrors.desc = 'الوصف يجب أن يكون 10 أحرف على الأقل';
-    }
+    if (!desc.trim()) newErrors.desc = 'الرجاء إدخال وصف للإعلان';
+    else if (desc.trim().length < 10) newErrors.desc = 'الوصف يجب أن يكون 10 أحرف على الأقل';
 
-    if (!city.trim()) {
-      newErrors.city = 'الرجاء إدخال المدينة';
-    }
+    if (!city.trim()) newErrors.city = 'الرجاء إدخال المدينة';
 
-    if (!price || isNaN(price) || Number(price) <= 0) {
-      newErrors.price = 'الرجاء إدخال سعر صحيح';
-    }
+    // ✅ القسم إجباري
+    if (!category) newErrors.category = 'الرجاء اختيار القسم';
+
+    if (!price || isNaN(price) || Number(price) <= 0) newErrors.price = 'الرجاء إدخال سعر صحيح';
 
     if (phone && !/^[0-9]{9,15}$/.test(phone.replace(/\D/g, ''))) {
       newErrors.phone = 'رقم الهاتف غير صحيح';
@@ -200,9 +193,7 @@ export default function AddPage() {
   const onPick = (c, lbl) => {
     setCoords(c);
     setLocationLabel(lbl || '');
-    if (errors.location) {
-      setErrors((prev) => ({ ...prev, location: undefined }));
-    }
+    if (errors.location) setErrors((prev) => ({ ...prev, location: undefined }));
   };
 
   const uploadImages = async () => {
@@ -246,6 +237,7 @@ export default function AddPage() {
     setBusy(true);
     try {
       const priceYER = toYER(price, currency, rates);
+
       const imageUrls = await uploadImages();
 
       const endAt = auctionEnabled
@@ -259,6 +251,7 @@ export default function AddPage() {
         description: desc.trim(),
         city: city.trim(),
         category,
+
         phone: phone.trim() || null,
         isWhatsapp: !!isWhatsapp,
 
@@ -297,30 +290,25 @@ export default function AddPage() {
     }
   };
 
-  // ✅ السعر المحول (FIXED)
+  // ✅ السعر المحول (صحيح)
   const convertedPrice = useMemo(() => {
     if (!price || isNaN(price)) return null;
 
-    const priceNum = Number(price);
-    if (!isFinite(priceNum) || priceNum <= 0) return null;
-
-    // نحسب YER أولاً (هذا صحيح)
-    let yer = null;
-    try {
-      yer = Number(toYER(priceNum, currency, rates));
-    } catch {
-      return null;
-    }
+    const yer = Number(toYER(price, currency, rates));
     if (!isFinite(yer) || yer <= 0) return null;
 
-    const sar = fromYER(yer, 'SAR', rates);
-    const usd = fromYER(yer, 'USD', rates);
+    const yerPerSAR = getYerPerSAR();
+    const yerPerUSD = getYerPerUSD();
+
+    const sar = yerPerSAR > 0 ? yer / yerPerSAR : null;
+    const usd = yerPerUSD > 0 ? yer / yerPerUSD : null;
 
     return {
-      YER: fmtYER(yer),
-      SAR: sar != null ? fmtSAR(sar) : null,
-      USD: usd != null ? fmtUSD(usd) : null,
+      YER: Math.round(yer).toLocaleString('ar-YE'),
+      SAR: sar ? sar.toFixed(2) : null,
+      USD: usd ? usd.toFixed(2) : null,
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [price, currency, rates]);
 
   if (loading) {
@@ -359,34 +347,27 @@ export default function AddPage() {
 
   return (
     <div className="add-page-layout">
-      {/* رأس الصفحة */}
       <div className="page-header add-page-header">
         <h1>إضافة إعلان جديد</h1>
         <p className="page-subtitle">أضف إعلانك ليجده الآلاف من المشترين</p>
       </div>
 
-      {/* نصائح سريعة */}
+      {/* ✅ تنبيه لطيف لو الأقسام رجعت من fallback */}
+      {catsSource === 'fallback' && (
+        <div className="cats-note">
+          ⚠️ الأقسام المعروضة حالياً افتراضية. إذا أضفت أقسام في Firestore ولم تظهر،
+          راجع Security Rules وأضف سماحية قراءة `categories`.
+        </div>
+      )}
+
       <div className="form-tips">
-        <div className="tip-item">
-          <span className="tip-icon">📸</span>
-          <span>أضف صور واضحة وجودة عالية</span>
-        </div>
-        <div className="tip-item">
-          <span className="tip-icon">📝</span>
-          <span>اكتب وصفاً مفصلاً ودقيقاً</span>
-        </div>
-        <div className="tip-item">
-          <span className="tip-icon">💰</span>
-          <span>حدد سعراً مناسباً ومنافساً</span>
-        </div>
-        <div className="tip-item">
-          <span className="tip-icon">📍</span>
-          <span>اختر الموقع الدقيق لإعلانك</span>
-        </div>
+        <div className="tip-item"><span className="tip-icon">📸</span><span>أضف صور واضحة وجودة عالية</span></div>
+        <div className="tip-item"><span className="tip-icon">📝</span><span>اكتب وصفاً مفصلاً ودقيقاً</span></div>
+        <div className="tip-item"><span className="tip-icon">💰</span><span>حدد سعراً مناسباً ومنافساً</span></div>
+        <div className="tip-item"><span className="tip-icon">📍</span><span>اختر الموقع الدقيق لإعلانك</span></div>
       </div>
 
       <div className="form-grid">
-        {/* العمود الأيسر: النموذج */}
         <div className="form-container">
           <h2 className="form-section-title">معلومات الإعلان</h2>
 
@@ -450,11 +431,18 @@ export default function AddPage() {
             <div className="form-group">
               <label className="form-label required">القسم</label>
               <select
-                className="form-select"
+                className={`form-select ${errors.category ? 'error' : ''}`}
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                onChange={(e) => {
+                  setCategory(e.target.value);
+                  if (submitAttempted) setErrors((prev) => ({ ...prev, category: undefined }));
+                }}
                 disabled={catsLoading}
               >
+                <option value="" disabled>
+                  اختر القسم
+                </option>
+
                 {catsLoading ? (
                   <option>جاري تحميل الأقسام...</option>
                 ) : (
@@ -465,9 +453,8 @@ export default function AddPage() {
                   ))
                 )}
               </select>
-              {!catsLoading && cats.length === 0 && (
-                <div className="form-warning">⚠️ لا توجد أقسام متاحة</div>
-              )}
+
+              {errors.category && <div className="form-error">{errors.category}</div>}
             </div>
           </div>
 
@@ -514,14 +501,8 @@ export default function AddPage() {
                 <span className="converted-price">
                   <strong>{convertedPrice.YER}</strong> ريال يمني
                 </span>
-
-                {/* لا نكرر نفس العملة المختارة */}
-                {currency !== 'SAR' && convertedPrice.SAR && (
-                  <span className="converted-price">≈ {convertedPrice.SAR} ريال سعودي</span>
-                )}
-                {currency !== 'USD' && convertedPrice.USD && (
-                  <span className="converted-price">≈ ${convertedPrice.USD} دولار أمريكي</span>
-                )}
+                <span className="converted-price">≈ {convertedPrice.SAR} ريال سعودي</span>
+                <span className="converted-price">≈ ${convertedPrice.USD} دولار أمريكي</span>
               </div>
             </div>
           )}
@@ -594,7 +575,6 @@ export default function AddPage() {
               </label>
             </div>
 
-            {/* معاينة الصور */}
             {imagePreviews.length > 0 && (
               <div className="image-previews">
                 {imagePreviews.map((preview, index) => (
@@ -658,7 +638,7 @@ export default function AddPage() {
           </div>
         </div>
 
-        {/* العمود الأيمن: الخريطة */}
+        {/* الخريطة */}
         <div className="map-container">
           <div className="map-header">
             <h2 className="form-section-title">
@@ -688,7 +668,6 @@ export default function AddPage() {
             </div>
           )}
 
-          {/* زر النشر في الجوال */}
           <div className="mobile-submit-section">
             <button className="submit-btn-large" onClick={submit} disabled={!user || busy}>
               {busy ? (
@@ -702,15 +681,13 @@ export default function AddPage() {
             </button>
 
             <div className="form-notes">
-              <p className="note-item">✅ سيتم مراجعة إعلانك قبل النشر</p>
-              <p className="note-item">📞 يمكنك تعديل الإعلان لاحقاً</p>
+              <p className="note-item">✅ يمكنك تعديل الإعلان لاحقاً</p>
               <p className="note-item">🛡️ معلوماتك محمية وآمنة</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* زر النشر (للشاشات الكبيرة) */}
       <div className="desktop-submit-section">
         <div className="submit-actions">
           <button className="submit-btn-large" onClick={submit} disabled={!user || busy}>
@@ -736,9 +713,7 @@ export default function AddPage() {
         </div>
       </div>
 
-      {/* ===== CSS (كما هو) ===== */}
       <style jsx>{`
-        /* تحسينات خاصة بصفحة الإضافة */
         .add-page-layout {
           min-height: calc(100vh - 60px);
           padding: 20px 16px;
@@ -747,12 +722,24 @@ export default function AddPage() {
           width: 100%;
         }
 
+        .cats-note{
+          margin: 10px 0 18px;
+          padding: 12px 14px;
+          border-radius: 12px;
+          border: 1px solid #fde68a;
+          background: #fffbeb;
+          color: #92400e;
+          font-weight: 700;
+          font-size: 13px;
+          line-height: 1.6;
+        }
+
         .add-page-header {
           text-align: center;
           padding: 30px 20px;
           background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
           color: white;
-          margin-bottom: 30px;
+          margin-bottom: 20px;
           border-radius: 20px;
           box-shadow: 0 8px 25px rgba(79, 70, 229, 0.2);
         }
@@ -873,7 +860,8 @@ export default function AddPage() {
         }
 
         .form-input.error,
-        .form-textarea.error {
+        .form-textarea.error,
+        .form-select.error {
           border-color: #dc2626;
           background: #fef2f2;
         }
@@ -903,7 +891,6 @@ export default function AddPage() {
           content: '⚠️';
         }
 
-        /* محدد العملة */
         .currency-selector {
           display: flex;
           gap: 8px;
@@ -930,7 +917,6 @@ export default function AddPage() {
           border-color: #4f46e5;
         }
 
-        /* تحويل السعر */
         .price-conversion {
           background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
           padding: 15px 20px;
@@ -962,10 +948,42 @@ export default function AddPage() {
           color: #4f46e5;
         }
 
-        /* رفع الصور */
+        .communication-toggle {
+          display: flex;
+          gap: 10px;
+          margin-top: 8px;
+        }
+
+        .toggle-btn {
+          flex: 1;
+          padding: 12px 16px;
+          border: 2px solid #e2e8f0;
+          background: #f8fafc;
+          border-radius: 8px;
+          font-weight: 600;
+          color: #64748b;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        }
+
+        .toggle-btn.active {
+          background: #4f46e5;
+          color: white;
+          border-color: #4f46e5;
+        }
+
+        .toggle-icon {
+          font-size: 18px;
+        }
+
         .image-upload-input {
           display: none;
         }
+
         .image-upload-label {
           display: flex;
           flex-direction: column;
@@ -979,22 +997,26 @@ export default function AddPage() {
           transition: all 0.2s ease;
           text-align: center;
         }
+
         .upload-icon {
           font-size: 40px;
           margin-bottom: 10px;
           opacity: 0.6;
         }
+
         .upload-hint {
           font-size: 13px;
           color: #94a3b8;
           margin-top: 5px;
         }
+
         .image-previews {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
           gap: 10px;
           margin-top: 15px;
         }
+
         .image-preview {
           position: relative;
           aspect-ratio: 1;
@@ -1002,11 +1024,13 @@ export default function AddPage() {
           overflow: hidden;
           border: 2px solid #e2e8f0;
         }
+
         .preview-img {
           width: 100%;
           height: 100%;
           object-fit: cover;
         }
+
         .remove-image-btn {
           position: absolute;
           top: 5px;
@@ -1024,6 +1048,7 @@ export default function AddPage() {
           font-size: 16px;
           font-weight: bold;
         }
+
         .image-number {
           position: absolute;
           bottom: 5px;
@@ -1035,7 +1060,66 @@ export default function AddPage() {
           font-size: 12px;
         }
 
-        /* الخريطة */
+        .auction-section {
+          background: #f8fafc;
+          padding: 20px;
+          border-radius: 12px;
+          margin-top: 30px;
+          border: 1px solid #e2e8f0;
+        }
+
+        .auction-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 15px;
+        }
+
+        .switch {
+          position: relative;
+          display: inline-block;
+          width: 60px;
+          height: 30px;
+        }
+
+        .switch input {
+          opacity: 0;
+          width: 0;
+          height: 0;
+        }
+
+        .slider {
+          position: absolute;
+          cursor: pointer;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: #cbd5e1;
+          transition: 0.4s;
+          border-radius: 34px;
+        }
+
+        .slider:before {
+          position: absolute;
+          content: '';
+          height: 22px;
+          width: 22px;
+          left: 4px;
+          bottom: 4px;
+          background-color: white;
+          transition: 0.4s;
+          border-radius: 50%;
+        }
+
+        input:checked + .slider {
+          background-color: #4f46e5;
+        }
+
+        input:checked + .slider:before {
+          transform: translateX(30px);
+        }
+
         .map-container {
           background: white;
           border-radius: 20px;
@@ -1045,6 +1129,7 @@ export default function AddPage() {
           display: flex;
           flex-direction: column;
         }
+
         .map-wrapper {
           flex: 1;
           min-height: 400px;
@@ -1054,7 +1139,22 @@ export default function AddPage() {
           margin-bottom: 20px;
         }
 
-        /* أزرار النشر */
+        .mobile-submit-section {
+          display: none;
+          margin-top: 30px;
+        }
+
+        .desktop-submit-section {
+          margin-top: 40px;
+          padding-top: 30px;
+          border-top: 2px solid #f1f5f9;
+        }
+
+        @media (max-width: 1024px) {
+          .mobile-submit-section { display: block; }
+          .desktop-submit-section { display: none; }
+        }
+
         .submit-btn-large {
           width: 100%;
           max-width: 400px;
@@ -1072,7 +1172,34 @@ export default function AddPage() {
           gap: 10px;
         }
 
-        /* التحميل */
+        .submit-btn-large:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
+        }
+
+        .cancel-link {
+          color: #64748b;
+          text-decoration: none;
+          font-weight: 700;
+        }
+
+        .final-notes, .form-notes{
+          margin-top: 20px;
+          padding: 15px;
+          background: #f8fafc;
+          border-radius: 10px;
+          border: 1px solid #e2e8f0;
+        }
+
+        .note-item {
+          color: #475569;
+          font-size: 14px;
+          margin: 8px 0;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
         .loading-container {
           display: flex;
           flex-direction: column;
@@ -1081,6 +1208,7 @@ export default function AddPage() {
           min-height: 300px;
           gap: 20px;
         }
+
         .loading-spinner-large {
           width: 60px;
           height: 60px;
@@ -1089,6 +1217,7 @@ export default function AddPage() {
           border-radius: 50%;
           animation: spin 1s linear infinite;
         }
+
         .loading-spinner-small {
           width: 20px;
           height: 20px;
@@ -1097,10 +1226,75 @@ export default function AddPage() {
           border-radius: 50%;
           animation: spin 0.8s linear infinite;
         }
+
         @keyframes spin {
-          to {
-            transform: rotate(360deg);
-          }
+          to { transform: rotate(360deg); }
+        }
+
+        .auth-required-card {
+          max-width: 500px;
+          margin: 50px auto;
+          background: white;
+          padding: 40px;
+          border-radius: 20px;
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+          text-align: center;
+          border: 1px solid #e2e8f0;
+        }
+
+        .lock-icon-large {
+          font-size: 70px;
+          margin-bottom: 20px;
+          opacity: 0.7;
+        }
+
+        .auth-actions {
+          display: flex;
+          flex-direction: column;
+          gap: 15px;
+          margin-top: 25px;
+        }
+
+        .auth-btn {
+          padding: 14px;
+          border-radius: 10px;
+          text-decoration: none;
+          font-weight: 700;
+          text-align: center;
+        }
+
+        .btn-primary.auth-btn {
+          background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+          color: white;
+        }
+
+        .btn-secondary.auth-btn {
+          background: #f8fafc;
+          color: #4f46e5;
+          border: 2px solid #e2e8f0;
+        }
+
+        .back-home-btn {
+          color: #64748b;
+          text-decoration: none;
+          font-size: 14px;
+          margin-top: 10px;
+          display: inline-block;
+        }
+
+        @media (max-width: 768px) {
+          .add-page-header { padding: 25px 15px; border-radius: 16px; }
+          .add-page-header h1 { font-size: 24px; }
+          .form-container, .map-container { padding: 20px; border-radius: 16px; }
+          .form-section-title { font-size: 18px; }
+          .currency-btn { padding: 8px 12px; font-size: 14px; }
+        }
+
+        @media (max-width: 480px) {
+          .form-row { grid-template-columns: 1fr; gap: 15px; }
+          .currency-selector { flex-direction: column; }
+          .communication-toggle { flex-direction: column; }
+          .image-previews { grid-template-columns: repeat(3, 1fr); }
         }
       `}</style>
     </div>
