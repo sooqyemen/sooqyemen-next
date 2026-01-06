@@ -5,9 +5,8 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 
-// Fix Leaflet default icon paths (Next.js)
+// ✅ Fix Leaflet default icon paths (Client only)
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -20,9 +19,8 @@ const YEMEN_BOUNDS = [
   [19.5, 54.7],
 ];
 
-const DEFAULT_CENTER = [15.3694, 44.1910];
+const DEFAULT_CENTER = [15.3694, 44.191];
 
-// ✅ LocalStorage key
 const SEEN_KEY = 'sooq_seen_listings_v1';
 
 function readSeen() {
@@ -52,6 +50,11 @@ function normalizeCoords(listing) {
     const lng = Number(listing.coords.lng);
     if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
   }
+  if (listing?.lat != null && listing?.lng != null) {
+    const lat = Number(listing.lat);
+    const lng = Number(listing.lng);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
+  }
   return null;
 }
 
@@ -64,9 +67,9 @@ function inYemen([lat, lng]) {
   );
 }
 
-// ✅ Icons: default (new) + seen (visited)
 const iconNew = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+  iconUrl:
+    'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -75,7 +78,8 @@ const iconNew = new L.Icon({
 });
 
 const iconSeen = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-grey.png',
+  iconUrl:
+    'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-grey.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -83,7 +87,6 @@ const iconSeen = new L.Icon({
   shadowSize: [41, 41],
 });
 
-// ✅ Small formatter (YER)
 function fmtYER(v) {
   const n = Number(v || 0);
   if (!Number.isFinite(n)) return '—';
@@ -94,17 +97,20 @@ export default function HomeMapView({ listings = [] }) {
   const [seen, setSeen] = useState(() => new Set());
 
   useEffect(() => {
-    // load seen once
     setSeen(readSeen());
   }, []);
 
   const points = useMemo(() => {
-    return listings
+    return (Array.isArray(listings) ? listings : [])
       .map((l) => {
-        const c = normalizeCoords(l);
-        if (!c) return null;
-        if (!inYemen(c)) return null;
-        return { ...l, _coords: c };
+        const coords = normalizeCoords(l);
+        if (!coords) return null;
+        if (!inYemen(coords)) return null;
+
+        const id = String(l?.id || l?.docId || '');
+        if (!id) return null;
+
+        return { ...l, id, _coords: coords };
       })
       .filter(Boolean);
   }, [listings]);
@@ -120,19 +126,10 @@ export default function HomeMapView({ listings = [] }) {
   };
 
   return (
-    <div className="card" style={{ padding: 12 }}>
-      <div style={{ fontWeight: 900, marginBottom: 10 }}>🗺️ عرض الإعلانات على الخريطة</div>
+    <div className="card mapCard">
+      <div className="mapTitle">🗺️ عرض الإعلانات على الخريطة</div>
 
-      <div
-        style={{
-          width: '100%',
-          height: 520,
-          minHeight: 520,
-          borderRadius: 14,
-          overflow: 'hidden',
-          border: '1px solid #e2e8f0',
-        }}
-      >
+      <div className="mapWrap">
         <MapContainer
           center={DEFAULT_CENTER}
           zoom={7}
@@ -149,22 +146,14 @@ export default function HomeMapView({ listings = [] }) {
           />
 
           {points.map((l) => {
-            const img =
-              (Array.isArray(l.images) && l.images[0]) ||
-              l.image ||
-              null;
-
+            const img = (Array.isArray(l.images) && l.images[0]) || l.image || null;
             const isSeen = seen.has(String(l.id));
             const price = l.currentBidYER || l.priceYER || 0;
 
             return (
-              <Marker
-                key={l.id}
-                position={l._coords}
-                icon={isSeen ? iconSeen : iconNew}
-              >
+              <Marker key={l.id} position={l._coords} icon={isSeen ? iconSeen : iconNew}>
                 <Popup>
-                  <div style={{ width: 230 }}>
+                  <div style={{ width: 230 }} dir="rtl">
                     {img ? (
                       <img
                         src={img}
@@ -176,10 +165,11 @@ export default function HomeMapView({ listings = [] }) {
                           borderRadius: 10,
                           marginBottom: 8,
                         }}
+                        loading="lazy"
                       />
                     ) : null}
 
-                    <div style={{ fontWeight: 800, marginBottom: 4 }}>
+                    <div style={{ fontWeight: 900, marginBottom: 4 }}>
                       {l.title || 'بدون عنوان'}
                     </div>
 
@@ -187,9 +177,7 @@ export default function HomeMapView({ listings = [] }) {
                       📍 {l.city || l.locationLabel || 'غير محدد'}
                     </div>
 
-                    <div style={{ fontWeight: 900, marginBottom: 10 }}>
-                      💰 {fmtYER(price)}
-                    </div>
+                    <div style={{ fontWeight: 900, marginBottom: 10 }}>💰 {fmtYER(price)}</div>
 
                     <Link
                       href={`/listing/${l.id}`}
@@ -203,7 +191,7 @@ export default function HomeMapView({ listings = [] }) {
                         background: isSeen ? '#64748b' : '#2563eb',
                         color: '#fff',
                         textDecoration: 'none',
-                        fontWeight: 700,
+                        fontWeight: 800,
                         fontSize: 13,
                       }}
                     >
@@ -221,16 +209,36 @@ export default function HomeMapView({ listings = [] }) {
         </MapContainer>
       </div>
 
-      <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+      <div className="muted mapNote">
         {points.length
           ? `✅ الظاهر على الخريطة: ${points.length} إعلان (فقط اللي له موقع داخل اليمن)`
           : 'لا توجد إعلانات لها موقع الآن—أضف موقع أثناء نشر الإعلان ليظهر هنا.'}
       </div>
 
       <style jsx>{`
+        .mapCard {
+          padding: 12px;
+        }
+        .mapTitle {
+          font-weight: 900;
+          margin-bottom: 10px;
+        }
+        .mapWrap {
+          width: 100%;
+          height: 520px;
+          min-height: 520px;
+          border-radius: 14px;
+          overflow: hidden;
+          border: 1px solid #e2e8f0;
+        }
+        .mapNote {
+          font-size: 12px;
+          margin-top: 10px;
+        }
         @media (max-width: 768px) {
-          .card :global(.leaflet-container) {
-            height: 420px !important;
+          .mapWrap {
+            height: 420px;
+            min-height: 420px;
           }
         }
       `}</style>
