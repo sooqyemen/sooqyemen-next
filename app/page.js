@@ -36,6 +36,10 @@ const CATEGORY_CONFIG = [
 
   { key: 'maintenance', label: 'صيانة', icon: '🛠️', href: '/maintenance' },
   { key: 'furniture', label: 'أثاث', icon: '🛋️', href: '/furniture' },
+
+  // ✅ NEW: الأدوات المنزلية
+  { key: 'home_tools', label: 'أدوات منزلية', icon: '🧹', href: '/home_tools' },
+
   { key: 'clothes', label: 'ملابس', icon: '👕', href: '/clothes' },
 
   { key: 'animals', label: 'حيوانات وطيور', icon: '🐑', href: '/animals' },
@@ -94,6 +98,11 @@ function normalizeCategoryKey(v) {
     // maintenance
     maintenance: 'maintenance',
 
+    // ✅ NEW: home tools
+    home_tools: 'home_tools',
+    hometools: 'home_tools',
+    'home tools': 'home_tools',
+
     // arabic labels
     'سيارات': 'cars',
     'عقارات': 'realestate',
@@ -116,6 +125,12 @@ function normalizeCategoryKey(v) {
     'خدمات': 'services',
     'اخرى': 'other',
     'أخرى': 'other',
+
+    // ✅ NEW: أدوات منزلية
+    'أدوات_منزلية': 'home_tools',
+    'ادوات_منزلية': 'home_tools',
+    'أدوات منزلية': 'home_tools',
+    'ادوات منزلية': 'home_tools',
   };
 
   return map[norm] || map[raw] || norm;
