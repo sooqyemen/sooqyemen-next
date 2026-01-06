@@ -1,3 +1,5 @@
+
+// app/profile/page.jsx
 'use client';
 
 import { useAuth } from '@/lib/useAuth';
@@ -8,27 +10,48 @@ import {
   doc,
   getDoc,
   setDoc,
-  updateDoc,
   serverTimestamp,
   collection,
   query,
   where,
   getCountFromServer,
+  getDocs,
+  addDoc,
+  limit,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebaseClient';
 
+const COMMISSION_PER_SIGNUP_SAR = 0.25;
+
 function formatJoinedDate(user, userDocData) {
-  // الأفضل: createdAt من users/{uid} لو موجود
   const ts = userDocData?.createdAt;
   const d1 = ts?.toDate ? ts.toDate() : null;
 
-  // بديل: من Firebase Auth
   const creation = user?.metadata?.creationTime ? new Date(user.metadata.creationTime) : null;
-
   const d = d1 || creation;
   if (!d || Number.isNaN(d.getTime())) return 'غير معروف';
 
   return d.toLocaleDateString('ar-YE', { year: 'numeric', month: 'long' });
+}
+
+function safeNum(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function generateReferralCode(len = 8) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let out = '';
+  try {
+    const bytes = new Uint8Array(len);
+    // eslint-disable-next-line no-undef
+    crypto.getRandomValues(bytes);
+    for (let i = 0; i < len; i++) out += alphabet[bytes[i] % alphabet.length];
+    return out;
+  } catch {
+    for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+    return out;
+  }
 }
 
 export default function ProfilePage() {
@@ -58,6 +81,138 @@ export default function ProfilePage() {
     rating: null,
     joinedDate: null,
   });
+
+  // ===== Referral (برنامج العمولة) =====
+  const [refBusy, setRefBusy] = useState(false);
+  const [refErr, setRefErr] = useState('');
+  const [refData, setRefData] = useState(null); // { id, code, clicks, signups, createdAt }
+  const [origin, setOrigin] = useState('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setOrigin(window.location.origin || '');
+    }
+  }, []);
+
+  const referralLink = useMemo(() => {
+    if (!origin || !refData?.code) return '';
+    return `${origin}/?ref=${encodeURIComponent(refData.code)}`;
+  }, [origin, refData?.code]);
+
+  const earningsSAR = useMemo(() => {
+    const signups = safeNum(refData?.signups, 0);
+    return signups * COMMISSION_PER_SIGNUP_SAR;
+  }, [refData?.signups]);
+
+  const loadReferral = async (uid) => {
+    setRefErr('');
+    try {
+      const qRef = query(
+        collection(db, 'referral_links'),
+        where('userId', '==', uid),
+        limit(1)
+      );
+      const snap = await getDocs(qRef);
+      if (snap.empty) {
+        setRefData(null);
+        return;
+      }
+      const d = snap.docs[0];
+      const data = d.data() || {};
+      setRefData({
+        id: d.id,
+        code: String(data.code || ''),
+        clicks: safeNum(data.clicks, 0),
+        signups: safeNum(data.signups, 0),
+        createdAt: data.createdAt || null,
+      });
+    } catch (e) {
+      console.error(e);
+      setRefErr('تعذر تحميل بيانات برنامج العمولة.');
+    }
+  };
+
+  const ensureReferral = async () => {
+    if (!user) return;
+
+    setRefBusy(true);
+    setRefErr('');
+
+    try {
+      // ✅ لو موجود مسبقاً: لا نعيد الإنشاء
+      await loadReferral(user.uid);
+      if (refData?.code) {
+        setRefBusy(false);
+        return;
+      }
+
+      // 🔁 تحقق مرة ثانية بشكل صريح من قاعدة البيانات (لتفادي حالة refData قديمة)
+      const qRef = query(
+        collection(db, 'referral_links'),
+        where('userId', '==', user.uid),
+        limit(1)
+      );
+      const snap = await getDocs(qRef);
+      if (!snap.empty) {
+        const d = snap.docs[0];
+        const data = d.data() || {};
+        setRefData({
+          id: d.id,
+          code: String(data.code || ''),
+          clicks: safeNum(data.clicks, 0),
+          signups: safeNum(data.signups, 0),
+          createdAt: data.createdAt || null,
+        });
+        setRefBusy(false);
+        return;
+      }
+
+      // ✅ إنشاء رابط جديد مرة واحدة
+      const code = generateReferralCode(8);
+
+      const created = await addDoc(collection(db, 'referral_links'), {
+        userId: user.uid,
+        userEmail: user.email || '',
+        code,
+        clicks: 0,
+        signups: 0,
+        currency: 'SAR',
+        commissionPerSignup: COMMISSION_PER_SIGNUP_SAR,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      setRefData({
+        id: created.id,
+        code,
+        clicks: 0,
+        signups: 0,
+        createdAt: null,
+      });
+    } catch (e) {
+      console.error(e);
+      setRefErr('تعذر إنشاء الرابط. تأكد من الصلاحيات (Firestore Rules).');
+    } finally {
+      setRefBusy(false);
+    }
+  };
+
+  const copyReferralLink = async () => {
+    if (!referralLink) return;
+    try {
+      await navigator.clipboard.writeText(referralLink);
+      alert('✅ تم نسخ الرابط');
+    } catch {
+      // fallback
+      window.prompt('انسخ الرابط:', referralLink);
+    }
+  };
+
+  const scrollToReferral = () => {
+    try {
+      document.getElementById('referral-box')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch {}
+  };
 
   // تحميل بيانات المستخدم من Firestore (users/{uid})
   useEffect(() => {
@@ -91,7 +246,6 @@ export default function ProfilePage() {
             joinedDate: formatJoinedDate(user, data),
           }));
         } else {
-          // إنشاء وثيقة مستخدم لأول مرة
           const initial = {
             email: user?.email || '',
             name: user?.name || '',
@@ -155,16 +309,11 @@ export default function ProfilePage() {
           where('isActive', '==', true)
         );
 
-        // "تم البيع": ندعم طريقتين حسب مشروعك:
-        // 1) status == 'sold'
-        // 2) isSold == true
-        // إذا ما عندك أي واحد، سيظهر 0 (أو —)
         let soldCount = 0;
 
         const allCountPromise = getCountFromServer(qAll);
         const activeCountPromise = getCountFromServer(qActive);
 
-        // نجرب status أولاً
         let soldPromise1 = null;
         try {
           const qSoldStatus = query(
@@ -177,7 +326,6 @@ export default function ProfilePage() {
           soldPromise1 = null;
         }
 
-        // نجرب isSold
         let soldPromise2 = null;
         try {
           const qSoldFlag = query(
@@ -199,8 +347,6 @@ export default function ProfilePage() {
 
         const sold1 = soldRes1?.data?.().count ?? 0;
         const sold2 = soldRes2?.data?.().count ?? 0;
-
-        // لو عندك الطريقتين معاً، نخليها أكبر واحد (بدون مضاعفة)
         soldCount = Math.max(sold1, sold2);
 
         if (!mounted) return;
@@ -225,6 +371,13 @@ export default function ProfilePage() {
       mounted = false;
     };
   }, [user]);
+
+  // تحميل بيانات برنامج العمولة
+  useEffect(() => {
+    if (!user) return;
+    loadReferral(user.uid);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]);
 
   const joinedDate = useMemo(() => {
     if (!user) return '';
@@ -332,7 +485,6 @@ export default function ProfilePage() {
               {formData.name?.charAt(0) || user.email?.charAt(0) || '👤'}
             </div>
 
-            {/* أزرار الصور (قريباً) */}
             <div className="avatar-actions">
               <button className="remove-avatar-btn" type="button" disabled>
                 تغيير الصورة (قريباً)
@@ -379,6 +531,9 @@ export default function ProfilePage() {
                   </button>
                   <Link href="/my-listings" className="my-listings-btn">📋 إعلاناتي</Link>
                   <Link href="/my-chats" className="my-chats-btn">💬 محادثاتي</Link>
+                  <button onClick={scrollToReferral} className="ref-btn" type="button">
+                    🤝 برنامج العمولة
+                  </button>
                 </>
               )}
             </div>
@@ -425,7 +580,90 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* تبويبات (نفس تصميمك، تركتها كما هي تقريباً) */}
+      {/* ===== برنامج العمولة ===== */}
+      <div id="referral-box" className="referral-box">
+        <div className="referral-head">
+          <div>
+            <h3 className="referral-title">🤝 برنامج العمولة</h3>
+            <p className="referral-sub">
+              عمولتك الحالية: <b>{COMMISSION_PER_SIGNUP_SAR.toFixed(2)}</b> ريال سعودي لكل مستخدم مؤهل.
+            </p>
+          </div>
+
+          {!refData?.code ? (
+            <button
+              type="button"
+              onClick={ensureReferral}
+              className="referral-create"
+              disabled={refBusy}
+            >
+              {refBusy ? '⏳ جاري الإنشاء…' : '➕ إنشاء رابط العمولة'}
+            </button>
+          ) : (
+            <button type="button" onClick={copyReferralLink} className="referral-copy" disabled={!referralLink}>
+              📋 نسخ الرابط
+            </button>
+          )}
+        </div>
+
+        {refErr ? <div className="referral-err">{refErr}</div> : null}
+
+        {refData?.code ? (
+          <>
+            <div className="referral-link-row">
+              <div className="referral-link">
+                <div className="referral-link-label">رابطك الخاص</div>
+                <div className="referral-link-value" dir="ltr">
+                  {referralLink}
+                </div>
+              </div>
+
+              <div className="referral-code">
+                <div className="referral-link-label">الكود</div>
+                <div className="referral-code-value">{refData.code}</div>
+              </div>
+            </div>
+
+            <div className="referral-stats">
+              <div className="refStat">
+                <div className="refStatIc">👀</div>
+                <div className="refStatBody">
+                  <div className="refStatNum">{safeNum(refData.clicks, 0).toLocaleString('ar-YE')}</div>
+                  <div className="refStatLbl">زيارات الرابط</div>
+                </div>
+              </div>
+
+              <div className="refStat">
+                <div className="refStatIc">✅</div>
+                <div className="refStatBody">
+                  <div className="refStatNum">{safeNum(refData.signups, 0).toLocaleString('ar-YE')}</div>
+                  <div className="refStatLbl">مسجلين مؤهلين</div>
+                </div>
+              </div>
+
+              <div className="refStat">
+                <div className="refStatIc">💵</div>
+                <div className="refStatBody">
+                  <div className="refStatNum">
+                    {earningsSAR.toLocaleString('ar-YE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div className="refStatLbl">أرباحك (SAR)</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="referral-note">
+              <b>ملاحظة:</b> التسجيلات من نفس الجهاز/الآي بي قد لا تُحسب كعمولة إذا كانت مشبوهة، لكن التسجيل نفسه مسموح ولن نمنع المستخدم.
+            </div>
+          </>
+        ) : (
+          <div className="referral-empty">
+            لم تقم بإنشاء رابط عمولة بعد. اضغط <b>“إنشاء رابط العمولة”</b> وسيتم حفظه لك بشكل دائم.
+          </div>
+        )}
+      </div>
+
+      {/* تبويبات */}
       <div className="profile-tabs">
         <button className={`tab-btn ${activeTab === 'info' ? 'active' : ''}`} onClick={() => setActiveTab('info')} type="button">
           ℹ️ المعلومات الشخصية
@@ -500,7 +738,6 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* تركت تبويباتك كما هي (تقدر لاحقاً نربطها بميزات حقيقية) */}
         {activeTab === 'settings' && <div className="settings-tab"><h3>إعدادات الحساب</h3><p className="muted">قريباً…</p></div>}
         {activeTab === 'security' && <div className="security-tab"><h3>أمان الحساب</h3><p className="muted">قريباً…</p></div>}
         {activeTab === 'activity' && <div className="activity-tab"><h3>نشاطاتك الأخيرة</h3><p className="muted">قريباً…</p></div>}
@@ -534,19 +771,79 @@ export default function ProfilePage() {
         .badge.verified{background:#d1fae5;color:#065f46}
         .badge.member{background:#dbeafe;color:#1e40af}
         .profile-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:14px}
-        .edit-btn,.save-btn,.cancel-btn,.my-listings-btn,.my-chats-btn{padding:12px 18px;border-radius:12px;font-weight:900;text-decoration:none;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:8px;font-size:14px}
+        .edit-btn,.save-btn,.cancel-btn,.my-listings-btn,.my-chats-btn,.ref-btn{padding:12px 18px;border-radius:12px;font-weight:900;text-decoration:none;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:8px;font-size:14px}
         .edit-btn{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff}
         .save-btn{background:#10b981;color:#fff}
         .cancel-btn{background:#f1f5f9;color:#64748b}
         .my-listings-btn{background:#f8fafc;color:#4f46e5;border:2px solid #e2e8f0}
         .my-chats-btn{background:#fef3c7;color:#92400e;border:2px solid #fde68a}
+        .ref-btn{background:#ecfeff;color:#155e75;border:2px solid #a5f3fc}
         .err{margin-top:12px;padding:10px 12px;border-radius:12px;background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.25);color:#991b1b;font-weight:800}
 
-        .profile-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin:24px 0 40px;}
+        .profile-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin:24px 0 18px;}
         .stat-card{background:#fff;padding:22px;border-radius:15px;display:flex;align-items:center;gap:18px;box-shadow:0 4px 15px rgba(0,0,0,.05);}
         .stat-icon{font-size:36px;width:56px;height:56px;background:#f8fafc;border-radius:12px;display:flex;align-items:center;justify-content:center;}
         .stat-number{font-size:30px;font-weight:950;color:#1e293b;line-height:1}
         .stat-label{font-size:14px;color:#64748b;margin-top:4px}
+
+        /* Referral box */
+        .referral-box{
+          background:#fff;border-radius:20px;padding:22px;margin:8px 0 28px;
+          box-shadow:0 4px 20px rgba(0,0,0,.08);
+          border:1px solid #eef2ff;
+        }
+        .referral-head{
+          display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;
+          padding-bottom:14px;border-bottom:2px solid #f1f5f9;margin-bottom:14px;
+        }
+        .referral-title{margin:0;color:#1e293b;font-size:20px}
+        .referral-sub{margin:6px 0 0;color:#64748b;font-weight:800}
+        .referral-create,.referral-copy{
+          padding:12px 16px;border-radius:12px;border:none;cursor:pointer;font-weight:900;
+        }
+        .referral-create{background:linear-gradient(135deg,#0ea5e9,#2563eb);color:#fff}
+        .referral-copy{background:#f8fafc;color:#4f46e5;border:2px solid #e2e8f0}
+        .referral-create:disabled,.referral-copy:disabled{opacity:.65;cursor:not-allowed}
+        .referral-err{
+          margin:10px 0 12px;padding:10px 12px;border-radius:12px;
+          background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.25);color:#991b1b;font-weight:900;
+        }
+        .referral-link-row{
+          display:grid;grid-template-columns: 1fr 170px;gap:12px;align-items:stretch;
+          margin-top:10px;
+        }
+        .referral-link,.referral-code{
+          background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:12px;
+        }
+        .referral-link-label{font-size:12px;color:#64748b;font-weight:900;margin-bottom:6px}
+        .referral-link-value{
+          font-weight:900;color:#0f172a;word-break:break-all;line-height:1.35;
+        }
+        .referral-code-value{
+          font-weight:950;color:#0f172a;font-size:18px;letter-spacing:1px
+        }
+
+        .referral-stats{
+          display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+          gap:12px;margin-top:14px;
+        }
+        .refStat{
+          background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px;
+          display:flex;gap:12px;align-items:center;
+        }
+        .refStatIc{
+          width:46px;height:46px;border-radius:12px;background:#f8fafc;display:flex;align-items:center;justify-content:center;
+          font-size:22px;
+        }
+        .refStatNum{font-size:22px;font-weight:950;color:#1e293b;line-height:1}
+        .refStatLbl{margin-top:4px;color:#64748b;font-weight:900;font-size:13px}
+        .referral-note{
+          margin-top:12px;padding:12px;border-radius:14px;
+          background:#fefce8;border:1px solid #fde68a;color:#92400e;font-weight:850;
+        }
+        .referral-empty{
+          margin-top:12px;padding:14px;border-radius:14px;background:#f8fafc;border:1px dashed #cbd5e1;color:#475569;font-weight:900;
+        }
 
         .profile-tabs{display:flex;gap:10px;margin-bottom:20px;overflow-x:auto;padding-bottom:8px}
         .tab-btn{padding:14px 18px;background:#f8fafc;border:none;border-radius:12px;font-weight:900;color:#64748b;cursor:pointer;white-space:nowrap;display:flex;gap:10px;align-items:center}
@@ -575,6 +872,9 @@ export default function ProfilePage() {
           .profile-page{padding:10px}
           .profile-main-info{flex-direction:column;text-align:center;gap:18px;padding:20px}
           .profile-actions{justify-content:center}
+          .referral-link-row{grid-template-columns: 1fr;}
+          .referral-head{align-items:stretch}
+          .referral-create,.referral-copy{width:100%}
         }
       `}</style>
     </div>
