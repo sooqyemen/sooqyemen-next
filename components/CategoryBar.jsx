@@ -18,6 +18,7 @@ const ICONS = {
   jobs: '💼',
   services: '🧰',
   phones: '📱',
+  home_tools: '🧹', // ✅ أدوات منزلية
   other: '📦',
 };
 
@@ -30,6 +31,11 @@ function normalizeSlug(slug) {
   if (s === 'heavyEquipment') return 'heavy_equipment';
   if (s === 'net') return 'networks';
   if (s === 'network') return 'networks';
+
+  // ✅ أدوات منزلية (لو جاء بصيغ مختلفة)
+  if (s === 'home-tools') return 'home_tools';
+  if (s === 'homeTools') return 'home_tools';
+  if (s === 'home_tools') return 'home_tools';
 
   return s;
 }
