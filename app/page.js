@@ -1,10 +1,10 @@
 'use client';
+
 import { useEffect, useMemo, useState, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import Price from '@/components/Price';
 import { db } from '@/lib/firebaseClient';
-import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import './home.css';
 
 // تحميل ديناميكي للخريطة (تجنب SSR لمشاكل Leaflet)
@@ -18,22 +18,28 @@ const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
   ),
 });
 
-// ✅ إعدادات الأقسام
+// ✅ إعدادات الأقسام (متوافقة مع صفحات الأقسام اللي سويناها)
 const CATEGORY_CONFIG = [
-  { key: 'all', label: 'الكل', icon: '📋' },
-  { key: 'cars', label: 'سيارات', icon: '🚗' },
-  { key: 'real_estate', label: 'عقارات', icon: '🏡' },
-  { key: 'mobiles', label: 'جوالات', icon: '📱' },
-  { key: 'electronics', label: 'إلكترونيات', icon: '💻' },
-  { key: 'motorcycles', label: 'دراجات نارية', icon: '🏍️' },
-  { key: 'heavy_equipment', label: 'معدات ثقيلة', icon: '🚜' },
-  { key: 'solar', label: 'طاقة شمسية', icon: '☀️' },
-  { key: 'networks', label: 'نت و شبكات', icon: '📡' },
-  { key: 'maintenance', label: 'صيانة', icon: '🛠️' },
-  { key: 'furniture', label: 'أثاث', icon: '🛋️' },
-  { key: 'animals', label: 'حيوانات و طيور', icon: '🐑' },
-  { key: 'jobs', label: 'وظائف', icon: '💼' },
-  { key: 'services', label: 'خدمات', icon: '🧰' },
+  { key: 'all', label: 'الكل', icon: '📋', href: '/' },
+
+  { key: 'cars', label: 'سيارات', icon: '🚗', href: '/cars' },
+  { key: 'realestate', label: 'عقارات', icon: '🏡', href: '/realestate' },
+  { key: 'phones', label: 'جوالات', icon: '📱', href: '/phones' },
+  { key: 'electronics', label: 'إلكترونيات', icon: '💻', href: '/electronics' },
+
+  { key: 'motorcycles', label: 'دراجات نارية', icon: '🏍️', href: '/motorcycles' },
+  { key: 'heavy_equipment', label: 'معدات ثقيلة', icon: '🚜', href: '/heavy_equipment' },
+  { key: 'solar', label: 'طاقة شمسية', icon: '☀️', href: '/solar' },
+  { key: 'networks', label: 'نت وشبكات', icon: '📡', href: '/networks' },
+
+  { key: 'furniture', label: 'أثاث', icon: '🛋️', href: '/furniture' },
+  { key: 'animals_birds', label: 'حيوانات وطيور', icon: '🐑', href: '/animals-birds' },
+
+  { key: 'jobs', label: 'وظائف', icon: '💼', href: '/jobs' },
+  { key: 'services', label: 'خدمات', icon: '🧰', href: '/services' },
+
+  // إذا عندك قسم صيانة فعلاً بقاعدة البيانات أضفه/اتركه
+  // { key: 'maintenance', label: 'صيانة', icon: '🛠️', href: '/maintenance' },
 ];
 
 // ✅ دوال مساعدة
@@ -87,13 +93,9 @@ function GridListingCard({ listing }) {
               }}
             />
           ) : null}
-          <div className={`img-fallback ${img ? 'hidden' : ''}`}>
-            {catObj?.icon || '🖼️'}
-          </div>
+          <div className={`img-fallback ${img ? 'hidden' : ''}`}>{catObj?.icon || '🖼️'}</div>
 
-          {listing.auctionEnabled && (
-            <div className="auction-badge">⚡ مزاد</div>
-          )}
+          {listing.auctionEnabled && <div className="auction-badge">⚡ مزاد</div>}
         </div>
 
         <div className="card-content">
@@ -158,9 +160,7 @@ function ListListingCard({ listing }) {
               }}
             />
           ) : null}
-          <div className={`list-img-fallback ${img ? 'hidden' : ''}`}>
-            {catObj?.icon || '🖼️'}
-          </div>
+          <div className={`list-img-fallback ${img ? 'hidden' : ''}`}>{catObj?.icon || '🖼️'}</div>
         </div>
 
         <div className="list-content">
@@ -197,9 +197,7 @@ function ListListingCard({ listing }) {
           <div className="list-footer">
             <span className="list-views">👁️ {Number(listing.views || 0).toLocaleString('ar-YE')} مشاهدة</span>
             <span className="list-time">⏱️ {formatRelative(listing.createdAt)}</span>
-            {listing.auctionEnabled && (
-              <span className="list-auction">⚡ مزاد نشط</span>
-            )}
+            {listing.auctionEnabled && <span className="list-auction">⚡ مزاد نشط</span>}
           </div>
         </div>
       </div>
@@ -215,9 +213,7 @@ function SearchBar({ search, setSearch, suggestions }) {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (searchRef.current && !searchRef.current.contains(e.target)) {
-        setOpen(false);
-      }
+      if (searchRef.current && !searchRef.current.contains(e.target)) setOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -242,7 +238,9 @@ function SearchBar({ search, setSearch, suggestions }) {
     <div className="search-wrapper" ref={searchRef}>
       <div className="search-container">
         <div className="search-input-wrapper">
-          <span className="search-icon" aria-hidden="true">🔍</span>
+          <span className="search-icon" aria-hidden="true">
+            🔍
+          </span>
           <input
             ref={inputRef}
             className="search-input focus-ring"
@@ -275,7 +273,9 @@ function SearchBar({ search, setSearch, suggestions }) {
               role="option"
               aria-selected={search === s}
             >
-              <span className="suggestion-icon" aria-hidden="true">🔍</span>
+              <span className="suggestion-icon" aria-hidden="true">
+                🔍
+              </span>
               <span className="suggestion-text">{s}</span>
             </button>
           ))}
@@ -295,20 +295,22 @@ export default function HomePage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [viewMode, setViewMode] = useState('grid'); // grid | list | map
 
-  // ✅ جلب الإعلانات من Firebase
+  // ✅ قراءة وضع العرض من التخزين
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const saved = window.localStorage.getItem('preferredViewMode');
+    if (saved === 'grid' || saved === 'list' || saved === 'map') setViewMode(saved);
+  }, []);
+
+  // ✅ جلب الإعلانات من Firebase (Compat) بدون خلط Modular
   useEffect(() => {
     setLoading(true);
     setError('');
 
     try {
-      const listingsQuery = query(
-        collection(db, 'listings'),
-        orderBy('createdAt', 'desc'),
-        limit(100)
-      );
+      const q = db.collection('listings').orderBy('createdAt', 'desc').limit(100);
 
-      const unsubscribe = onSnapshot(
-        listingsQuery,
+      const unsubscribe = q.onSnapshot(
         (snapshot) => {
           const data = snapshot.docs
             .map((doc) => ({ id: doc.id, ...doc.data() }))
@@ -371,7 +373,7 @@ export default function HomePage() {
       if (!q) return true;
 
       const title = safeText(listing.title).toLowerCase();
-      const city = safeText(liting.city).toLowerCase();
+      const city = safeText(listing.city).toLowerCase(); // ✅ كان فيها خطأ
       const locationLabel = safeText(listing.locationLabel).toLowerCase();
       const description = safeText(listing.description).toLowerCase();
       const category = String(listing.category || '').toLowerCase();
@@ -395,8 +397,6 @@ export default function HomePage() {
 
   return (
     <div className="home-page" dir="rtl">
-      {/* ✅ لا يوجد Header هنا لأن الهيدر في layout */}
-
       <section className="hero-section" aria-label="القسم الرئيسي">
         <div className="hero-container">
           <div className="hero-content">
@@ -414,19 +414,29 @@ export default function HomePage() {
             <div className="categories-scroll" role="tablist">
               {CATEGORY_CONFIG.map((category) => {
                 const isActive = selectedCategory === category.key;
+
                 return (
-                  <button
-                    key={category.key}
-                    type="button"
-                    className={`category-button focus-ring ${isActive ? 'active' : ''}`}
-                    onClick={() => setSelectedCategory(category.key)}
-                    role="tab"
-                    aria-selected={isActive}
-                    aria-controls={`category-${category.key}`}
-                  >
-                    <span className="category-button-icon" aria-hidden="true">{category.icon}</span>
-                    <span className="category-button-label">{category.label}</span>
-                  </button>
+                  <div key={category.key} className="category-wrap">
+                    <button
+                      type="button"
+                      className={`category-button focus-ring ${isActive ? 'active' : ''}`}
+                      onClick={() => setSelectedCategory(category.key)}
+                      role="tab"
+                      aria-selected={isActive}
+                      aria-controls={`category-${category.key}`}
+                    >
+                      <span className="category-button-icon" aria-hidden="true">
+                        {category.icon}
+                      </span>
+                      <span className="category-button-label">{category.label}</span>
+                    </button>
+
+                    {category.key !== 'all' && category.href ? (
+                      <Link className="category-open-link" href={category.href} title={`فتح قسم ${category.label}`}>
+                        فتح
+                      </Link>
+                    ) : null}
+                  </div>
                 );
               })}
             </div>
@@ -442,7 +452,9 @@ export default function HomePage() {
                   aria-pressed={viewMode === 'grid'}
                   title="عرض شبكي"
                 >
-                  <span className="view-toggle-icon" aria-hidden="true">◼️◼️</span>
+                  <span className="view-toggle-icon" aria-hidden="true">
+                    ◼️◼️
+                  </span>
                   <span className="view-toggle-label">شبكة</span>
                 </button>
 
@@ -453,7 +465,9 @@ export default function HomePage() {
                   aria-pressed={viewMode === 'list'}
                   title="عرض قائمة"
                 >
-                  <span className="view-toggle-icon" aria-hidden="true">☰</span>
+                  <span className="view-toggle-icon" aria-hidden="true">
+                    ☰
+                  </span>
                   <span className="view-toggle-label">قائمة</span>
                 </button>
 
@@ -464,7 +478,9 @@ export default function HomePage() {
                   aria-pressed={viewMode === 'map'}
                   title="عرض خريطة"
                 >
-                  <span className="view-toggle-icon" aria-hidden="true">🗺️</span>
+                  <span className="view-toggle-icon" aria-hidden="true">
+                    🗺️
+                  </span>
                   <span className="view-toggle-label">خريطة</span>
                 </button>
               </div>
@@ -484,7 +500,9 @@ export default function HomePage() {
             </div>
           ) : error ? (
             <div className="error-container">
-              <div className="error-icon" aria-hidden="true">⚠️</div>
+              <div className="error-icon" aria-hidden="true">
+                ⚠️
+              </div>
               <h3>حدث خطأ</h3>
               <p>{error}</p>
               <button className="retry-button focus-ring" onClick={handleRetry} aria-label="إعادة المحاولة">
@@ -493,7 +511,9 @@ export default function HomePage() {
             </div>
           ) : filteredListings.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-icon" aria-hidden="true">📭</div>
+              <div className="empty-icon" aria-hidden="true">
+                📭
+              </div>
               <h3>لا توجد إعلانات</h3>
               <p>
                 {search || selectedCategory !== 'all'
@@ -530,7 +550,9 @@ export default function HomePage() {
         aria-label="إضافة إعلان جديد"
         title="أضف إعلان جديد"
       >
-        <span className="floating-add-icon" aria-hidden="true">➕</span>
+        <span className="floating-add-icon" aria-hidden="true">
+          ➕
+        </span>
         <span className="floating-add-text">أضف إعلان</span>
       </Link>
 
@@ -540,10 +562,28 @@ export default function HomePage() {
         .list-category-label { margin-right: 4px; }
         .results-number { font-weight: 700; color: var(--color-primary-light); }
         .view-toggle-label { font-size: 0.875rem; }
+
+        .category-wrap{
+          display:flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 6px;
+          margin-left: 10px;
+        }
+        .category-open-link{
+          font-size: 12px;
+          font-weight: 900;
+          color: #0F3460;
+          text-decoration: none;
+          opacity: .9;
+        }
+        .category-open-link:hover{ text-decoration: underline; opacity: 1; }
+
         @media (max-width: 768px) {
           .map-view { height: 400px; }
           .view-toggle-label { display: none; }
           .view-toggle-button { padding: 0.5rem; }
+          .category-open-link{ font-size: 11px; }
         }
       `}</style>
     </div>
