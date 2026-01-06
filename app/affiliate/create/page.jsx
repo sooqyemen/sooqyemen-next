@@ -1,115 +1,155 @@
-// app/affiliate/create/page.jsx
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/useAuth';
 import { db } from '@/lib/firebaseClient';
 
-function makeCode() {
-  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function randomCode(len = 8) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let out = '';
-  for (let i = 0; i < 8; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
   return out;
 }
 
 export default function AffiliateCreatePage() {
+  const router = useRouter();
   const { user, loading } = useAuth();
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
-  const [code, setCode] = useState('');
+
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState('');
+  const [refCode, setRefCode] = useState('');
+  const [refUrl, setRefUrl] = useState('');
 
   const baseUrl = useMemo(() => {
     if (typeof window === 'undefined') return '';
     return window.location.origin;
   }, []);
 
-  const createLink = async () => {
-    if (!user?.uid) return;
-    setBusy(true);
-    setMsg('');
+  useEffect(() => {
+    // لو غير مسجل دخول، ودّه لتسجيل الدخول
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [loading, user, router]);
+
+  const handleCreate = async () => {
+    setError('');
+    setRefCode('');
+    setRefUrl('');
+
+    if (loading) return;
+    if (!user?.uid) {
+      setError('يجب تسجيل الدخول لإنشاء رابط إحالة.');
+      return;
+    }
+
+    setCreating(true);
+
     try {
-      let c = makeCode();
+      // كود قصير + شبه فريد
+      const code = `${user.uid.slice(0, 5).toUpperCase()}-${randomCode(6)}`;
 
-      // جرّب أكثر من مرة لو الكود مستخدم
-      for (let i = 0; i < 5; i++) {
-        const doc = await db.collection('referrals').doc(c).get();
-        if (!doc.exists) break;
-        c = makeCode();
-      }
-
-      await db.collection('referrals').doc(c).set({
-        code: c,
+      // ✅ مجموعة جديدة: referral_links
+      // ⚠️ لو الـ Rules تمنع، سيطلع لك Permission Denied (وسيظهر في الرسالة أدناه)
+      await db.collection('referral_links').doc(code).set({
+        code,
         ownerUid: user.uid,
-        ownerEmail: user.email || null,
-        active: true,
-        commissionPerSignupSAR: 0.25, // ✅ ربع ريال لكل تسجيل (تقدر تعدلها)
+        ownerEmail: user.email || '',
+        commissionPerSignupSAR: 0.25,
+        clicks: 0,
+        signups: 0,
+        earningsSAR: 0,
+        enabled: true,
         createdAt: new Date(),
       });
 
-      setCode(c);
-      setMsg('تم إنشاء رابط الإحالة بنجاح ✅');
+      const url = `${baseUrl}/?ref=${encodeURIComponent(code)}`;
+      setRefCode(code);
+      setRefUrl(url);
     } catch (e) {
-      console.error(e);
-      setMsg('حدث خطأ أثناء إنشاء الرابط');
+      console.error('Affiliate create error:', e);
+      const msg =
+        e?.code === 'permission-denied'
+          ? 'رفض صلاحيات Firestore (permission-denied). لازم نضيف سماح لمجموعة referral_links في Rules.'
+          : e?.message
+          ? `فشل إنشاء الرابط: ${e.message}`
+          : 'حدث خطأ أثناء إنشاء الرابط.';
+      setError(msg);
     } finally {
-      setBusy(false);
+      setCreating(false);
     }
   };
 
-  const link = code && baseUrl ? `${baseUrl}/?ref=${code}` : '';
-
-  if (loading) return <div className="container" style={{ padding: 16 }}>جاري التحميل…</div>;
-
-  if (!user) {
-    return (
-      <div className="container" style={{ padding: 16 }}>
-        <div className="card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 900, fontSize: 18 }}>لوحة المسوق</div>
-          <div className="muted" style={{ marginTop: 6 }}>سجل دخولك أولاً لإنشاء رابط إحالة.</div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div dir="rtl">
-      <div className="container" style={{ paddingTop: 14 }}>
-        <div className="card" style={{ padding: 16, marginBottom: 12 }}>
-          <div style={{ fontWeight: 900, fontSize: 20 }}>إنشاء رابط إحالة</div>
-          <div className="muted" style={{ marginTop: 6 }}>
-            سيتم إنشاء كود خاص بك، ويمكنك مشاركته. سيتم تسجيل الزيارات والتسجيلات.
-          </div>
-        </div>
+    <div className="container" style={{ paddingTop: 24, paddingBottom: 40 }}>
+      <div className="card" style={{ padding: 16 }}>
+        <h1 style={{ margin: 0 }}>إنشاء رابط إحالة</h1>
+        <p className="muted" style={{ marginTop: 8 }}>
+          سيتم إنشاء كود خاص بك ويمكنك مشاركته. سيتم تسجيل الزيارات والتسجيلات لاحقًا.
+        </p>
 
-        <div className="card" style={{ padding: 16 }}>
-          <button className="btn btnPrimary" onClick={createLink} disabled={busy}>
-            {busy ? 'جاري الإنشاء…' : 'إنشاء رابط إحالة'}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+          <button
+            type="button"
+            className={'btn btnPrimary'}
+            onClick={handleCreate}
+            disabled={creating || loading || !user}
+          >
+            {creating ? 'جاري الإنشاء…' : 'إنشاء رابط إحالة'}
           </button>
 
-          {msg ? <div className="muted" style={{ marginTop: 10 }}>{msg}</div> : null}
+          <Link className="btn" href="/">
+            رجوع للرئيسية
+          </Link>
+        </div>
 
-          {code ? (
-            <div style={{ marginTop: 14, display: 'grid', gap: 8 }}>
-              <div><b>الكود:</b> {code}</div>
-              <div><b>الرابط:</b></div>
-              <input className="input" value={link} readOnly />
+        {error ? (
+          <div
+            className="card"
+            style={{
+              marginTop: 12,
+              padding: 12,
+              borderColor: 'rgba(220,38,38,.35)',
+              color: '#991b1b',
+              background: '#fff',
+            }}
+          >
+            {error}
+          </div>
+        ) : null}
+
+        {refUrl ? (
+          <div className="card" style={{ marginTop: 12, padding: 12 }}>
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>تم إنشاء الرابط ✅</div>
+
+            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>
+              الكود:
+            </div>
+            <div style={{ fontWeight: 900, marginBottom: 10 }}>{refCode}</div>
+
+            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>
+              الرابط:
+            </div>
+
+            <input className="input" value={refUrl} readOnly />
+
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
               <button
-                className="btn"
                 type="button"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(link);
-                    setMsg('تم نسخ الرابط ✅');
-                  } catch {
-                    setMsg('لم أستطع النسخ تلقائياً — انسخ الرابط يدوياً');
-                  }
-                }}
+                className="btn"
+                onClick={() => navigator.clipboard?.writeText(refUrl)}
               >
                 📋 نسخ الرابط
               </button>
+
+              <a className="btn" href={`https://wa.me/?text=${encodeURIComponent(refUrl)}`} target="_blank" rel="noreferrer">
+                واتساب
+              </a>
             </div>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
