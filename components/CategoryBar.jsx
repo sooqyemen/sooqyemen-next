@@ -1,162 +1,138 @@
-// components/CategoryListings.jsx
+// components/CategoryBar.jsx
 'use client';
 
-import dynamic from 'next/dynamic';
-import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
-import { db } from '@/lib/firebaseClient';
-import ListingCard from '@/components/ListingCard';
+import { useMemo } from 'react';
 
-const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), { ssr: false });
+const ICONS = {
+  all: '📋',
+  map: '🗺️',
+  cars: '🚗',
+  realestate: '🏠',
+  real_estate: '🏠',
+  phones: '📱',
+  mobiles: '📱',
+  electronics: '💻',
+  motorcycles: '🏍️',
+  heavy_equipment: '🚜',
+  solar: '☀️',
+  networks: '📡',
+  maintenance: '🛠️',
+  furniture: '🛋️',
+  clothes: '👕',
+  animals: '🐑',
+  jobs: '💼',
+  services: '🧰',
+  other: '📌',
+};
 
-function norm(v) {
-  return String(v || '').trim().toLowerCase();
+function getIcon(slug) {
+  return ICONS[String(slug || '').toLowerCase()] || '📌';
 }
 
-/**
- * ✅ توحيد أسماء الأقسام
- * عشان لو عندك إعلانات قديمة محفوظة باسم مختلف
- */
-function getCategoryAliases(cat) {
-  const c = norm(cat);
-  if (!c || c === 'all') return ['all'];
+export default function CategoryBar({
+  categories = [],
+  active = 'all',
+  onChange = () => {},
+  view = 'grid',            // 'grid' | 'list' | 'map'
+  onChangeView = () => {},  // setView
+}) {
+  const items = useMemo(() => {
+    const clean = Array.isArray(categories) ? categories : [];
+    // نتأكد من الشكل: {slug,name}
+    const normalized = clean
+      .map((c) => ({
+        slug: String(c?.slug || '').trim(),
+        name: String(c?.name || '').trim(),
+      }))
+      .filter((c) => c.slug && c.name);
 
-  const map = {
-    realestate: ['realestate', 'real_estate', 'realestate ', 'real_estate '],
-    real_estate: ['realestate', 'real_estate'],
-    mobiles: ['mobiles', 'phones'],
-    phones: ['phones', 'mobiles'],
-  };
-
-  return map[c] ? map[c] : [c];
-}
-
-export default function CategoryListings({ category }) {
-  const [view, setView] = useState('grid'); // grid | list | map
-  const [q, setQ] = useState('');
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState('');
-
-  useEffect(() => {
-    const aliases = getCategoryAliases(category);
-
-    setLoading(true);
-    setErr('');
-
-    // ✅ نجلب آخر 500 إعلان (خفيف ومضمون) ثم نفلتر
-    const ref = db.collection('listings').orderBy('createdAt', 'desc').limit(500);
-
-    const unsub = ref.onSnapshot(
-      (snap) => {
-        const all = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
-          .filter((l) => l.isActive !== false && l.hidden !== true);
-
-        // ✅ فلترة القسم
-        const filteredByCat =
-          aliases.includes('all')
-            ? all
-            : all.filter((l) => aliases.includes(norm(l.category)));
-
-        setItems(filteredByCat);
-        setLoading(false);
-      },
-      (e) => {
-        console.error(e);
-        setErr(e?.message || 'فشل تحميل إعلانات القسم');
-        setLoading(false);
-      }
-    );
-
-    return () => unsub();
-  }, [category]);
-
-  const filtered = useMemo(() => {
-    const s = norm(q);
-    if (!s) return items;
-
-    return items.filter((l) => {
-      const title = norm(l.title);
-      const city = norm(l.city);
-      const desc = norm(l.description);
-      const loc = norm(l.locationLabel);
-      return title.includes(s) || city.includes(s) || desc.includes(s) || loc.includes(s);
-    });
-  }, [items, q]);
-
-  if (loading) {
-    return (
-      <div className="card" style={{ padding: 16 }}>
-        <div className="muted">جاري تحميل إعلانات القسم...</div>
-      </div>
-    );
-  }
-
-  if (err) {
-    return (
-      <div className="card" style={{ padding: 16, border: '1px solid #fecaca' }}>
-        <div style={{ fontWeight: 900, color: '#b91c1c' }}>⚠️ حدث خطأ</div>
-        <div className="muted" style={{ marginTop: 6 }}>{err}</div>
-      </div>
-    );
-  }
+    return [{ slug: 'all', name: 'الكل' }, ...normalized];
+  }, [categories]);
 
   return (
-    <div>
-      {/* شريط أدوات: شبكة/قائمة/خريطة + بحث */}
-      <div className="card" style={{ padding: 12, marginBottom: 12 }}>
-        <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div className="row" style={{ gap: 8 }}>
-            <button type="button" className={`btn ${view === 'grid' ? 'btnPrimary' : ''}`} onClick={() => setView('grid')}>
-              ◼️ شبكة
-            </button>
-            <button type="button" className={`btn ${view === 'list' ? 'btnPrimary' : ''}`} onClick={() => setView('list')}>
-              ☰ قائمة
-            </button>
-            <button type="button" className={`btn ${view === 'map' ? 'btnPrimary' : ''}`} onClick={() => setView('map')}>
-              🗺️ خريطة
-            </button>
-          </div>
+    <div style={{ display: 'grid', gap: 10 }}>
+      {/* صف: الكل + أزرار العرض */}
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => onChange('all')}
+            className={'btn ' + (active === 'all' ? 'btnPrimary' : '')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <span>{getIcon('all')}</span>
+            <span>الكل</span>
+          </button>
 
-          <input
-            className="input"
-            style={{ flex: 1, minWidth: 180 }}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="ابحث داخل القسم..."
-          />
+          <button
+            type="button"
+            onClick={() => onChangeView('grid')}
+            className={'btn ' + (view === 'grid' ? 'btnPrimary' : '')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            title="عرض شبكة"
+          >
+            <span>◼️</span>
+            <span>شبكة</span>
+          </button>
 
-          <div className="muted" style={{ fontWeight: 800 }}>
-            {filtered.length} إعلان
-          </div>
+          <button
+            type="button"
+            onClick={() => onChangeView('list')}
+            className={'btn ' + (view === 'list' ? 'btnPrimary' : '')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            title="عرض قائمة"
+          >
+            <span>☰</span>
+            <span>قائمة</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onChangeView('map')}
+            className={'btn ' + (view === 'map' ? 'btnPrimary' : '')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            title="عرض خريطة"
+          >
+            <span>{getIcon('map')}</span>
+            <span>خريطة</span>
+          </button>
         </div>
       </div>
 
-      {/* المحتوى */}
-      {filtered.length === 0 ? (
-        <div className="card" style={{ padding: 16, textAlign: 'center' }}>
-          <div style={{ fontWeight: 900 }}>لا توجد إعلانات في هذا القسم</div>
-          <div className="muted" style={{ marginTop: 6 }}>جرّب البحث أو أضف إعلان جديد.</div>
-          <div style={{ marginTop: 12 }}>
-            <Link className="btn btnPrimary" href="/add">➕ أضف إعلان</Link>
-          </div>
-        </div>
-      ) : view === 'map' ? (
-        <HomeMapView listings={filtered} />
-      ) : (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: view === 'grid' ? 'repeat(auto-fill, minmax(240px, 1fr))' : '1fr',
-            gap: 12,
-          }}
-        >
-          {filtered.map((l) => (
-            <ListingCard key={l.id} listing={l} />
-          ))}
-        </div>
-      )}
+      {/* صف الأقسام (سلايدر أفقي للجوال) */}
+      <div
+        className="row"
+        style={{
+          overflowX: 'auto',
+          paddingBottom: 6,
+          flexWrap: 'nowrap',
+          gap: 8,
+        }}
+      >
+        {items
+          .filter((c) => c.slug !== 'all')
+          .map((cat) => {
+            const isActive = active === cat.slug;
+            return (
+              <button
+                key={cat.slug}
+                type="button"
+                onClick={() => onChange(cat.slug)}
+                className={'btn ' + (isActive ? 'btnPrimary' : '')}
+                style={{
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <span>{getIcon(cat.slug)}</span>
+                <span>{cat.name}</span>
+              </button>
+            );
+          })}
+      </div>
 
       <style jsx>{`
         @media (max-width: 768px) {
