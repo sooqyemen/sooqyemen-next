@@ -7,13 +7,7 @@ export default function CategoryPageShell({ title, description, children }) {
     <div dir="rtl">
       <div className="container" style={{ paddingTop: 14, paddingBottom: 24 }}>
         <div className="card" style={{ padding: 16, marginBottom: 12 }}>
-          <div
-            style={{
-              fontWeight: 900,
-              fontSize: 20,
-              lineHeight: 1.4,
-            }}
-          >
+          <div style={{ fontWeight: 900, fontSize: 20, lineHeight: 1.4 }}>
             {safeTitle}
           </div>
 
@@ -26,16 +20,6 @@ export default function CategoryPageShell({ title, description, children }) {
 
         {children}
       </div>
-
-      {/* تحسين بسيط للجوال */}
-      <style jsx>{`
-        @media (max-width: 768px) {
-          .container {
-            padding-left: 12px !important;
-            padding-right: 12px !important;
-          }
-        }
-      `}</style>
     </div>
   );
 }
