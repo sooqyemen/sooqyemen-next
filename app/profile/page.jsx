@@ -1,4 +1,3 @@
-
 // app/profile/page.jsx
 'use client';
 
@@ -22,6 +21,7 @@ import {
 import { db } from '@/lib/firebaseClient';
 
 const COMMISSION_PER_SIGNUP_SAR = 0.25;
+const MIN_PAYOUT_SAR = 50;
 
 function formatJoinedDate(user, userDocData) {
   const ts = userDocData?.createdAt;
@@ -104,28 +104,33 @@ export default function ProfilePage() {
     return signups * COMMISSION_PER_SIGNUP_SAR;
   }, [refData?.signups]);
 
+  const canWithdraw = useMemo(() => earningsSAR >= MIN_PAYOUT_SAR, [earningsSAR]);
+
+  // ✅ دالة تجيب الرابط من Firestore وتُرجع البيانات (وتحدث state)
+  const fetchReferral = async (uid) => {
+    const qRef = query(collection(db, 'referral_links'), where('userId', '==', uid), limit(1));
+    const snap = await getDocs(qRef);
+    if (snap.empty) return null;
+
+    const d = snap.docs[0];
+    const data = d.data() || {};
+    const out = {
+      id: d.id,
+      code: String(data.code || ''),
+      clicks: safeNum(data.clicks, 0),
+      signups: safeNum(data.signups, 0),
+      createdAt: data.createdAt || null,
+    };
+
+    setRefData(out);
+    return out;
+  };
+
   const loadReferral = async (uid) => {
     setRefErr('');
     try {
-      const qRef = query(
-        collection(db, 'referral_links'),
-        where('userId', '==', uid),
-        limit(1)
-      );
-      const snap = await getDocs(qRef);
-      if (snap.empty) {
-        setRefData(null);
-        return;
-      }
-      const d = snap.docs[0];
-      const data = d.data() || {};
-      setRefData({
-        id: d.id,
-        code: String(data.code || ''),
-        clicks: safeNum(data.clicks, 0),
-        signups: safeNum(data.signups, 0),
-        createdAt: data.createdAt || null,
-      });
+      const out = await fetchReferral(uid);
+      if (!out) setRefData(null);
     } catch (e) {
       console.error(e);
       setRefErr('تعذر تحميل بيانات برنامج العمولة.');
@@ -139,31 +144,9 @@ export default function ProfilePage() {
     setRefErr('');
 
     try {
-      // ✅ لو موجود مسبقاً: لا نعيد الإنشاء
-      await loadReferral(user.uid);
-      if (refData?.code) {
-        setRefBusy(false);
-        return;
-      }
-
-      // 🔁 تحقق مرة ثانية بشكل صريح من قاعدة البيانات (لتفادي حالة refData قديمة)
-      const qRef = query(
-        collection(db, 'referral_links'),
-        where('userId', '==', user.uid),
-        limit(1)
-      );
-      const snap = await getDocs(qRef);
-      if (!snap.empty) {
-        const d = snap.docs[0];
-        const data = d.data() || {};
-        setRefData({
-          id: d.id,
-          code: String(data.code || ''),
-          clicks: safeNum(data.clicks, 0),
-          signups: safeNum(data.signups, 0),
-          createdAt: data.createdAt || null,
-        });
-        setRefBusy(false);
+      // ✅ لو موجود مسبقاً: لا نعيد الإنشاء (تحقق مباشر من Firestore)
+      const existing = await fetchReferral(user.uid);
+      if (existing?.code) {
         return;
       }
 
@@ -203,7 +186,6 @@ export default function ProfilePage() {
       await navigator.clipboard.writeText(referralLink);
       alert('✅ تم نسخ الرابط');
     } catch {
-      // fallback
       window.prompt('انسخ الرابط:', referralLink);
     }
   };
@@ -652,6 +634,31 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {/* ✅ حالة السحب */}
+            <div className={`payout-status ${canWithdraw ? 'ok' : 'wait'}`}>
+              <div className="payout-title">
+                {canWithdraw ? '✅ مؤهل للسحب' : '⏳ غير مؤهل للسحب بعد'}
+              </div>
+              <div className="payout-sub">
+                الحد الأدنى للسحب هو <b>{MIN_PAYOUT_SAR}</b> ريال سعودي.
+                {canWithdraw ? ' رصيدك وصل للحد المطلوب.' : ' عندما يصل رصيدك للحد المطلوب ستظهر لك حالة التأهل.'}
+              </div>
+            </div>
+
+            {/* ✅ سياسة التحويل */}
+            <div className="payout-policy">
+              <div className="policy-title">سياسة السحب والتحويل (بنك الكريمي)</div>
+              <ul className="policy-list">
+                <li>الحد الأدنى للسحب: <b>{MIN_PAYOUT_SAR} ريال سعودي</b>.</li>
+                <li>لا يتم تحويل مبالغ أقل من <b>{MIN_PAYOUT_SAR}</b> ريال.</li>
+                <li>التحويل يتم عبر <b>بنك الكريمي</b>.</li>
+                <li>عند التأهل، تقوم الإدارة بالتواصل معك لإرسال بيانات التحويل (مثل الاسم الكامل ورقم/حساب الكريمي).</li>
+              </ul>
+              <div className="policy-tip">
+                <b>تنبيه أمان:</b> لا تشارك بياناتك البنكية علنًا. سيتم طلبها منك بشكل خاص من الإدارة.
+              </div>
+            </div>
+
             <div className="referral-note">
               <b>ملاحظة:</b> التسجيلات من نفس الجهاز/الآي بي قد لا تُحسب كعمولة إذا كانت مشبوهة، لكن التسجيل نفسه مسموح ولن نمنع المستخدم.
             </div>
@@ -837,6 +844,26 @@ export default function ProfilePage() {
         }
         .refStatNum{font-size:22px;font-weight:950;color:#1e293b;line-height:1}
         .refStatLbl{margin-top:4px;color:#64748b;font-weight:900;font-size:13px}
+
+        .payout-status{
+          margin-top:12px;border-radius:14px;padding:14px;border:1px solid;
+          font-weight:900;
+        }
+        .payout-status.ok{background:#ecfdf5;border-color:#86efac;color:#065f46}
+        .payout-status.wait{background:#eff6ff;border-color:#93c5fd;color:#1e40af}
+        .payout-title{font-size:16px;margin-bottom:6px}
+        .payout-sub{font-size:13px;opacity:.95;line-height:1.6}
+
+        .payout-policy{
+          margin-top:12px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px;
+        }
+        .policy-title{font-weight:950;color:#0f172a;margin-bottom:8px}
+        .policy-list{margin:0;padding-right:18px;color:#334155;font-weight:850;line-height:1.9}
+        .policy-tip{
+          margin-top:10px;padding:10px 12px;border-radius:12px;
+          background:#fefce8;border:1px solid #fde68a;color:#92400e;font-weight:900;
+        }
+
         .referral-note{
           margin-top:12px;padding:12px;border-radius:14px;
           background:#fefce8;border:1px solid #fde68a;color:#92400e;font-weight:850;
