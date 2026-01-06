@@ -19,7 +19,7 @@ const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
   ),
 });
 
-// ✅ إعدادات الأقسام (مربوطة مع صفحات الأقسام)
+// ✅ مفاتيح الأقسام الموحّدة (هذه هي المفاتيح التي نريدها في Firestore وفي كل الصفحات)
 const CATEGORY_CONFIG = [
   { key: 'all', label: 'الكل', icon: '📋', href: '/' },
 
@@ -34,16 +34,91 @@ const CATEGORY_CONFIG = [
   { key: 'solar', label: 'طاقة شمسية', icon: '☀️', href: '/solar' },
   { key: 'networks', label: 'نت وشبكات', icon: '📡', href: '/networks' },
 
+  { key: 'maintenance', label: 'صيانة', icon: '🛠️', href: '/maintenance' },
   { key: 'furniture', label: 'أثاث', icon: '🛋️', href: '/furniture' },
-  { key: 'animals_birds', label: 'حيوانات وطيور', icon: '🐑', href: '/animals-birds' },
+  { key: 'clothes', label: 'ملابس', icon: '👕', href: '/clothes' },
+
+  { key: 'animals', label: 'حيوانات وطيور', icon: '🐑', href: '/animals' },
 
   { key: 'jobs', label: 'وظائف', icon: '💼', href: '/jobs' },
   { key: 'services', label: 'خدمات', icon: '🧰', href: '/services' },
+
+  { key: 'other', label: 'أخرى', icon: '📦', href: '/other' },
 ];
 
 // ✅ دوال مساعدة
 function safeText(v) {
   return typeof v === 'string' ? v : '';
+}
+
+// ✅ أهم دالة: توحيد اسم القسم مهما كان مكتوب
+function normalizeCategoryKey(v) {
+  const raw = String(v || '').trim();
+  if (!raw) return '';
+
+  // موحّد إنجليزي
+  const lowered = raw.toLowerCase();
+
+  // وحّد الشرطات/المسافات
+  const norm = lowered
+    .replace(/\s+/g, '_')
+    .replace(/-/g, '_')
+    .replace(/__+/g, '_');
+
+  // خرائط تحويل للمفاتيح القديمة + العربي
+  const map = {
+    // real estate
+    real_estate: 'realestate',
+    realestate: 'realestate',
+
+    // phones/mobiles
+    mobiles: 'phones',
+    mobile: 'phones',
+    phones: 'phones',
+    phone: 'phones',
+
+    // animals
+    animals_birds: 'animals',
+    animalsbirds: 'animals',
+    animals: 'animals',
+
+    // heavy equipment
+    heavy_equipment: 'heavy_equipment',
+    heavyequipment: 'heavy_equipment',
+    'heavy equipment': 'heavy_equipment',
+
+    // networks
+    network: 'networks',
+    networks: 'networks',
+
+    // maintenance
+    maintenance: 'maintenance',
+
+    // arabic labels
+    'سيارات': 'cars',
+    'عقارات': 'realestate',
+    'جوالات': 'phones',
+    'إلكترونيات': 'electronics',
+    'الكترونيات': 'electronics',
+    'دراجات_نارية': 'motorcycles',
+    'دراجات': 'motorcycles',
+    'معدات_ثقيلة': 'heavy_equipment',
+    'طاقة_شمسية': 'solar',
+    'نت_وشبكات': 'networks',
+    'نت_و_شبكات': 'networks',
+    'صيانة': 'maintenance',
+    'أثاث': 'furniture',
+    'اثاث': 'furniture',
+    'ملابس': 'clothes',
+    'حيوانات_وطيور': 'animals',
+    'حيوانات': 'animals',
+    'وظائف': 'jobs',
+    'خدمات': 'services',
+    'اخرى': 'other',
+    'أخرى': 'other',
+  };
+
+  return map[norm] || map[raw] || norm;
 }
 
 function formatRelative(ts) {
@@ -68,10 +143,10 @@ function formatRelative(ts) {
   }
 }
 
-// ✅ مكون بطاقة العرض الشبكي
+// ✅ بطاقة شبكة
 function GridListingCard({ listing }) {
   const img = (Array.isArray(listing.images) && listing.images[0]) || null;
-  const catKey = String(listing.category || '').toLowerCase();
+  const catKey = normalizeCategoryKey(listing.category);
   const catObj = CATEGORY_CONFIG.find((c) => c.key === catKey);
   const desc = safeText(listing.description).trim();
   const shortDesc = desc.length > 60 ? `${desc.slice(0, 60)}...` : desc || '—';
@@ -137,10 +212,10 @@ function GridListingCard({ listing }) {
   );
 }
 
-// ✅ مكون بطاقة العرض القائمة
+// ✅ بطاقة قائمة
 function ListListingCard({ listing }) {
   const img = (Array.isArray(listing.images) && listing.images[0]) || null;
-  const catKey = String(listing.category || '').toLowerCase();
+  const catKey = normalizeCategoryKey(listing.category);
   const catObj = CATEGORY_CONFIG.find((c) => c.key === catKey);
   const desc = safeText(listing.description).trim();
   const shortDesc = desc.length > 120 ? `${desc.slice(0, 120)}...` : desc || '—';
@@ -208,7 +283,7 @@ function ListListingCard({ listing }) {
   );
 }
 
-// ✅ مكون شريط البحث
+// ✅ شريط البحث
 function SearchBar({ search, setSearch, suggestions }) {
   const [open, setOpen] = useState(false);
   const searchRef = useRef(null);
@@ -241,9 +316,7 @@ function SearchBar({ search, setSearch, suggestions }) {
     <div className="search-wrapper" ref={searchRef}>
       <div className="search-container">
         <div className="search-input-wrapper">
-          <span className="search-icon" aria-hidden="true">
-            🔍
-          </span>
+          <span className="search-icon" aria-hidden="true">🔍</span>
           <input
             ref={inputRef}
             className="search-input focus-ring"
@@ -276,9 +349,7 @@ function SearchBar({ search, setSearch, suggestions }) {
               role="option"
               aria-selected={search === s}
             >
-              <span className="suggestion-icon" aria-hidden="true">
-                🔍
-              </span>
+              <span className="suggestion-icon" aria-hidden="true">🔍</span>
               <span className="suggestion-text">{s}</span>
             </button>
           ))}
@@ -288,7 +359,6 @@ function SearchBar({ search, setSearch, suggestions }) {
   );
 }
 
-// ✅ الصفحة الرئيسية
 export default function HomePage() {
   const router = useRouter();
 
@@ -307,15 +377,19 @@ export default function HomePage() {
     if (saved === 'grid' || saved === 'list' || saved === 'map') setViewMode(saved);
   }, []);
 
-  // ✅ جلب الإعلانات من Firebase (Compat) بدون خلط Modular
+  // ✅ جلب الإعلانات من Firebase (Compat)
   useEffect(() => {
     setLoading(true);
     setError('');
 
-    try {
-      const q = db.collection('listings').orderBy('createdAt', 'desc').limit(100);
+    let unsub = null;
+    let triedFallback = false;
 
-      const unsubscribe = q.onSnapshot(
+    const subscribe = (withOrder) => {
+      const base = db.collection('listings');
+      const q = withOrder ? base.orderBy('createdAt', 'desc').limit(100) : base.limit(100);
+
+      unsub = q.onSnapshot(
         (snapshot) => {
           const data = snapshot.docs
             .map((doc) => ({ id: doc.id, ...doc.data() }))
@@ -326,20 +400,34 @@ export default function HomePage() {
         },
         (err) => {
           console.error('خطأ في جلب الإعلانات:', err);
+
+          // ✅ fallback: لو orderBy سبب مشكلة لأي سبب، جرّب بدون orderBy
+          if (withOrder && !triedFallback) {
+            triedFallback = true;
+            try { if (unsub) unsub(); } catch {}
+            subscribe(false);
+            return;
+          }
+
           setError(err?.message || 'حدث خطأ في جلب الإعلانات');
           setLoading(false);
         }
       );
+    };
 
-      return () => unsubscribe();
+    try {
+      subscribe(true);
     } catch (e) {
       console.error('خطأ فادح في الاتصال:', e);
       setError('تعذّر الاتصال بقاعدة البيانات');
       setLoading(false);
     }
+
+    return () => {
+      try { if (unsub) unsub(); } catch {}
+    };
   }, []);
 
-  // ✅ عند الضغط على القسم: يفتح صفحة القسم مباشرة (بدون كلمة "فتح")
   const handleCategoryClick = (category) => {
     if (!category) return;
 
@@ -348,13 +436,11 @@ export default function HomePage() {
       return;
     }
 
-    // نخلي تمييز سريع قبل الانتقال (اختياري)
     setSelectedCategory(category.key);
-
     if (category.href) router.push(category.href);
   };
 
-  // ✅ اقتراحات البحث الذكي
+  // ✅ اقتراحات البحث
   const suggestions = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return [];
@@ -379,31 +465,31 @@ export default function HomePage() {
     return Array.from(results).slice(0, 8);
   }, [search, listings]);
 
-  // ✅ فلترة الإعلانات (ملاحظة: الأقسام الآن تفتح صفحاتها، لذلك على الهوم غالبًا "الكل")
+  // ✅ فلترة الإعلانات (تستخدم normalizeCategoryKey عشان تظهر حتى لو category قديم)
   const filteredListings = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const catSelected = String(selectedCategory || 'all').toLowerCase();
+    const catSelected = normalizeCategoryKey(selectedCategory || 'all');
 
     return listings.filter((listing) => {
+      const listingCat = normalizeCategoryKey(listing.category);
+
       if (catSelected !== 'all') {
-        const cat = String(listing.category || '').toLowerCase();
-        if (cat !== catSelected) return false;
+        if (listingCat !== catSelected) return false;
       }
 
       if (!q) return true;
 
       const title = safeText(listing.title).toLowerCase();
-      const city = safeText(listing.city).toLowerCase(); // ✅ إصلاح typo
+      const city = safeText(listing.city).toLowerCase();
       const locationLabel = safeText(listing.locationLabel).toLowerCase();
       const description = safeText(listing.description).toLowerCase();
-      const category = String(listing.category || '').toLowerCase();
 
       return (
         title.includes(q) ||
         city.includes(q) ||
         locationLabel.includes(q) ||
         description.includes(q) ||
-        category.includes(q)
+        listingCat.includes(q)
       );
     });
   }, [listings, search, selectedCategory]);
@@ -422,7 +508,6 @@ export default function HomePage() {
           <div className="hero-content">
             <h1 className="hero-title">سوق اليمن</h1>
             <p className="hero-subtitle">أكبر منصة للإعلانات والمزادات في اليمن - بيع وشراء كل شيء</p>
-
             <SearchBar search={search} setSearch={setSearch} suggestions={suggestions} />
           </div>
         </div>
@@ -442,11 +527,8 @@ export default function HomePage() {
                     onClick={() => handleCategoryClick(category)}
                     role="tab"
                     aria-selected={isActive}
-                    aria-controls={`category-${category.key}`}
                   >
-                    <span className="category-button-icon" aria-hidden="true">
-                      {category.icon}
-                    </span>
+                    <span className="category-button-icon" aria-hidden="true">{category.icon}</span>
                     <span className="category-button-label">{category.label}</span>
                   </button>
                 );
@@ -464,9 +546,7 @@ export default function HomePage() {
                   aria-pressed={viewMode === 'grid'}
                   title="عرض شبكي"
                 >
-                  <span className="view-toggle-icon" aria-hidden="true">
-                    ◼️◼️
-                  </span>
+                  <span className="view-toggle-icon" aria-hidden="true">◼️◼️</span>
                   <span className="view-toggle-label">شبكة</span>
                 </button>
 
@@ -477,9 +557,7 @@ export default function HomePage() {
                   aria-pressed={viewMode === 'list'}
                   title="عرض قائمة"
                 >
-                  <span className="view-toggle-icon" aria-hidden="true">
-                    ☰
-                  </span>
+                  <span className="view-toggle-icon" aria-hidden="true">☰</span>
                   <span className="view-toggle-label">قائمة</span>
                 </button>
 
@@ -490,9 +568,7 @@ export default function HomePage() {
                   aria-pressed={viewMode === 'map'}
                   title="عرض خريطة"
                 >
-                  <span className="view-toggle-icon" aria-hidden="true">
-                    🗺️
-                  </span>
+                  <span className="view-toggle-icon" aria-hidden="true">🗺️</span>
                   <span className="view-toggle-label">خريطة</span>
                 </button>
               </div>
@@ -512,9 +588,7 @@ export default function HomePage() {
             </div>
           ) : error ? (
             <div className="error-container">
-              <div className="error-icon" aria-hidden="true">
-                ⚠️
-              </div>
+              <div className="error-icon" aria-hidden="true">⚠️</div>
               <h3>حدث خطأ</h3>
               <p>{error}</p>
               <button className="retry-button focus-ring" onClick={handleRetry} aria-label="إعادة المحاولة">
@@ -523,9 +597,7 @@ export default function HomePage() {
             </div>
           ) : filteredListings.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-icon" aria-hidden="true">
-                📭
-              </div>
+              <div className="empty-icon" aria-hidden="true">📭</div>
               <h3>لا توجد إعلانات</h3>
               <p>
                 {search || selectedCategory !== 'all'
@@ -562,42 +634,20 @@ export default function HomePage() {
         aria-label="إضافة إعلان جديد"
         title="أضف إعلان جديد"
       >
-        <span className="floating-add-icon" aria-hidden="true">
-          ➕
-        </span>
+        <span className="floating-add-icon" aria-hidden="true">➕</span>
         <span className="floating-add-text">أضف إعلان</span>
       </Link>
 
       <style jsx>{`
-        .hidden {
-          display: none !important;
-        }
-        .map-view {
-          height: 500px;
-          border-radius: 12px;
-          overflow: hidden;
-          margin-bottom: 2.5rem;
-        }
-        .list-category-label {
-          margin-right: 4px;
-        }
-        .results-number {
-          font-weight: 700;
-          color: var(--color-primary-light);
-        }
-        .view-toggle-label {
-          font-size: 0.875rem;
-        }
+        .hidden { display: none !important; }
+        .map-view { height: 500px; border-radius: 12px; overflow: hidden; margin-bottom: 2.5rem; }
+        .list-category-label { margin-right: 4px; }
+        .results-number { font-weight: 700; color: var(--color-primary-light); }
+        .view-toggle-label { font-size: 0.875rem; }
         @media (max-width: 768px) {
-          .map-view {
-            height: 400px;
-          }
-          .view-toggle-label {
-            display: none;
-          }
-          .view-toggle-button {
-            padding: 0.5rem;
-          }
+          .map-view { height: 400px; }
+          .view-toggle-label { display: none; }
+          .view-toggle-button { padding: 0.5rem; }
         }
       `}</style>
     </div>
