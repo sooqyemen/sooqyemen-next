@@ -106,17 +106,30 @@ export default function ProfilePage() {
 
   const canWithdraw = useMemo(() => earningsSAR >= MIN_PAYOUT_SAR, [earningsSAR]);
 
+  const requiredSignupsForMin = useMemo(() => {
+    return Math.ceil(MIN_PAYOUT_SAR / COMMISSION_PER_SIGNUP_SAR); // 200
+  }, []);
+
   // ✅ دالة تجيب الرابط من Firestore وتُرجع البيانات (وتحدث state)
+  // ✅ تدعم userId (قديم) + ownerUid (جديد)
   const fetchReferral = async (uid) => {
-    const qRef = query(collection(db, 'referral_links'), where('userId', '==', uid), limit(1));
-    const snap = await getDocs(qRef);
+    // 1) محاولة بالصيغة القديمة userId
+    let qRef = query(collection(db, 'referral_links'), where('userId', '==', uid), limit(1));
+    let snap = await getDocs(qRef);
+
+    // 2) لو ما لقى.. جرّب الصيغة الجديدة ownerUid
+    if (snap.empty) {
+      qRef = query(collection(db, 'referral_links'), where('ownerUid', '==', uid), limit(1));
+      snap = await getDocs(qRef);
+    }
+
     if (snap.empty) return null;
 
     const d = snap.docs[0];
     const data = d.data() || {};
     const out = {
       id: d.id,
-      code: String(data.code || ''),
+      code: String(data.code || d.id || ''),
       clicks: safeNum(data.clicks, 0),
       signups: safeNum(data.signups, 0),
       createdAt: data.createdAt || null,
@@ -146,16 +159,16 @@ export default function ProfilePage() {
     try {
       // ✅ لو موجود مسبقاً: لا نعيد الإنشاء (تحقق مباشر من Firestore)
       const existing = await fetchReferral(user.uid);
-      if (existing?.code) {
-        return;
-      }
+      if (existing?.code) return;
 
       // ✅ إنشاء رابط جديد مرة واحدة
       const code = generateReferralCode(8);
 
-      const created = await addDoc(collection(db, 'referral_links'), {
-        userId: user.uid,
+      await addDoc(collection(db, 'referral_links'), {
+        userId: user.uid, // نخليه موجود للتوافق
+        ownerUid: user.uid, // نخليه موجود للتوافق
         userEmail: user.email || '',
+        ownerEmail: user.email || '',
         code,
         clicks: 0,
         signups: 0,
@@ -165,13 +178,8 @@ export default function ProfilePage() {
         updatedAt: serverTimestamp(),
       });
 
-      setRefData({
-        id: created.id,
-        code,
-        clicks: 0,
-        signups: 0,
-        createdAt: null,
-      });
+      // reload to get doc id/code safely
+      await fetchReferral(user.uid);
     } catch (e) {
       console.error(e);
       setRefErr('تعذر إنشاء الرابط. تأكد من الصلاحيات (Firestore Rules).');
@@ -641,8 +649,21 @@ export default function ProfilePage() {
               </div>
               <div className="payout-sub">
                 الحد الأدنى للسحب هو <b>{MIN_PAYOUT_SAR}</b> ريال سعودي.
-                {canWithdraw ? ' رصيدك وصل للحد المطلوب.' : ' عندما يصل رصيدك للحد المطلوب ستظهر لك حالة التأهل.'}
+                {canWithdraw ? (
+                  <> رصيدك وصل للحد المطلوب.</>
+                ) : (
+                  <> تحتاج تقريبًا إلى <b>{requiredSignupsForMin}</b> تسجيل مؤهل للوصول للحد الأدنى.</>
+                )}
               </div>
+
+              {/* ✅ زر طلب السحب يظهر فقط إذا مؤهل */}
+              {canWithdraw ? (
+                <div style={{ marginTop: 10 }}>
+                  <Link href="/payout/request" className="payout-btn">
+                    💸 طلب سحب الأرباح
+                  </Link>
+                </div>
+              ) : null}
             </div>
 
             {/* ✅ سياسة التحويل */}
@@ -652,7 +673,7 @@ export default function ProfilePage() {
                 <li>الحد الأدنى للسحب: <b>{MIN_PAYOUT_SAR} ريال سعودي</b>.</li>
                 <li>لا يتم تحويل مبالغ أقل من <b>{MIN_PAYOUT_SAR}</b> ريال.</li>
                 <li>التحويل يتم عبر <b>بنك الكريمي</b>.</li>
-                <li>عند التأهل، تقوم الإدارة بالتواصل معك لإرسال بيانات التحويل (مثل الاسم الكامل ورقم/حساب الكريمي).</li>
+                <li>عند تقديم طلب سحب (بعد التأهل)، تقوم الإدارة بالتواصل معك لإرسال بيانات التحويل (مثل الاسم الكامل وبيانات الكريمي).</li>
               </ul>
               <div className="policy-tip">
                 <b>تنبيه أمان:</b> لا تشارك بياناتك البنكية علنًا. سيتم طلبها منك بشكل خاص من الإدارة.
@@ -853,6 +874,13 @@ export default function ProfilePage() {
         .payout-status.wait{background:#eff6ff;border-color:#93c5fd;color:#1e40af}
         .payout-title{font-size:16px;margin-bottom:6px}
         .payout-sub{font-size:13px;opacity:.95;line-height:1.6}
+
+        .payout-btn{
+          display:inline-flex;align-items:center;gap:8px;
+          padding:10px 14px;border-radius:12px;
+          background:linear-gradient(135deg,#10b981,#059669);
+          color:#fff;text-decoration:none;font-weight:950;
+        }
 
         .payout-policy{
           margin-top:12px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px;
