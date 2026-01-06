@@ -1,194 +1,145 @@
 // /app/categories/page.js
 'use client';
 
-import { useEffect, useState } from 'react';
-import Header from '@/components/Header';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { db } from '@/lib/firebaseClient';
 
-// قائمة الفئات الافتراضية
+// ✅ القائمة المعتمدة (تطابق صفحات الأقسام عندك)
 const DEFAULT_CATEGORIES = [
-  { id: 'cars', name: 'سيارات', icon: '🚗', color: '#3b82f6' },
-  { id: 'real_estate', name: 'عقارات', icon: '🏠', color: '#10b981' },
-  { id: 'mobiles', name: 'موبايلات', icon: '📱', color: '#8b5cf6' },
-  { id: 'electronics', name: 'إلكترونيات', icon: '💻', color: '#f59e0b' },
-  { id: 'home', name: 'أثاث منزل', icon: '🛋️', color: '#ef4444' },
-  { id: 'jobs', name: 'وظائف', icon: '💼', color: '#06b6d4' },
-  { id: 'services', name: 'خدمات', icon: '🔧', color: '#84cc16' },
-  { id: 'animals', name: 'حيوانات', icon: '🐕', color: '#f97316' },
-  { id: 'clothing', name: 'ملابس', icon: '👕', color: '#8b5cf6' },
-  { id: 'education', name: 'تعليم', icon: '🎓', color: '#06b6d4' },
-  { id: 'health', name: 'صحة', icon: '🏥', color: '#ef4444' },
-  { id: 'sports', name: 'رياضة', icon: '⚽', color: '#84cc16' },
+  { slug: 'cars', name: 'سيارات', icon: '🚗' },
+  { slug: 'realestate', name: 'عقارات', icon: '🏠' },
+  { slug: 'phones', name: 'جوالات', icon: '📱' },
+  { slug: 'electronics', name: 'إلكترونيات', icon: '💻' },
+  { slug: 'furniture', name: 'أثاث منزل', icon: '🛋️' },
+  { slug: 'household_tools', name: 'أدوات منزلية', icon: '🧹' }, // ✅ جديد
+  { slug: 'jobs', name: 'وظائف', icon: '💼' },
+  { slug: 'services', name: 'خدمات', icon: '🧰' },
+  { slug: 'maintenance', name: 'صيانة', icon: '🛠️' },
+  { slug: 'networks', name: 'شبكات', icon: '📡' },
+  { slug: 'solar', name: 'طاقة شمسية', icon: '🔋' },
+  { slug: 'heavy_equipment', name: 'معدات ثقيلة', icon: '🚜' },
+  { slug: 'motorcycles', name: 'دراجات نارية', icon: '🏍️' },
+  { slug: 'clothes', name: 'ملابس', icon: '👕' },
+  { slug: 'animals', name: 'حيوانات', icon: '🐦' },
+  { slug: 'other', name: 'أخرى', icon: '📦' },
 ];
 
 export default function CategoriesPage() {
   const [counts, setCounts] = useState({});
   const [loading, setLoading] = useState(true);
 
-  // جلب عدد الإعلانات لكل فئة
   useEffect(() => {
-    const fetchCounts = async () => {
-      try {
-        const promises = DEFAULT_CATEGORIES.map(async (cat) => {
-          const snapshot = await db
-            .collection('listings')
-            .where('category', '==', cat.id)
-            .where('isActive', '!=', false)
-            .where('hidden', '!=', true)
-            .get();
-          return { [cat.id]: snapshot.size };
-        });
+    let cancelled = false;
 
-        const results = await Promise.all(promises);
-        const countsObj = results.reduce((acc, curr) => ({ ...acc, ...curr }), {});
-        setCounts(countsObj);
-      } catch (error) {
-        console.error('Error fetching counts:', error);
+    const fetchCounts = async () => {
+      setLoading(true);
+      try {
+        // ✅ بدل 15 استعلام لكل قسم (وتعقيدات indexes)
+        // نجلب آخر عدد من الإعلانات ونعدّها محلياً
+        const snap = await db.collection('listings').orderBy('createdAt', 'desc').limit(800).get();
+
+        const map = {};
+        for (const doc of snap.docs) {
+          const d = doc.data() || {};
+          if (d.isActive === false) continue;
+          if (d.hidden === true) continue;
+
+          const cat = String(d.category || '').trim();
+          if (!cat) continue;
+
+          map[cat] = (map[cat] || 0) + 1;
+        }
+
+        if (!cancelled) setCounts(map);
+      } catch (e) {
+        console.error('Error fetching counts:', e);
+        if (!cancelled) setCounts({});
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchCounts();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
+  const items = useMemo(() => DEFAULT_CATEGORIES, []);
+
   return (
-    <>
-      <Header />
-      
-      <div className="container" style={{ paddingTop: '80px', paddingBottom: '40px' }}>
-        <div className="page-header">
-          <div>
-            <h1>تصفح حسب الفئة</h1>
-            <p className="muted" style={{ marginTop: '0.5rem' }}>
-              اختر الفئة التي تريد استعراض إعلاناتها
-            </p>
+    <div dir="rtl">
+      <div className="container" style={{ paddingTop: 14, paddingBottom: 40 }}>
+        <div className="card" style={{ padding: 16, marginBottom: 12 }}>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontWeight: 900, fontSize: 20 }}>تصفح حسب القسم</div>
+              <div className="muted" style={{ marginTop: 6 }}>اختر القسم الذي تريد استعراض إعلاناته</div>
+            </div>
+
+            <Link href="/listings" className="btn">
+              عرض جميع الإعلانات
+            </Link>
           </div>
-          <Link href="/listings" className="btn">
-            عرض جميع الإعلانات
-          </Link>
         </div>
 
         {loading ? (
-          <div className="loading-container">
-            <div className="spinner"></div>
-            <p>جاري تحميل الفئات...</p>
+          <div className="card" style={{ padding: 16, textAlign: 'center' }}>
+            <div className="muted">جاري تحميل الأقسام…</div>
           </div>
         ) : (
-          <div className="categories-grid">
-            {DEFAULT_CATEGORIES.map((category) => (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+              gap: 12,
+            }}
+          >
+            {items.map((c) => (
               <Link
-                key={category.id}
-                href={`/listings?category=${category.id}`}
-                className="category-card"
-                style={{ 
-                  '--category-color': category.color,
-                  textDecoration: 'none'
+                key={c.slug}
+                href={`/${c.slug}`}
+                className="card"
+                style={{
+                  padding: 14,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
                 }}
               >
-                <div className="category-icon" style={{ background: category.color + '20', color: category.color }}>
-                  {category.icon}
+                <div
+                  style={{
+                    width: 46,
+                    height: 46,
+                    borderRadius: 12,
+                    border: '1px solid rgba(0,0,0,0.06)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 22,
+                    background: '#f8fafc',
+                    flexShrink: 0,
+                  }}
+                >
+                  {c.icon}
                 </div>
-                <div className="category-info">
-                  <h3 className="category-name">{category.name}</h3>
-                  <div className="category-stats">
-                    <span className="category-count">
-                      {counts[category.id] || 0} إعلان
-                    </span>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 900 }}>{c.name}</div>
+                  <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+                    {(counts[c.slug] || 0).toLocaleString('ar-YE')} إعلان
                   </div>
                 </div>
-                <div className="category-arrow">→</div>
+
+                <div className="muted" style={{ fontSize: 18, fontWeight: 900 }}>
+                  ←
+                </div>
               </Link>
             ))}
           </div>
         )}
       </div>
-
-      <style jsx>{`
-        .categories-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-          gap: 1rem;
-          margin-top: 2rem;
-        }
-        
-        .category-card {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          padding: 1.25rem;
-          background: white;
-          border-radius: 12px;
-          border: 1px solid #e2e8f0;
-          transition: all 0.2s ease;
-          cursor: pointer;
-        }
-        
-        .category-card:hover {
-          border-color: var(--category-color);
-          transform: translateY(-2px);
-          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
-        }
-        
-        .category-icon {
-          width: 50px;
-          height: 50px;
-          border-radius: 12px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 1.5rem;
-          flex-shrink: 0;
-        }
-        
-        .category-info {
-          flex: 1;
-        }
-        
-        .category-name {
-          font-size: 1rem;
-          font-weight: 600;
-          color: #0f172a;
-          margin: 0 0 0.25rem 0;
-        }
-        
-        .category-stats {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-        }
-        
-        .category-count {
-          font-size: 0.875rem;
-          color: #64748b;
-        }
-        
-        .category-arrow {
-          color: #94a3b8;
-          font-size: 1.25rem;
-          opacity: 0;
-          transform: translateX(-5px);
-          transition: all 0.2s ease;
-        }
-        
-        .category-card:hover .category-arrow {
-          opacity: 1;
-          transform: translateX(0);
-          color: var(--category-color);
-        }
-        
-        @media (max-width: 768px) {
-          .categories-grid {
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-            gap: 0.75rem;
-          }
-          
-          .category-card {
-            padding: 1rem;
-          }
-        }
-      `}</style>
-    </>
+    </div>
   );
 }
