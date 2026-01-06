@@ -1,3 +1,4 @@
+// components/Header.jsx
 'use client';
 
 import Link from 'next/link';
@@ -7,6 +8,9 @@ import { useAuth } from '@/lib/useAuth';
 
 // إيميلات المدراء
 const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
+
+// رابط برنامج العمولة
+const AFFILIATE_CREATE_PATH = '/affiliate/create';
 
 export default function Header() {
   const { user, loading, logout } = useAuth();
@@ -133,6 +137,11 @@ export default function Header() {
                 الإعلانات
               </Link>
 
+              {/* ✅ برنامج العمولة */}
+              <Link href={AFFILIATE_CREATE_PATH} className="nav-link">
+                💸 برنامج العمولة
+              </Link>
+
               {isAdmin && (
                 <Link href="/admin" className="nav-link admin-link">
                   لوحة الإدارة
@@ -150,9 +159,7 @@ export default function Header() {
                   </Link>
 
                   <div className="user-menu">
-                    <span className="user-greeting">
-                      أهلاً، {user.name || user.email?.split('@')[0]}
-                    </span>
+                    <span className="user-greeting">أهلاً، {user.name || user.email?.split('@')[0]}</span>
 
                     <div className="dropdown">
                       <Link href="/my-listings" className="dropdown-item">
@@ -166,6 +173,11 @@ export default function Header() {
 
                       <Link href="/profile" className="dropdown-item">
                         👤 الملف الشخصي
+                      </Link>
+
+                      {/* ✅ برنامج العمولة داخل القائمة */}
+                      <Link href={AFFILIATE_CREATE_PATH} className="dropdown-item">
+                        💸 برنامج العمولة
                       </Link>
 
                       <div className="dropdown-divider" />
@@ -237,11 +249,7 @@ export default function Header() {
                 )}
               </div>
 
-              <button
-                className="close-menu-btn"
-                onClick={() => closeMenu()}
-                aria-label="إغلاق القائمة"
-              >
+              <button className="close-menu-btn" onClick={() => closeMenu()} aria-label="إغلاق القائمة">
                 ✕
               </button>
             </div>
@@ -267,11 +275,7 @@ export default function Header() {
 
                 {!loading && user && (
                   <>
-                    <Link
-                      href="/my-listings"
-                      className="menu-item"
-                      onClick={() => closeMenu(true)}
-                    >
+                    <Link href="/my-listings" className="menu-item" onClick={() => closeMenu(true)}>
                       <span className="item-icon">📋</span>
                       <span className="item-text">إعلاناتي</span>
                     </Link>
@@ -287,11 +291,7 @@ export default function Header() {
                 )}
 
                 {isAdmin && (
-                  <Link
-                    href="/admin"
-                    className="menu-item admin-menu-item"
-                    onClick={() => closeMenu(true)}
-                  >
+                  <Link href="/admin" className="menu-item admin-menu-item" onClick={() => closeMenu(true)}>
                     <span className="item-icon">🛡️</span>
                     <span className="item-text">لوحة الإدارة</span>
                   </Link>
@@ -313,15 +313,9 @@ export default function Header() {
                       <span className="item-text">الملف الشخصي</span>
                     </Link>
 
-                    <button
-                      className="menu-item logout-menu-item"
-                      onClick={handleLogout}
-                      disabled={isLoggingOut}
-                    >
+                    <button className="menu-item logout-menu-item" onClick={handleLogout} disabled={isLoggingOut}>
                       <span className="item-icon">{isLoggingOut ? '⏳' : '🚪'}</span>
-                      <span className="item-text">
-                        {isLoggingOut ? 'جاري تسجيل الخروج…' : 'تسجيل الخروج'}
-                      </span>
+                      <span className="item-text">{isLoggingOut ? 'جاري تسجيل الخروج…' : 'تسجيل الخروج'}</span>
                     </button>
                   </>
                 ) : (
@@ -341,6 +335,12 @@ export default function Header() {
 
               <div className="menu-section">
                 <h3 className="section-title">المزيد</h3>
+
+                {/* ✅ برنامج العمولة (جوال) */}
+                <Link href={AFFILIATE_CREATE_PATH} className="menu-item" onClick={() => closeMenu(true)}>
+                  <span className="item-icon">💸</span>
+                  <span className="item-text">برنامج العمولة</span>
+                </Link>
 
                 <Link href="/help" className="menu-item" onClick={() => closeMenu(true)}>
                   <span className="item-icon">❓</span>
