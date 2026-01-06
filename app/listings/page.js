@@ -3,10 +3,15 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
+
 import { db } from '@/lib/firebaseClient';
-import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import Header from '@/components/Header';
 import Price from '@/components/Price';
+import ListingCard from '@/components/ListingCard';
+
+const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
+  ssr: false,
+});
 
 function safeText(v) {
   return typeof v === 'string' ? v : '';
@@ -33,78 +38,108 @@ function formatRelative(ts) {
 }
 
 function ListingRow({ listing }) {
-  const img = (Array.isArray(listing.images) && listing.images[0]) || null;
+  const img = (Array.isArray(listing.images) && listing.images[0]) || listing.image || null;
   const desc = safeText(listing.description).trim();
   const shortDesc = desc.length > 120 ? `${desc.slice(0, 120)}...` : desc || '—';
 
   return (
-    <Link href={`/listing/${listing.id}`} className="rowLink">
-      <div className="rowCard">
-        <div className="thumb">
-          {img ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={img} alt={listing.title || 'صورة الإعلان'} />
-          ) : (
-            <div className="thumbFallback">🖼️</div>
-          )}
+    <Link
+      href={`/listing/${listing.id}`}
+      className="card"
+      style={{
+        display: 'flex',
+        gap: 12,
+        padding: 12,
+        alignItems: 'stretch',
+      }}
+    >
+      <div
+        style={{
+          width: 120,
+          height: 120,
+          borderRadius: 12,
+          overflow: 'hidden',
+          background: '#f1f5f9',
+          flexShrink: 0,
+        }}
+      >
+        {img ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={img}
+            alt={listing.title || 'صورة الإعلان'}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        ) : (
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 26,
+              opacity: 0.6,
+            }}
+          >
+            🖼️
+          </div>
+        )}
+      </div>
+
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div
+            style={{
+              fontWeight: 900,
+              color: '#0f172a',
+              lineHeight: 1.35,
+              overflow: 'hidden',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+            }}
+          >
+            {listing.title || 'بدون عنوان'}
+          </div>
+
+          <div style={{ flexShrink: 0, fontWeight: 900 }}>
+            <Price
+              priceYER={listing.currentBidYER || listing.priceYER || 0}
+              originalPrice={listing.originalPrice}
+              originalCurrency={listing.originalCurrency}
+              showCurrency={true}
+            />
+          </div>
         </div>
 
-        <div className="body">
-          <div className="top">
-            <div className="title">{listing.title || 'بدون عنوان'}</div>
-            <div className="price">
-              <Price
-                priceYER={listing.currentBidYER || listing.priceYER || 0}
-                originalPrice={listing.originalPrice}
-                originalCurrency={listing.originalCurrency}
-                showCurrency={true}
-              />
-            </div>
-          </div>
+        <div className="row muted" style={{ flexWrap: 'wrap', gap: 10, fontSize: 13 }}>
+          <span>📍 {listing.city || listing.locationLabel || 'غير محدد'}</span>
+          <span>⏱️ {formatRelative(listing.createdAt)}</span>
+          <span>👁️ {Number(listing.views || 0).toLocaleString('ar-YE')}</span>
+          {listing.auctionEnabled ? <span className="badge">⚡ مزاد</span> : null}
+        </div>
 
-          <div className="meta">
-            <span>📍 {listing.city || listing.locationLabel || 'غير محدد'}</span>
-            <span>⏱️ {formatRelative(listing.createdAt)}</span>
-            <span>👁️ {Number(listing.views || 0).toLocaleString('ar-YE')}</span>
-            {listing.auctionEnabled ? <span className="badge">⚡ مزاد</span> : null}
-          </div>
-
-          <div className="desc">{shortDesc}</div>
+        <div className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>
+          {shortDesc}
         </div>
       </div>
 
+      {/* تحسين للجوال */}
+      <div
+        style={{
+          display: 'none',
+        }}
+      />
       <style jsx>{`
-        .rowLink { text-decoration: none; color: inherit; display: block; }
-        .rowCard{
-          display:flex; gap:12px;
-          background:#fff;
-          border:1px solid rgba(0,0,0,.08);
-          border-radius:14px;
-          padding:12px;
-          transition:transform .15s ease, box-shadow .15s ease;
-        }
-        .rowCard:hover{ transform: translateY(-1px); box-shadow: 0 10px 22px rgba(0,0,0,.06); }
-        .thumb{ width:120px; height:120px; border-radius:12px; overflow:hidden; background:#f1f5f9; flex-shrink:0; }
-        .thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
-        .thumbFallback{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:1.8rem; opacity:.6; }
-        .body{ flex:1; min-width:0; display:flex; flex-direction:column; gap:8px; }
-        .top{ display:flex; gap:12px; justify-content:space-between; align-items:flex-start; }
-        .title{ font-weight:900; color:#0f172a; line-height:1.35; }
-        .price{ flex-shrink:0; }
-        .meta{ display:flex; gap:12px; flex-wrap:wrap; color:#64748b; font-size:.9rem; }
-        .badge{
-          background: rgba(59,130,246,.12);
-          border:1px solid rgba(59,130,246,.18);
-          color:#1d4ed8;
-          padding:2px 10px;
-          border-radius:999px;
-          font-weight:800;
-        }
-        .desc{ color:#475569; font-size:.92rem; line-height:1.6; }
-        @media (max-width: 640px){
-          .rowCard{ flex-direction:column; }
-          .thumb{ width:100%; height:180px; }
-          .top{ flex-direction:column; align-items:flex-start; }
+        @media (max-width: 640px) {
+          a.card {
+            flex-direction: column;
+          }
+          a.card > div:first-child {
+            width: 100% !important;
+            height: 180px !important;
+          }
         }
       `}</style>
     </Link>
@@ -112,6 +147,7 @@ function ListingRow({ listing }) {
 }
 
 export default function ListingsPage() {
+  const [view, setView] = useState('grid'); // grid | list | map
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -121,34 +157,42 @@ export default function ListingsPage() {
     setLoading(true);
     setErr('');
 
-    const qRef = query(
-      collection(db, 'listings'),
-      orderBy('createdAt', 'desc'),
-      limit(300)
-    );
+    // ✅ compat only (بدون modular)
+    let unsub = null;
 
-    const unsub = onSnapshot(
-      qRef,
-      (snap) => {
-        const data = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
-          .filter((x) => x.isActive !== false && x.hidden !== true);
-        setListings(data);
-        setLoading(false);
-      },
-      (e) => {
-        console.error(e);
-        setErr('تعذّر تحميل الإعلانات');
-        setLoading(false);
-      }
-    );
+    try {
+      const ref = db.collection('listings').orderBy('createdAt', 'desc').limit(300);
 
-    return () => unsub();
+      unsub = ref.onSnapshot(
+        (snap) => {
+          const data = snap.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter((x) => x.isActive !== false && x.hidden !== true);
+
+          setListings(data);
+          setLoading(false);
+        },
+        (e) => {
+          console.error(e);
+          setErr(e?.message || 'تعذّر تحميل الإعلانات');
+          setLoading(false);
+        }
+      );
+    } catch (e) {
+      console.error(e);
+      setErr('تعذّر الاتصال بقاعدة البيانات');
+      setLoading(false);
+    }
+
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
   }, []);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return listings;
+
     return listings.filter((l) => {
       const title = safeText(l.title).toLowerCase();
       const city = safeText(l.city).toLowerCase();
@@ -160,59 +204,88 @@ export default function ListingsPage() {
 
   return (
     <div dir="rtl">
-      <Header />
-
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '16px' }}>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between', flexWrap: 'wrap', alignItems: 'center' }}>
-          <h1 style={{ margin: 0 }}>جميع الإعلانات</h1>
-
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="ابحث في الإعلانات…"
-              style={{
-                padding: '10px 12px',
-                borderRadius: 12,
-                border: '1px solid rgba(0,0,0,.12)',
-                minWidth: 260
-              }}
-            />
-            <Link
-              href="/add"
-              style={{
-                padding: '10px 12px',
-                borderRadius: 12,
-                background: '#3b82f6',
-                color: '#fff',
-                fontWeight: 800,
-                textDecoration: 'none'
-              }}
-            >
-              ➕ أضف إعلان
-            </Link>
+      <div className="container" style={{ paddingTop: 14, paddingBottom: 24 }}>
+        {/* العنوان */}
+        <div className="card" style={{ padding: 16, marginBottom: 12 }}>
+          <div style={{ fontWeight: 900, fontSize: 20 }}>جميع الإعلانات</div>
+          <div className="muted" style={{ marginTop: 6 }}>
+            تصفّح كل الإعلانات مع بحث وعرض شبكة/قائمة/خريطة
           </div>
         </div>
 
-        <p style={{ color: '#64748b', marginTop: 8 }}>
-          النتائج: <b>{filtered.length}</b>
-        </p>
+        {/* شريط الأدوات */}
+        <div className="card" style={{ padding: 12, marginBottom: 12 }}>
+          <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className="row" style={{ gap: 8 }}>
+              <button className={`btn ${view === 'grid' ? 'btnPrimary' : ''}`} onClick={() => setView('grid')}>
+                ◼️ شبكة
+              </button>
+              <button className={`btn ${view === 'list' ? 'btnPrimary' : ''}`} onClick={() => setView('list')}>
+                ☰ قائمة
+              </button>
+              <button className={`btn ${view === 'map' ? 'btnPrimary' : ''}`} onClick={() => setView('map')}>
+                🗺️ خريطة
+              </button>
+            </div>
 
+            <input
+              className="input"
+              style={{ flex: 1, minWidth: 180 }}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="ابحث في الإعلانات…"
+            />
+
+            <Link className="btn btnPrimary" href="/add">
+              ➕ أضف إعلان
+            </Link>
+
+            <div className="muted" style={{ fontWeight: 900 }}>
+              {filtered.length} إعلان
+            </div>
+          </div>
+        </div>
+
+        {/* المحتوى */}
         {loading ? (
-          <div style={{ padding: 18, background: '#fff', borderRadius: 14, border: '1px solid rgba(0,0,0,.08)' }}>
-            جاري التحميل…
+          <div className="card" style={{ padding: 16 }}>
+            <div className="muted">جاري التحميل…</div>
           </div>
         ) : err ? (
-          <div style={{ padding: 18, background: '#fff', borderRadius: 14, border: '1px solid rgba(220,38,38,.25)', color: '#991b1b' }}>
-            {err}
+          <div className="card" style={{ padding: 16, border: '1px solid rgba(220,38,38,.25)' }}>
+            <div style={{ fontWeight: 900, color: '#991b1b' }}>⚠️ {err}</div>
           </div>
         ) : filtered.length === 0 ? (
-          <div style={{ padding: 18, background: '#fff', borderRadius: 14, border: '1px solid rgba(0,0,0,.08)' }}>
-            لا توجد إعلانات مطابقة.
+          <div className="card" style={{ padding: 16, textAlign: 'center' }}>
+            <div style={{ fontWeight: 900 }}>لا توجد نتائج مطابقة</div>
+            <div className="muted" style={{ marginTop: 6 }}>
+              جرّب كلمة بحث أخرى أو أضف إعلان جديد.
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <Link className="btn btnPrimary" href="/add">
+                ➕ أضف إعلان
+              </Link>
+            </div>
+          </div>
+        ) : view === 'map' ? (
+          <HomeMapView listings={filtered} />
+        ) : view === 'list' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {filtered.map((l) => (
+              <ListingRow key={l.id} listing={l} />
+            ))}
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10 }}>
-            {filtered.map((l) => <ListingRow key={l.id} listing={l} />)}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+              gap: 12,
+            }}
+          >
+            {filtered.map((l) => (
+              <ListingCard key={l.id} listing={l} />
+            ))}
           </div>
         )}
       </div>
