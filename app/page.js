@@ -7,8 +7,6 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import Price from '@/components/Price';
 import { db } from '@/lib/firebaseClient';
-import firebase from 'firebase/compat/app';
-import 'firebase/compat/firestore';
 import './home.css';
 
 // تحميل ديناميكي للخريطة (تجنب SSR لمشاكل Leaflet)
@@ -22,7 +20,20 @@ const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
   ),
 });
 
-// ✅ مفاتيح الأقسام الموحّدة (هذه هي المفاتيح التي نريدها في Firestore وفي كل الصفحات)
+// ==============================
+// ✅ Referral (Tracking) - FIXED
+// ==============================
+const STORAGE_CODE = 'sooq_ref_code';
+const STORAGE_SEEN_AT = 'sooq_ref_seenAt';
+
+function normalizeRefCode(v) {
+  return String(v || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .slice(0, 64);
+}
+
+// ✅ مفاتيح الأقسام الموحّدة
 const CATEGORY_CONFIG = [
   { key: 'all', label: 'الكل', icon: '📋', href: '/' },
 
@@ -40,11 +51,10 @@ const CATEGORY_CONFIG = [
   { key: 'maintenance', label: 'صيانة', icon: '🛠️', href: '/maintenance' },
   { key: 'furniture', label: 'أثاث', icon: '🛋️', href: '/furniture' },
 
-  // ✅ NEW: الأدوات المنزلية
+  // ✅ الأدوات المنزلية
   { key: 'home_tools', label: 'أدوات منزلية', icon: '🧹', href: '/home_tools' },
 
   { key: 'clothes', label: 'ملابس', icon: '👕', href: '/clothes' },
-
   { key: 'animals', label: 'حيوانات وطيور', icon: '🐑', href: '/animals' },
 
   { key: 'jobs', label: 'وظائف', icon: '💼', href: '/jobs' },
@@ -53,34 +63,19 @@ const CATEGORY_CONFIG = [
   { key: 'other', label: 'أخرى', icon: '📦', href: '/other' },
 ];
 
-// ✅ دوال مساعدة
 function safeText(v) {
   return typeof v === 'string' ? v : '';
 }
 
-// ✅ توحيد كود الإحالة
-function normalizeRefCode(v) {
-  const raw = String(v || '').trim();
-  if (!raw) return '';
-  // نخليها uppercase ونشيل أي أحرف غريبة (اختياري)
-  return raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 32);
-}
-
-// ✅ أهم دالة: توحيد اسم القسم مهما كان مكتوب
+// ✅ توحيد اسم القسم مهما كان مكتوب
 function normalizeCategoryKey(v) {
   const raw = String(v || '').trim();
   if (!raw) return '';
 
-  // موحّد إنجليزي
   const lowered = raw.toLowerCase();
 
-  // وحّد الشرطات/المسافات
-  const norm = lowered
-    .replace(/\s+/g, '_')
-    .replace(/-/g, '_')
-    .replace(/__+/g, '_');
+  const norm = lowered.replace(/\s+/g, '_').replace(/-/g, '_').replace(/__+/g, '_');
 
-  // خرائط تحويل للمفاتيح القديمة + العربي
   const map = {
     // real estate
     real_estate: 'realestate',
@@ -109,7 +104,7 @@ function normalizeCategoryKey(v) {
     // maintenance
     maintenance: 'maintenance',
 
-    // ✅ NEW: home tools
+    // ✅ home tools
     home_tools: 'home_tools',
     hometools: 'home_tools',
     'home tools': 'home_tools',
@@ -137,7 +132,7 @@ function normalizeCategoryKey(v) {
     اخرى: 'other',
     أخرى: 'other',
 
-    // ✅ NEW: أدوات منزلية
+    // ✅ أدوات منزلية
     أدوات_منزلية: 'home_tools',
     ادوات_منزلية: 'home_tools',
     'أدوات منزلية': 'home_tools',
@@ -182,6 +177,7 @@ function GridListingCard({ listing }) {
       <div className="listing-card grid-card">
         <div className="image-container">
           {img ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={img}
               alt={listing.title || 'صورة الإعلان'}
@@ -251,6 +247,7 @@ function ListListingCard({ listing }) {
       <div className="listing-card list-card">
         <div className="list-image-container">
           {img ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={img}
               alt={listing.title || 'صورة الإعلان'}
@@ -342,7 +339,9 @@ function SearchBar({ search, setSearch, suggestions }) {
     <div className="search-wrapper" ref={searchRef}>
       <div className="search-container">
         <div className="search-input-wrapper">
-          <span className="search-icon" aria-hidden="true">🔍</span>
+          <span className="search-icon" aria-hidden="true">
+            🔍
+          </span>
           <input
             ref={inputRef}
             className="search-input focus-ring"
@@ -375,7 +374,9 @@ function SearchBar({ search, setSearch, suggestions }) {
               role="option"
               aria-selected={search === s}
             >
-              <span className="suggestion-icon" aria-hidden="true">🔍</span>
+              <span className="suggestion-icon" aria-hidden="true">
+                🔍
+              </span>
               <span className="suggestion-text">{s}</span>
             </button>
           ))}
@@ -396,78 +397,40 @@ export default function HomePage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [viewMode, setViewMode] = useState('grid'); // grid | list | map
 
-  // ✅ 1) التقاط ref من الرابط + حفظه + تسجيل زيارة (مرة واحدة لكل جهاز لكل كود)
+  // ✅ التقاط ref من الرابط وتخزينه (FIXED - بدون IIFE غلط)
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const STORAGE_CODE = 'referral_code';
-    const CLICK_KEY_PREFIX = 'referral_click_logged_';
+    let fromUrl = '';
+    try {
+      const params = new URLSearchParams(window.location.search);
+      fromUrl = normalizeRefCode(params.get('ref'));
+    } catch {
+      fromUrl = '';
+    }
 
-    const params = new URLSearchParams(window.location.search);
-    const fromUrl = normalizeRefCode(params.get('ref'));
+    let stored = '';
+    try {
+      stored = window.localStorage.getItem(STORAGE_CODE) || '';
+    } catch {}
 
-    // لو جاء ref من الرابط: خزنه وخلي الرابط نظيف
+    const code = fromUrl || normalizeRefCode(stored);
+
+    if (code) {
+      try {
+        window.localStorage.setItem(STORAGE_CODE, code);
+        if (fromUrl) window.localStorage.setItem(STORAGE_SEEN_AT, String(Date.now()));
+      } catch {}
+    }
+
+    // تنظيف الرابط من ref بعد الحفظ (اختياري – يخلي الرابط نظيف)
     if (fromUrl) {
       try {
-        window.localStorage.setItem(STORAGE_CODE, fromUrl);
-      } catch {}
-
-      // نظف العنوان من ?ref=
-      try {
-        const clean = window.location.pathname + window.location.hash;
-        window.history.replaceState({}, '', clean);
+        const u = new URL(window.location.href);
+        u.searchParams.delete('ref');
+        window.history.replaceState({}, '', u.pathname + u.search + u.hash);
       } catch {}
     }
-
-    // الكود النهائي: من الرابط أو من التخزين
-    const code = fromUrl || normalizeRefCode(() => {
-      try {
-        return window.localStorage.getItem(STORAGE_CODE);
-      } catch {
-        return '';
-      }
-    }());
-
-    if (!code) return;
-
-    const loggedKey = `${CLICK_KEY_PREFIX}${code}`;
-
-    // منع تكرار الزيارة لنفس الجهاز لنفس الكود
-    try {
-      if (window.localStorage.getItem(loggedKey) === '1') return;
-      window.localStorage.setItem(loggedKey, '1');
-    } catch {
-      // لو التخزين ممنوع، ما نسوي تسجيل (أفضل من تكرار عشوائي)
-      return;
-    }
-
-    (async () => {
-      try {
-        const snap = await db
-          .collection('referral_links')
-          .where('code', '==', code)
-          .limit(1)
-          .get();
-
-        if (snap.empty) return;
-
-        const refDoc = snap.docs[0].ref;
-
-        await refDoc.set(
-          {
-            clicks: firebase.firestore.FieldValue.increment(1),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
-      } catch (e) {
-        console.error('Referral click tracking error:', e);
-        // لو فشل التسجيل، اسمح بالمحاولة مرة ثانية
-        try {
-          window.localStorage.removeItem(loggedKey);
-        } catch {}
-      }
-    })();
   }, []);
 
   // ✅ قراءة وضع العرض من التخزين
@@ -503,7 +466,9 @@ export default function HomePage() {
 
           if (withOrder && !triedFallback) {
             triedFallback = true;
-            try { if (unsub) unsub(); } catch {}
+            try {
+              if (unsub) unsub();
+            } catch {}
             subscribe(false);
             return;
           }
@@ -523,7 +488,9 @@ export default function HomePage() {
     }
 
     return () => {
-      try { if (unsub) unsub(); } catch {}
+      try {
+        if (unsub) unsub();
+      } catch {}
     };
   }, []);
 
@@ -627,7 +594,9 @@ export default function HomePage() {
                     role="tab"
                     aria-selected={isActive}
                   >
-                    <span className="category-button-icon" aria-hidden="true">{category.icon}</span>
+                    <span className="category-button-icon" aria-hidden="true">
+                      {category.icon}
+                    </span>
                     <span className="category-button-label">{category.label}</span>
                   </button>
                 );
@@ -645,7 +614,9 @@ export default function HomePage() {
                   aria-pressed={viewMode === 'grid'}
                   title="عرض شبكي"
                 >
-                  <span className="view-toggle-icon" aria-hidden="true">◼️◼️</span>
+                  <span className="view-toggle-icon" aria-hidden="true">
+                    ◼️◼️
+                  </span>
                   <span className="view-toggle-label">شبكة</span>
                 </button>
 
@@ -656,7 +627,9 @@ export default function HomePage() {
                   aria-pressed={viewMode === 'list'}
                   title="عرض قائمة"
                 >
-                  <span className="view-toggle-icon" aria-hidden="true">☰</span>
+                  <span className="view-toggle-icon" aria-hidden="true">
+                    ☰
+                  </span>
                   <span className="view-toggle-label">قائمة</span>
                 </button>
 
@@ -667,7 +640,9 @@ export default function HomePage() {
                   aria-pressed={viewMode === 'map'}
                   title="عرض خريطة"
                 >
-                  <span className="view-toggle-icon" aria-hidden="true">🗺️</span>
+                  <span className="view-toggle-icon" aria-hidden="true">
+                    🗺️
+                  </span>
                   <span className="view-toggle-label">خريطة</span>
                 </button>
               </div>
@@ -687,7 +662,9 @@ export default function HomePage() {
             </div>
           ) : error ? (
             <div className="error-container">
-              <div className="error-icon" aria-hidden="true">⚠️</div>
+              <div className="error-icon" aria-hidden="true">
+                ⚠️
+              </div>
               <h3>حدث خطأ</h3>
               <p>{error}</p>
               <button className="retry-button focus-ring" onClick={handleRetry} aria-label="إعادة المحاولة">
@@ -696,7 +673,9 @@ export default function HomePage() {
             </div>
           ) : filteredListings.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-icon" aria-hidden="true">📭</div>
+              <div className="empty-icon" aria-hidden="true">
+                📭
+              </div>
               <h3>لا توجد إعلانات</h3>
               <p>
                 {search || selectedCategory !== 'all'
@@ -733,20 +712,42 @@ export default function HomePage() {
         aria-label="إضافة إعلان جديد"
         title="أضف إعلان جديد"
       >
-        <span className="floating-add-icon" aria-hidden="true">➕</span>
+        <span className="floating-add-icon" aria-hidden="true">
+          ➕
+        </span>
         <span className="floating-add-text">أضف إعلان</span>
       </Link>
 
       <style jsx>{`
-        .hidden { display: none !important; }
-        .map-view { height: 500px; border-radius: 12px; overflow: hidden; margin-bottom: 2.5rem; }
-        .list-category-label { margin-right: 4px; }
-        .results-number { font-weight: 700; color: var(--color-primary-light); }
-        .view-toggle-label { font-size: 0.875rem; }
+        .hidden {
+          display: none !important;
+        }
+        .map-view {
+          height: 500px;
+          border-radius: 12px;
+          overflow: hidden;
+          margin-bottom: 2.5rem;
+        }
+        .list-category-label {
+          margin-right: 4px;
+        }
+        .results-number {
+          font-weight: 700;
+          color: var(--color-primary-light);
+        }
+        .view-toggle-label {
+          font-size: 0.875rem;
+        }
         @media (max-width: 768px) {
-          .map-view { height: 400px; }
-          .view-toggle-label { display: none; }
-          .view-toggle-button { padding: 0.5rem; }
+          .map-view {
+            height: 400px;
+          }
+          .view-toggle-label {
+            display: none;
+          }
+          .view-toggle-button {
+            padding: 0.5rem;
+          }
         }
       `}</style>
     </div>
