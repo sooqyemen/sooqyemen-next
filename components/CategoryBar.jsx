@@ -21,13 +21,16 @@ const ICONS = {
   other: '📦',
 };
 
+// توحيد أي مفاتيح قديمة إلى المعتمدة
 function normalizeSlug(slug) {
   const s = String(slug || '').trim();
+
   if (s === 'real_estate') return 'realestate';
   if (s === 'heavy-equipment') return 'heavy_equipment';
   if (s === 'heavyEquipment') return 'heavy_equipment';
   if (s === 'net') return 'networks';
   if (s === 'network') return 'networks';
+
   return s;
 }
 
@@ -53,6 +56,7 @@ export default function CategoryBar({
 
   return (
     <div className="categoryBarWrap">
+      {/* صف: الكل + تبديل العرض */}
       <div className="categoryBarTop">
         <button
           type="button"
@@ -73,6 +77,7 @@ export default function CategoryBar({
         </button>
       </div>
 
+      {/* سلايدر الأقسام */}
       <div className="categoryBarSlider" role="tablist" aria-label="الأقسام">
         {cleaned.map((cat) => {
           const isActive = activeSlug === cat.slug;
