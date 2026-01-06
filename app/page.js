@@ -1,11 +1,11 @@
 'use client';
-
 import { useEffect, useMemo, useState, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import Price from '@/components/Price';
 import { db } from '@/lib/firebaseClient';
-// ملاحظة: لم نعد نستورد './home.css' هنا لأنّ الاستيراد العام لملفات CSS يجب أن يكون في app/layout.js
+import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import './home.css';
 
 // تحميل ديناميكي للخريطة (تجنب SSR لمشاكل Leaflet)
 const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
@@ -82,10 +82,8 @@ function GridListingCard({ listing }) {
               className="listing-img"
               loading="lazy"
               onError={(e) => {
-                const el = e.currentTarget;
-                el.style.display = 'none';
-                const fallback = el.parentElement?.querySelector('.img-fallback');
-                if (fallback) fallback.style.display = 'flex';
+                e.target.style.display = 'none';
+                e.target.parentElement.querySelector('.img-fallback').style.display = 'flex';
               }}
             />
           ) : null}
@@ -93,7 +91,9 @@ function GridListingCard({ listing }) {
             {catObj?.icon || '🖼️'}
           </div>
 
-          {listing.auctionEnabled && <div className="auction-badge">⚡ مزاد</div>}
+          {listing.auctionEnabled && (
+            <div className="auction-badge">⚡ مزاد</div>
+          )}
         </div>
 
         <div className="card-content">
@@ -125,9 +125,7 @@ function GridListingCard({ listing }) {
           </div>
 
           <div className="listing-footer">
-            <span className="views-count">
-              👁️ {Number(listing.views || 0).toLocaleString('ar-YE')}
-            </span>
+            <span className="views-count">👁️ {Number(listing.views || 0).toLocaleString('ar-YE')}</span>
             <span className="time-ago">⏱️ {formatRelative(listing.createdAt)}</span>
           </div>
         </div>
@@ -155,10 +153,8 @@ function ListListingCard({ listing }) {
               className="list-img"
               loading="lazy"
               onError={(e) => {
-                const el = e.currentTarget;
-                el.style.display = 'none';
-                const fallback = el.parentElement?.querySelector('.list-img-fallback');
-                if (fallback) fallback.style.display = 'flex';
+                e.target.style.display = 'none';
+                e.target.parentElement.querySelector('.list-img-fallback').style.display = 'flex';
               }}
             />
           ) : null}
@@ -199,11 +195,11 @@ function ListListingCard({ listing }) {
           <p className="list-description">{shortDesc}</p>
 
           <div className="list-footer">
-            <span className="list-views">
-              👁️ {Number(listing.views || 0).toLocaleString('ar-YE')} مشاهدة
-            </span>
+            <span className="list-views">👁️ {Number(listing.views || 0).toLocaleString('ar-YE')} مشاهدة</span>
             <span className="list-time">⏱️ {formatRelative(listing.createdAt)}</span>
-            {listing.auctionEnabled && <span className="list-auction">⚡ مزاد نشط</span>}
+            {listing.auctionEnabled && (
+              <span className="list-auction">⚡ مزاد نشط</span>
+            )}
           </div>
         </div>
       </div>
@@ -219,7 +215,9 @@ function SearchBar({ search, setSearch, suggestions }) {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (searchRef.current && !searchRef.current.contains(e.target)) setOpen(false);
+      if (searchRef.current && !searchRef.current.contains(e.target)) {
+        setOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -244,9 +242,7 @@ function SearchBar({ search, setSearch, suggestions }) {
     <div className="search-wrapper" ref={searchRef}>
       <div className="search-container">
         <div className="search-input-wrapper">
-          <span className="search-icon" aria-hidden="true">
-            🔍
-          </span>
+          <span className="search-icon" aria-hidden="true">🔍</span>
           <input
             ref={inputRef}
             className="search-input focus-ring"
@@ -279,9 +275,7 @@ function SearchBar({ search, setSearch, suggestions }) {
               role="option"
               aria-selected={search === s}
             >
-              <span className="suggestion-icon" aria-hidden="true">
-                🔍
-              </span>
+              <span className="suggestion-icon" aria-hidden="true">🔍</span>
               <span className="suggestion-text">{s}</span>
             </button>
           ))}
@@ -301,15 +295,20 @@ export default function HomePage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [viewMode, setViewMode] = useState('grid'); // grid | list | map
 
-  // ✅ جلب الإعلانات من Firebase (Compat)
+  // ✅ جلب الإعلانات من Firebase
   useEffect(() => {
     setLoading(true);
     setError('');
 
     try {
-      const ref = db.collection('listings').orderBy('createdAt', 'desc').limit(100);
+      const listingsQuery = query(
+        collection(db, 'listings'),
+        orderBy('createdAt', 'desc'),
+        limit(100)
+      );
 
-      const unsubscribe = ref.onSnapshot(
+      const unsubscribe = onSnapshot(
+        listingsQuery,
         (snapshot) => {
           const data = snapshot.docs
             .map((doc) => ({ id: doc.id, ...doc.data() }))
@@ -372,7 +371,7 @@ export default function HomePage() {
       if (!q) return true;
 
       const title = safeText(listing.title).toLowerCase();
-      const city = safeText(listing.city).toLowerCase(); // ✅ إصلاح هنا
+      const city = safeText(liting.city).toLowerCase();
       const locationLabel = safeText(listing.locationLabel).toLowerCase();
       const description = safeText(listing.description).toLowerCase();
       const category = String(listing.category || '').toLowerCase();
@@ -396,6 +395,8 @@ export default function HomePage() {
 
   return (
     <div className="home-page" dir="rtl">
+      {/* ✅ لا يوجد Header هنا لأن الهيدر في layout */}
+
       <section className="hero-section" aria-label="القسم الرئيسي">
         <div className="hero-container">
           <div className="hero-content">
@@ -423,9 +424,7 @@ export default function HomePage() {
                     aria-selected={isActive}
                     aria-controls={`category-${category.key}`}
                   >
-                    <span className="category-button-icon" aria-hidden="true">
-                      {category.icon}
-                    </span>
+                    <span className="category-button-icon" aria-hidden="true">{category.icon}</span>
                     <span className="category-button-label">{category.label}</span>
                   </button>
                 );
@@ -443,9 +442,7 @@ export default function HomePage() {
                   aria-pressed={viewMode === 'grid'}
                   title="عرض شبكي"
                 >
-                  <span className="view-toggle-icon" aria-hidden="true">
-                    ◼️◼️
-                  </span>
+                  <span className="view-toggle-icon" aria-hidden="true">◼️◼️</span>
                   <span className="view-toggle-label">شبكة</span>
                 </button>
 
@@ -456,9 +453,7 @@ export default function HomePage() {
                   aria-pressed={viewMode === 'list'}
                   title="عرض قائمة"
                 >
-                  <span className="view-toggle-icon" aria-hidden="true">
-                    ☰
-                  </span>
+                  <span className="view-toggle-icon" aria-hidden="true">☰</span>
                   <span className="view-toggle-label">قائمة</span>
                 </button>
 
@@ -469,9 +464,7 @@ export default function HomePage() {
                   aria-pressed={viewMode === 'map'}
                   title="عرض خريطة"
                 >
-                  <span className="view-toggle-icon" aria-hidden="true">
-                    🗺️
-                  </span>
+                  <span className="view-toggle-icon" aria-hidden="true">🗺️</span>
                   <span className="view-toggle-label">خريطة</span>
                 </button>
               </div>
@@ -491,9 +484,7 @@ export default function HomePage() {
             </div>
           ) : error ? (
             <div className="error-container">
-              <div className="error-icon" aria-hidden="true">
-                ⚠️
-              </div>
+              <div className="error-icon" aria-hidden="true">⚠️</div>
               <h3>حدث خطأ</h3>
               <p>{error}</p>
               <button className="retry-button focus-ring" onClick={handleRetry} aria-label="إعادة المحاولة">
@@ -502,9 +493,7 @@ export default function HomePage() {
             </div>
           ) : filteredListings.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-icon" aria-hidden="true">
-                📭
-              </div>
+              <div className="empty-icon" aria-hidden="true">📭</div>
               <h3>لا توجد إعلانات</h3>
               <p>
                 {search || selectedCategory !== 'all'
@@ -535,43 +524,26 @@ export default function HomePage() {
         </div>
       </main>
 
-      <Link href="/add" className="floating-add-button focus-ring" aria-label="إضافة إعلان جديد" title="أضف إعلان جديد">
-        <span className="floating-add-icon" aria-hidden="true">
-          ➕
-        </span>
+      <Link
+        href="/add"
+        className="floating-add-button focus-ring"
+        aria-label="إضافة إعلان جديد"
+        title="أضف إعلان جديد"
+      >
+        <span className="floating-add-icon" aria-hidden="true">➕</span>
         <span className="floating-add-text">أضف إعلان</span>
       </Link>
 
       <style jsx>{`
-        .hidden {
-          display: none !important;
-        }
-        .map-view {
-          height: 500px;
-          border-radius: 12px;
-          overflow: hidden;
-          margin-bottom: 2.5rem;
-        }
-        .list-category-label {
-          margin-right: 4px;
-        }
-        .results-number {
-          font-weight: 700;
-          color: var(--color-primary-light);
-        }
-        .view-toggle-label {
-          font-size: 0.875rem;
-        }
+        .hidden { display: none !important; }
+        .map-view { height: 500px; border-radius: 12px; overflow: hidden; margin-bottom: 2.5rem; }
+        .list-category-label { margin-right: 4px; }
+        .results-number { font-weight: 700; color: var(--color-primary-light); }
+        .view-toggle-label { font-size: 0.875rem; }
         @media (max-width: 768px) {
-          .map-view {
-            height: 400px;
-          }
-          .view-toggle-label {
-            display: none;
-          }
-          .view-toggle-button {
-            padding: 0.5rem;
-          }
+          .map-view { height: 400px; }
+          .view-toggle-label { display: none; }
+          .view-toggle-button { padding: 0.5rem; }
         }
       `}</style>
     </div>
