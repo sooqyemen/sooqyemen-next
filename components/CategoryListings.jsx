@@ -12,6 +12,7 @@ export default function CategoryListings({ category, pageSize = 24 }) {
   const [error, setError] = useState('');
 
   const titleFromItem = (d) => d?.title || d?.name || 'إعلان';
+
   const firstImage = (d) => {
     const arr = d?.images || d?.photos || [];
     const v = Array.isArray(arr) && arr.length ? arr[0] : '';
@@ -38,7 +39,7 @@ export default function CategoryListings({ category, pageSize = 24 }) {
   };
 
   const queryBase = useMemo(() => {
-    // ملاحظة: لو ما عندك createdAt مرتب/موجود، احذف orderBy
+    // ملاحظة: يحتاج createdAt موجود + مفهرس
     return db
       .collection('listings')
       .where('category', '==', category)
