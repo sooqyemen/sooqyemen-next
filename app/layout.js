@@ -1,3 +1,5 @@
+// app/layout.js
+import 'leaflet/dist/leaflet.css';
 import './globals.css';
 import { AuthProvider } from '@/lib/useAuth';
 import Header from '@/components/Header';
