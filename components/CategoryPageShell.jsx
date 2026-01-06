@@ -2,18 +2,18 @@
 export default function CategoryPageShell({ title, description, children }) {
   return (
     <div dir="rtl">
-      <section className="hero-section" aria-label="عنوان القسم">
-        <div className="hero-container">
-          <div className="hero-content">
-            <h1 className="hero-title">{title}</h1>
-            {description ? <p className="hero-subtitle">{description}</p> : null}
-          </div>
+      <div className="container" style={{ paddingTop: 14 }}>
+        <div className="card" style={{ padding: 16, marginBottom: 12 }}>
+          <div style={{ fontWeight: 900, fontSize: 20 }}>{title}</div>
+          {description ? (
+            <div className="muted" style={{ marginTop: 6 }}>
+              {description}
+            </div>
+          ) : null}
         </div>
-      </section>
 
-      <main className="main-content" role="main">
-        <div className="container">{children}</div>
-      </main>
+        {children}
+      </div>
     </div>
   );
 }
