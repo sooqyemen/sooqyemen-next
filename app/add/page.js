@@ -12,22 +12,22 @@ const LocationPicker = dynamic(
   { ssr: false }
 );
 
-// ✅ الأقسام الافتراضية (تظهر لو فشل Firestore أو ما فيه أقسام)
+// ✅ الأقسام الافتراضية (مطابقة تمامًا لمفاتيح Firestore عندك)
 const DEFAULT_CATEGORIES = [
   { slug: 'cars', name: 'سيارات' },
-  { slug: 'real_estate', name: 'عقارات' },
-  { slug: 'mobiles', name: 'جوالات' },
-  { slug: 'jobs', name: 'وظائف' },
-  { slug: 'solar', name: 'طاقة شمسية' },
-  { slug: 'furniture', name: 'أثاث' },
-  { slug: 'clothes', name: 'ملابس' },            // ✅ جديد
-  { slug: 'motorcycles', name: 'دراجات نارية' }, // ✅ جديد
-  { slug: 'animals', name: 'حيوانات وطيور' },
-  { slug: 'networks', name: 'نت وشبكات' },
+  { slug: 'realestate', name: 'عقارات' },
   { slug: 'electronics', name: 'إلكترونيات' },
-  { slug: 'services', name: 'خدمات' },
+  { slug: 'motorcycles', name: 'دراجات نارية' },
+  { slug: 'heavy_equipment', name: 'معدات ثقيلة' },
+  { slug: 'solar', name: 'طاقة شمسية' },
+  { slug: 'networks', name: 'نت وشبكات' },
   { slug: 'maintenance', name: 'صيانة' },
-  { slug: 'other', name: 'أخرى / غير مصنف' },   // ✅ جديد
+  { slug: 'furniture', name: 'أثاث' },
+  { slug: 'clothes', name: 'ملابس' },
+  { slug: 'animals', name: 'حيوانات وطيور' },
+  { slug: 'jobs', name: 'وظائف' },
+  { slug: 'services', name: 'خدمات' },
+  { slug: 'other', name: 'أخرى / غير مصنف' },
 ];
 
 export default function AddPage() {
@@ -45,7 +45,7 @@ export default function AddPage() {
   const [currency, setCurrency] = useState('YER');
   const [price, setPrice] = useState('');
 
-  const [coords, setCoords] = useState(null);
+  const [coords, setCoords] = useState(null); // [lat, lng]
   const [locationLabel, setLocationLabel] = useState('');
 
   const [images, setImages] = useState([]);
@@ -70,7 +70,7 @@ export default function AddPage() {
           .map((d) => {
             const data = d.data() || {};
             return {
-              slug: d.id,
+              slug: d.id, // ✅ مفتاح القسم = id
               name: String(data.name || '').trim(),
               active: data.active,
             };
@@ -84,8 +84,7 @@ export default function AddPage() {
           setCats(arr);
           setCatsSource('firestore');
 
-          // ✅ لا تختار أول قسم تلقائيًا
-          // فقط إذا القسم الحالي غير موجود (وكان المستخدم مختاره سابقًا)
+          // ✅ إذا القسم الحالي غير موجود، صفّره
           if (category && !arr.some((x) => x.slug === category)) {
             setCategory('');
           }
@@ -105,7 +104,6 @@ export default function AddPage() {
         setCatsLoading(false);
         setCatsSource('fallback');
 
-        // ✅ لا تفرض اختيار افتراضي
         if (category && !DEFAULT_CATEGORIES.some((x) => x.slug === category)) {
           setCategory('');
         }
@@ -139,26 +137,12 @@ export default function AddPage() {
   // ✅ Helpers for rates (fallback إذا rates ما وصل)
   const getYerPerUSD = () => {
     const r = rates || {};
-    return Number(
-      r.USD ||
-      r.usd ||
-      r.usdRate ||
-      r.usdToYer ||
-      r.usd_yer ||
-      1632 // fallback
-    );
+    return Number(r.USD || r.usd || r.usdRate || r.usdToYer || r.usd_yer || 1632);
   };
 
   const getYerPerSAR = () => {
     const r = rates || {};
-    return Number(
-      r.SAR ||
-      r.sar ||
-      r.sarRate ||
-      r.sarToYer ||
-      r.sar_yer ||
-      425 // fallback
-    );
+    return Number(r.SAR || r.sar || r.sarRate || r.sarToYer || r.sar_yer || 425);
   };
 
   // ✅ التحقق من الأخطاء
@@ -237,7 +221,6 @@ export default function AddPage() {
     setBusy(true);
     try {
       const priceYER = toYER(price, currency, rates);
-
       const imageUrls = await uploadImages();
 
       const endAt = auctionEnabled
@@ -246,11 +229,16 @@ export default function AddPage() {
           )
         : null;
 
+      const lat = Array.isArray(coords) ? Number(coords[0]) : null;
+      const lng = Array.isArray(coords) ? Number(coords[1]) : null;
+
       await db.collection('listings').add({
         title: title.trim(),
         description: desc.trim(),
         city: city.trim(),
-        category,
+
+        // ✅ مهم جدًا: نخزّن key الإنجليزي المطابق لـ Firestore
+        category: String(category || '').trim(),
 
         phone: phone.trim() || null,
         isWhatsapp: !!isWhatsapp,
@@ -260,7 +248,11 @@ export default function AddPage() {
         originalCurrency: currency,
         currencyBase: 'YER',
 
-        coords: coords ? [coords[0], coords[1]] : null,
+        // ✅ نخزّن أكثر من صيغة لتضمن عمل الخريطة في كل مكان
+        coords: lat != null && lng != null ? [lat, lng] : null,
+        lat: lat != null ? lat : null,
+        lng: lng != null ? lng : null,
+
         locationLabel: locationLabel || null,
 
         images: imageUrls,
@@ -290,7 +282,7 @@ export default function AddPage() {
     }
   };
 
-  // ✅ السعر المحول (صحيح)
+  // ✅ السعر المحول
   const convertedPrice = useMemo(() => {
     if (!price || isNaN(price)) return null;
 
@@ -351,8 +343,6 @@ export default function AddPage() {
         <h1>إضافة إعلان جديد</h1>
         <p className="page-subtitle">أضف إعلانك ليجده الآلاف من المشترين</p>
       </div>
-
-
 
       <div className="form-tips">
         <div className="tip-item"><span className="tip-icon">📸</span><span>أضف صور واضحة وجودة عالية</span></div>
@@ -423,7 +413,9 @@ export default function AddPage() {
             </div>
 
             <div className="form-group">
-              <label className="form-label required">القسم</label>
+              <label className="form-label required">
+                القسم {catsSource === 'fallback' ? '(Fallback)' : ''}
+              </label>
               <select
                 className={`form-select ${errors.category ? 'error' : ''}`}
                 value={category}
@@ -707,7 +699,9 @@ export default function AddPage() {
         </div>
       </div>
 
+      {/* ✅ نفس CSS حقك كما هو */}
       <style jsx>{`
+        /* (نفس الـ CSS الذي أرسلته بدون تغيير) */
         .add-page-layout {
           min-height: calc(100vh - 60px);
           padding: 20px 16px;
