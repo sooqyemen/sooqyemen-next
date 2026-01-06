@@ -1,3 +1,4 @@
+// app/page.jsx
 'use client';
 
 import { useEffect, useMemo, useState, useRef } from 'react';
@@ -6,6 +7,8 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import Price from '@/components/Price';
 import { db } from '@/lib/firebaseClient';
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/firestore';
 import './home.css';
 
 // تحميل ديناميكي للخريطة (تجنب SSR لمشاكل Leaflet)
@@ -53,6 +56,14 @@ const CATEGORY_CONFIG = [
 // ✅ دوال مساعدة
 function safeText(v) {
   return typeof v === 'string' ? v : '';
+}
+
+// ✅ توحيد كود الإحالة
+function normalizeRefCode(v) {
+  const raw = String(v || '').trim();
+  if (!raw) return '';
+  // نخليها uppercase ونشيل أي أحرف غريبة (اختياري)
+  return raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 32);
 }
 
 // ✅ أهم دالة: توحيد اسم القسم مهما كان مكتوب
@@ -104,31 +115,31 @@ function normalizeCategoryKey(v) {
     'home tools': 'home_tools',
 
     // arabic labels
-    'سيارات': 'cars',
-    'عقارات': 'realestate',
-    'جوالات': 'phones',
-    'إلكترونيات': 'electronics',
-    'الكترونيات': 'electronics',
-    'دراجات_نارية': 'motorcycles',
-    'دراجات': 'motorcycles',
-    'معدات_ثقيلة': 'heavy_equipment',
-    'طاقة_شمسية': 'solar',
-    'نت_وشبكات': 'networks',
-    'نت_و_شبكات': 'networks',
-    'صيانة': 'maintenance',
-    'أثاث': 'furniture',
-    'اثاث': 'furniture',
-    'ملابس': 'clothes',
-    'حيوانات_وطيور': 'animals',
-    'حيوانات': 'animals',
-    'وظائف': 'jobs',
-    'خدمات': 'services',
-    'اخرى': 'other',
-    'أخرى': 'other',
+    سيارات: 'cars',
+    عقارات: 'realestate',
+    جوالات: 'phones',
+    إلكترونيات: 'electronics',
+    الكترونيات: 'electronics',
+    دراجات_نارية: 'motorcycles',
+    دراجات: 'motorcycles',
+    معدات_ثقيلة: 'heavy_equipment',
+    طاقة_شمسية: 'solar',
+    نت_وشبكات: 'networks',
+    نت_و_شبكات: 'networks',
+    صيانة: 'maintenance',
+    أثاث: 'furniture',
+    اثاث: 'furniture',
+    ملابس: 'clothes',
+    حيوانات_وطيور: 'animals',
+    حيوانات: 'animals',
+    وظائف: 'jobs',
+    خدمات: 'services',
+    اخرى: 'other',
+    أخرى: 'other',
 
     // ✅ NEW: أدوات منزلية
-    'أدوات_منزلية': 'home_tools',
-    'ادوات_منزلية': 'home_tools',
+    أدوات_منزلية: 'home_tools',
+    ادوات_منزلية: 'home_tools',
     'أدوات منزلية': 'home_tools',
     'ادوات منزلية': 'home_tools',
   };
@@ -385,6 +396,80 @@ export default function HomePage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [viewMode, setViewMode] = useState('grid'); // grid | list | map
 
+  // ✅ 1) التقاط ref من الرابط + حفظه + تسجيل زيارة (مرة واحدة لكل جهاز لكل كود)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const STORAGE_CODE = 'referral_code';
+    const CLICK_KEY_PREFIX = 'referral_click_logged_';
+
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = normalizeRefCode(params.get('ref'));
+
+    // لو جاء ref من الرابط: خزنه وخلي الرابط نظيف
+    if (fromUrl) {
+      try {
+        window.localStorage.setItem(STORAGE_CODE, fromUrl);
+      } catch {}
+
+      // نظف العنوان من ?ref=
+      try {
+        const clean = window.location.pathname + window.location.hash;
+        window.history.replaceState({}, '', clean);
+      } catch {}
+    }
+
+    // الكود النهائي: من الرابط أو من التخزين
+    const code = fromUrl || normalizeRefCode(() => {
+      try {
+        return window.localStorage.getItem(STORAGE_CODE);
+      } catch {
+        return '';
+      }
+    }());
+
+    if (!code) return;
+
+    const loggedKey = `${CLICK_KEY_PREFIX}${code}`;
+
+    // منع تكرار الزيارة لنفس الجهاز لنفس الكود
+    try {
+      if (window.localStorage.getItem(loggedKey) === '1') return;
+      window.localStorage.setItem(loggedKey, '1');
+    } catch {
+      // لو التخزين ممنوع، ما نسوي تسجيل (أفضل من تكرار عشوائي)
+      return;
+    }
+
+    (async () => {
+      try {
+        const snap = await db
+          .collection('referral_links')
+          .where('code', '==', code)
+          .limit(1)
+          .get();
+
+        if (snap.empty) return;
+
+        const refDoc = snap.docs[0].ref;
+
+        await refDoc.set(
+          {
+            clicks: firebase.firestore.FieldValue.increment(1),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      } catch (e) {
+        console.error('Referral click tracking error:', e);
+        // لو فشل التسجيل، اسمح بالمحاولة مرة ثانية
+        try {
+          window.localStorage.removeItem(loggedKey);
+        } catch {}
+      }
+    })();
+  }, []);
+
   // ✅ قراءة وضع العرض من التخزين
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -416,7 +501,6 @@ export default function HomePage() {
         (err) => {
           console.error('خطأ في جلب الإعلانات:', err);
 
-          // ✅ fallback: لو orderBy سبب مشكلة لأي سبب، جرّب بدون orderBy
           if (withOrder && !triedFallback) {
             triedFallback = true;
             try { if (unsub) unsub(); } catch {}
@@ -480,7 +564,7 @@ export default function HomePage() {
     return Array.from(results).slice(0, 8);
   }, [search, listings]);
 
-  // ✅ فلترة الإعلانات (تستخدم normalizeCategoryKey عشان تظهر حتى لو category قديم)
+  // ✅ فلترة الإعلانات
   const filteredListings = useMemo(() => {
     const q = search.trim().toLowerCase();
     const catSelected = normalizeCategoryKey(selectedCategory || 'all');
