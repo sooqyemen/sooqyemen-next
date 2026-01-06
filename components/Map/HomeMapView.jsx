@@ -3,10 +3,10 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
-// ✅ Fix Leaflet default icon paths (Client only)
+// Fix Leaflet default icon paths (Next.js)
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -19,8 +19,9 @@ const YEMEN_BOUNDS = [
   [19.5, 54.7],
 ];
 
-const DEFAULT_CENTER = [15.3694, 44.191];
+const DEFAULT_CENTER = [15.3694, 44.1910];
 
+// LocalStorage key
 const SEEN_KEY = 'sooq_seen_listings_v1';
 
 function readSeen() {
@@ -40,21 +41,27 @@ function writeSeen(set) {
 }
 
 function normalizeCoords(listing) {
+  // 1) coords: [lat,lng]
   if (Array.isArray(listing?.coords) && listing.coords.length === 2) {
     const lat = Number(listing.coords[0]);
     const lng = Number(listing.coords[1]);
     if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
   }
+
+  // 2) coords: {lat,lng}
   if (listing?.coords?.lat != null && listing?.coords?.lng != null) {
     const lat = Number(listing.coords.lat);
     const lng = Number(listing.coords.lng);
     if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
   }
+
+  // 3) top-level lat/lng (important for old docs)
   if (listing?.lat != null && listing?.lng != null) {
     const lat = Number(listing.lat);
     const lng = Number(listing.lng);
     if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
   }
+
   return null;
 }
 
@@ -67,9 +74,9 @@ function inYemen([lat, lng]) {
   );
 }
 
+// Icons
 const iconNew = new L.Icon({
-  iconUrl:
-    'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -78,8 +85,7 @@ const iconNew = new L.Icon({
 });
 
 const iconSeen = new L.Icon({
-  iconUrl:
-    'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-grey.png',
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-grey.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -93,24 +99,59 @@ function fmtYER(v) {
   return new Intl.NumberFormat('ar-YE').format(Math.round(n)) + ' ريال';
 }
 
+function MapFixer({ points }) {
+  const map = useMap();
+
+  // ✅ إصلاح المقاس بعد الظهور (مهم عند تبديل شبكة/قائمة/خريطة)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      map.invalidateSize(true);
+    }, 150);
+
+    const onResize = () => map.invalidateSize(true);
+    window.addEventListener('resize', onResize);
+
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [map]);
+
+  // ✅ لو فيه نقاط: زوّم على إعلانات القسم
+  useEffect(() => {
+    if (points?.length) {
+      const bounds = L.latLngBounds(points.map((p) => p._coords));
+      map.fitBounds(bounds, { padding: [24, 24], maxZoom: 12 });
+    } else {
+      map.setView(DEFAULT_CENTER, 7);
+    }
+  }, [map, points]);
+
+  return null;
+}
+
 export default function HomeMapView({ listings = [] }) {
   const [seen, setSeen] = useState(() => new Set());
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     setSeen(readSeen());
   }, []);
 
+  useEffect(() => {
+    const calc = () => setIsMobile(window.innerWidth <= 768);
+    calc();
+    window.addEventListener('resize', calc);
+    return () => window.removeEventListener('resize', calc);
+  }, []);
+
   const points = useMemo(() => {
     return (Array.isArray(listings) ? listings : [])
       .map((l) => {
-        const coords = normalizeCoords(l);
-        if (!coords) return null;
-        if (!inYemen(coords)) return null;
-
-        const id = String(l?.id || l?.docId || '');
-        if (!id) return null;
-
-        return { ...l, id, _coords: coords };
+        const c = normalizeCoords(l);
+        if (!c) return null;
+        if (!inYemen(c)) return null;
+        return { ...l, _coords: c };
       })
       .filter(Boolean);
   }, [listings]);
@@ -126,10 +167,19 @@ export default function HomeMapView({ listings = [] }) {
   };
 
   return (
-    <div className="card mapCard">
-      <div className="mapTitle">🗺️ عرض الإعلانات على الخريطة</div>
+    <div className="card" style={{ padding: 12 }}>
+      <div style={{ fontWeight: 900, marginBottom: 10 }}>🗺️ عرض الإعلانات على الخريطة</div>
 
-      <div className="mapWrap">
+      <div
+        style={{
+          width: '100%',
+          height: isMobile ? 420 : 520,
+          minHeight: isMobile ? 420 : 520,
+          borderRadius: 14,
+          overflow: 'hidden',
+          border: '1px solid #e2e8f0',
+        }}
+      >
         <MapContainer
           center={DEFAULT_CENTER}
           zoom={7}
@@ -138,8 +188,10 @@ export default function HomeMapView({ listings = [] }) {
           style={{ height: '100%', width: '100%' }}
           maxBounds={YEMEN_BOUNDS}
           maxBoundsViscosity={1.0}
-          scrollWheelZoom
+          scrollWheelZoom={!isMobile}
         >
+          <MapFixer points={points} />
+
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution="&copy; OpenStreetMap contributors"
@@ -153,7 +205,7 @@ export default function HomeMapView({ listings = [] }) {
             return (
               <Marker key={l.id} position={l._coords} icon={isSeen ? iconSeen : iconNew}>
                 <Popup>
-                  <div style={{ width: 230 }} dir="rtl">
+                  <div style={{ width: 230 }}>
                     {img ? (
                       <img
                         src={img}
@@ -165,11 +217,10 @@ export default function HomeMapView({ listings = [] }) {
                           borderRadius: 10,
                           marginBottom: 8,
                         }}
-                        loading="lazy"
                       />
                     ) : null}
 
-                    <div style={{ fontWeight: 900, marginBottom: 4 }}>
+                    <div style={{ fontWeight: 800, marginBottom: 4 }}>
                       {l.title || 'بدون عنوان'}
                     </div>
 
@@ -177,7 +228,9 @@ export default function HomeMapView({ listings = [] }) {
                       📍 {l.city || l.locationLabel || 'غير محدد'}
                     </div>
 
-                    <div style={{ fontWeight: 900, marginBottom: 10 }}>💰 {fmtYER(price)}</div>
+                    <div style={{ fontWeight: 900, marginBottom: 10 }}>
+                      💰 {fmtYER(price)}
+                    </div>
 
                     <Link
                       href={`/listing/${l.id}`}
@@ -191,7 +244,7 @@ export default function HomeMapView({ listings = [] }) {
                         background: isSeen ? '#64748b' : '#2563eb',
                         color: '#fff',
                         textDecoration: 'none',
-                        fontWeight: 800,
+                        fontWeight: 700,
                         fontSize: 13,
                       }}
                     >
@@ -209,39 +262,11 @@ export default function HomeMapView({ listings = [] }) {
         </MapContainer>
       </div>
 
-      <div className="muted mapNote">
+      <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
         {points.length
           ? `✅ الظاهر على الخريطة: ${points.length} إعلان (فقط اللي له موقع داخل اليمن)`
           : 'لا توجد إعلانات لها موقع الآن—أضف موقع أثناء نشر الإعلان ليظهر هنا.'}
       </div>
-
-      <style jsx>{`
-        .mapCard {
-          padding: 12px;
-        }
-        .mapTitle {
-          font-weight: 900;
-          margin-bottom: 10px;
-        }
-        .mapWrap {
-          width: 100%;
-          height: 520px;
-          min-height: 520px;
-          border-radius: 14px;
-          overflow: hidden;
-          border: 1px solid #e2e8f0;
-        }
-        .mapNote {
-          font-size: 12px;
-          margin-top: 10px;
-        }
-        @media (max-width: 768px) {
-          .mapWrap {
-            height: 420px;
-            min-height: 420px;
-          }
-        }
-      `}</style>
     </div>
   );
 }
