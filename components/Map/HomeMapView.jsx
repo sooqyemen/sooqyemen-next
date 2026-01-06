@@ -3,8 +3,9 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 // Fix Leaflet default icon paths (Next.js)
 delete L.Icon.Default.prototype._getIconUrl;
@@ -41,27 +42,16 @@ function writeSeen(set) {
 }
 
 function normalizeCoords(listing) {
-  // 1) coords: [lat,lng]
   if (Array.isArray(listing?.coords) && listing.coords.length === 2) {
     const lat = Number(listing.coords[0]);
     const lng = Number(listing.coords[1]);
     if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
   }
-
-  // 2) coords: {lat,lng}
   if (listing?.coords?.lat != null && listing?.coords?.lng != null) {
     const lat = Number(listing.coords.lat);
     const lng = Number(listing.coords.lng);
     if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
   }
-
-  // 3) top-level lat/lng (important for old docs)
-  if (listing?.lat != null && listing?.lng != null) {
-    const lat = Number(listing.lat);
-    const lng = Number(listing.lng);
-    if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
-  }
-
   return null;
 }
 
@@ -74,7 +64,7 @@ function inYemen([lat, lng]) {
   );
 }
 
-// Icons
+// Icons: default (new) + seen (visited)
 const iconNew = new L.Icon({
   iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
@@ -93,60 +83,47 @@ const iconSeen = new L.Icon({
   shadowSize: [41, 41],
 });
 
+// Small formatter (YER)
 function fmtYER(v) {
   const n = Number(v || 0);
   if (!Number.isFinite(n)) return '—';
   return new Intl.NumberFormat('ar-YE').format(Math.round(n)) + ' ريال';
 }
 
-function MapFixer({ points }) {
-  const map = useMap();
-
-  // ✅ إصلاح المقاس بعد الظهور (مهم عند تبديل شبكة/قائمة/خريطة)
-  useEffect(() => {
-    const t = setTimeout(() => {
-      map.invalidateSize(true);
-    }, 150);
-
-    const onResize = () => map.invalidateSize(true);
-    window.addEventListener('resize', onResize);
-
-    return () => {
-      clearTimeout(t);
-      window.removeEventListener('resize', onResize);
-    };
-  }, [map]);
-
-  // ✅ لو فيه نقاط: زوّم على إعلانات القسم
-  useEffect(() => {
-    if (points?.length) {
-      const bounds = L.latLngBounds(points.map((p) => p._coords));
-      map.fitBounds(bounds, { padding: [24, 24], maxZoom: 12 });
-    } else {
-      map.setView(DEFAULT_CENTER, 7);
-    }
-  }, [map, points]);
-
-  return null;
-}
-
 export default function HomeMapView({ listings = [] }) {
   const [seen, setSeen] = useState(() => new Set());
-  const [isMobile, setIsMobile] = useState(false);
+  const [map, setMap] = useState(null);
 
   useEffect(() => {
     setSeen(readSeen());
   }, []);
 
+  // ✅ إصلاح: invalidateSize عشان الخريطة تظهر بكامل المساحة بعد الرندر/التبديل
   useEffect(() => {
-    const calc = () => setIsMobile(window.innerWidth <= 768);
-    calc();
-    window.addEventListener('resize', calc);
-    return () => window.removeEventListener('resize', calc);
-  }, []);
+    if (!map) return;
+
+    const tick = () => {
+      try {
+        map.invalidateSize();
+      } catch {}
+    };
+
+    // أول مرة + بعد شوية (يحمي من بطء الأجهزة/التبديل)
+    const t1 = setTimeout(tick, 0);
+    const t2 = setTimeout(tick, 200);
+
+    // عند تغيير حجم الشاشة
+    window.addEventListener('resize', tick);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener('resize', tick);
+    };
+  }, [map]);
 
   const points = useMemo(() => {
-    return (Array.isArray(listings) ? listings : [])
+    return listings
       .map((l) => {
         const c = normalizeCoords(l);
         if (!c) return null;
@@ -173,14 +150,16 @@ export default function HomeMapView({ listings = [] }) {
       <div
         style={{
           width: '100%',
-          height: isMobile ? 420 : 520,
-          minHeight: isMobile ? 420 : 520,
+          // ✅ ارتفاع مرن للجوال والديسكتوب بدون styled-jsx
+          height: 'min(520px, 70vh)',
+          minHeight: 360,
           borderRadius: 14,
           overflow: 'hidden',
           border: '1px solid #e2e8f0',
         }}
       >
         <MapContainer
+          whenCreated={setMap}
           center={DEFAULT_CENTER}
           zoom={7}
           minZoom={6}
@@ -188,10 +167,8 @@ export default function HomeMapView({ listings = [] }) {
           style={{ height: '100%', width: '100%' }}
           maxBounds={YEMEN_BOUNDS}
           maxBoundsViscosity={1.0}
-          scrollWheelZoom={!isMobile}
+          scrollWheelZoom
         >
-          <MapFixer points={points} />
-
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution="&copy; OpenStreetMap contributors"
@@ -228,9 +205,7 @@ export default function HomeMapView({ listings = [] }) {
                       📍 {l.city || l.locationLabel || 'غير محدد'}
                     </div>
 
-                    <div style={{ fontWeight: 900, marginBottom: 10 }}>
-                      💰 {fmtYER(price)}
-                    </div>
+                    <div style={{ fontWeight: 900, marginBottom: 10 }}>💰 {fmtYER(price)}</div>
 
                     <Link
                       href={`/listing/${l.id}`}
