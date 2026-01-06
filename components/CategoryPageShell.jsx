@@ -1,212 +1,207 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { db, firebase } from '@/lib/firebaseClient';
-import { useAuth } from '@/lib/useAuth';
+import { db } from '@/lib/firebaseClient';
+import Price from '@/components/Price';
 
-const DEMO_PHONE = '770991885';
+function norm(v) {
+  return String(v || '').trim().toLowerCase();
+}
 
-export default function SeedDemoPage() {
-  const { user, loading } = useAuth();
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
+function safeText(v) {
+  return typeof v === 'string' ? v : '';
+}
 
-  const demoListings = useMemo(() => {
-    const now = Date.now();
+function formatRelative(ts) {
+  try {
+    const d = ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null;
+    if (!d || Number.isNaN(d.getTime())) return 'قبل قليل';
 
-    return [
-      {
-        title: 'تجريبي: تويوتا كامري 2012 نظيفة جداً',
-        description:
-          '⚠️ إعلان تجريبي مرتبط بحساب المدير.\nمكينة ممتازة - قير ممتاز - مكيف شغال.\nملاحظة: هذا الإعلان للتجربة فقط.',
-        city: 'صنعاء',
-        category: 'cars',
-        locationLabel: 'صنعاء - التحرير',
-        coords: [15.3694, 44.1910],
-        images: [
-          'https://placehold.co/900x650?text=DEMO+CAMRY+1',
-          'https://placehold.co/900x650?text=DEMO+CAMRY+2',
-        ],
-        originalCurrency: 'YER',
-        originalPrice: 3800000,
-        priceYER: 3800000,
-        auctionEnabled: false,
-      },
-      {
-        title: 'تجريبي: تويوتا هايلوكس 2015 دبل (نظيف)',
-        description:
-          '⚠️ إعلان تجريبي مرتبط بحساب المدير.\nدبل - مناسب للخطوط.\nملاحظة: هذا الإعلان للتجربة فقط.',
-        city: 'عدن',
-        category: 'cars',
-        locationLabel: 'عدن - المنصورة',
-        coords: [12.8037, 45.0350],
-        images: [
-          'https://placehold.co/900x650?text=DEMO+HILUX+1',
-          'https://placehold.co/900x650?text=DEMO+HILUX+2',
-        ],
-        originalCurrency: 'YER',
-        originalPrice: 9200000,
-        priceYER: 9200000,
-        auctionEnabled: true,
-        auctionMinutes: 90,
-      },
-      {
-        title: 'تجريبي: تويوتا كورولا 2008 اقتصادي',
-        description:
-          '⚠️ إعلان تجريبي مرتبط بحساب المدير.\nاقتصادي - مناسب للاستخدام اليومي.\nملاحظة: هذا الإعلان للتجربة فقط.',
-        city: 'تعز',
-        category: 'cars',
-        locationLabel: 'تعز - التحرير',
-        coords: [13.5795, 44.0209],
-        images: [
-          'https://placehold.co/900x650?text=DEMO+COROLLA+1',
-          'https://placehold.co/900x650?text=DEMO+COROLLA+2',
-        ],
-        originalCurrency: 'YER',
-        originalPrice: 2600000,
-        priceYER: 2600000,
-        auctionEnabled: false,
-      },
-      {
-        title: 'تجريبي: هيونداي سنتافي 2016 فل كامل',
-        description:
-          '⚠️ إعلان تجريبي مرتبط بحساب المدير.\nفل كامل - نظيفة.\nملاحظة: هذا الإعلان للتجربة فقط.',
-        city: 'إب',
-        category: 'cars',
-        locationLabel: 'إب - شارع العدين',
-        coords: [13.9667, 44.1833],
-        images: [
-          'https://placehold.co/900x650?text=DEMO+SANTAFE+1',
-          'https://placehold.co/900x650?text=DEMO+SANTAFE+2',
-        ],
-        originalCurrency: 'YER',
-        originalPrice: 11500000,
-        priceYER: 11500000,
-        auctionEnabled: false,
-      },
-    ].map((x) => {
-      const auctionEnabled = !!x.auctionEnabled;
-      const minutes = Number(x.auctionMinutes || 60);
+    const now = new Date();
+    const diff = now - d;
+    const mins = Math.floor(diff / 60000);
+    const hrs = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
 
-      return {
-        title: x.title,
-        description: x.description,
-        city: x.city,
-        category: x.category,
-
-        phone: DEMO_PHONE,
-        isWhatsapp: true,
-
-        // عملات
-        priceYER: Number(x.priceYER || 0),
-        originalPrice: Number(x.originalPrice || 0),
-        originalCurrency: x.originalCurrency || 'YER',
-        currencyBase: 'YER',
-
-        coords: Array.isArray(x.coords) ? x.coords : null,
-        locationLabel: x.locationLabel || null,
-
-        images: Array.isArray(x.images) ? x.images : [],
-
-        // ربط بالمدير الحالي (عضوية المدير)
-        userId: user?.uid || null,
-        userEmail: user?.email || null,
-        userName: user?.displayName || 'Admin',
-
-        views: 0,
-        likes: 0,
-        isActive: true,
-        hidden: false,
-
-        // مزاد
-        auctionEnabled,
-        auctionEndAt: auctionEnabled
-          ? firebase.firestore.Timestamp.fromMillis(now + Math.max(1, minutes) * 60 * 1000)
-          : null,
-        currentBidYER: auctionEnabled ? Number(x.priceYER || 0) : null,
-
-        // تمييز تجريبي
-        isDemo: true,
-
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      };
-    });
-  }, [user]);
-
-  const createDemo = async () => {
-    setMsg('');
-    if (!user) {
-      setMsg('لازم تسجل دخول بحساب المدير أولاً.');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      const col = db.collection('listings');
-      for (const item of demoListings) {
-        await col.add(item);
-      }
-      setMsg('✅ تم إنشاء 4 إعلانات تجريبية بنجاح. افتح قسم السيارات وتأكد.');
-    } catch (e) {
-      console.error(e);
-      setMsg(`❌ فشل إنشاء الإعلانات: ${e?.message || 'Unknown error'}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="container" style={{ padding: 16 }}>
-        جاري التحميل...
-      </div>
-    );
+    if (mins <= 1) return 'الآن';
+    if (mins < 60) return `قبل ${mins} دقيقة`;
+    if (hrs < 24) return `قبل ${hrs} ساعة`;
+    if (days < 7) return `قبل ${days} يوم`;
+    if (days < 30) return `قبل ${Math.floor(days / 7)} أسبوع`;
+    return d.toLocaleDateString('ar-YE');
+  } catch {
+    return 'قبل قليل';
   }
+}
+
+function ListingCard({ listing }) {
+  const img = (Array.isArray(listing.images) && listing.images[0]) || null;
+  const title = listing.title || 'بدون عنوان';
+  const city = listing.city || listing.locationLabel || 'غير محدد';
+  const desc = safeText(listing.description).trim();
+  const shortDesc = desc.length > 90 ? `${desc.slice(0, 90)}...` : desc || '—';
 
   return (
-    <div dir="rtl" className="container" style={{ padding: 16 }}>
-      <div className="card" style={{ padding: 16 }}>
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>إعلانات تجريبية (سيارات)</h1>
-        <p className="muted" style={{ marginTop: 8, lineHeight: 1.7 }}>
-          هذه الصفحة تنشئ 4 إعلانات سيارات تجريبية في <b>listings</b> مرتبطة بحساب المدير الحالي.
-        </p>
+    <Link href={`/listing/${listing.id}`} className="card-link">
+      <div className="card" style={{ overflow: 'hidden' }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
+          <div
+            style={{
+              width: 110,
+              height: 90,
+              borderRadius: 10,
+              overflow: 'hidden',
+              flexShrink: 0,
+              background: '#f3f4f6',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 22,
+            }}
+          >
+            {img ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={img}
+                alt={title}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                loading="lazy"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            ) : (
+              '🖼️'
+            )}
+          </div>
 
-        <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button className="btnPrimary" onClick={createDemo} disabled={busy || !user}>
-            {busy ? 'جاري الإنشاء...' : 'إنشاء 4 إعلانات تجريبية'}
-          </button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 800, marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {title}
+            </div>
 
-          <Link className="btn" href="/cars">
-            فتح قسم السيارات
-          </Link>
+            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>
+              📍 {city}
+            </div>
 
-          <Link className="btn" href="/">
-            العودة للرئيسية
-          </Link>
+            <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
+              {shortDesc}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <div>
+                <Price
+                  priceYER={listing.currentBidYER || listing.priceYER || 0}
+                  originalPrice={listing.originalPrice}
+                  originalCurrency={listing.originalCurrency}
+                  showCurrency={true}
+                />
+              </div>
+
+              <div className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                ⏱️ {formatRelative(listing.createdAt)}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+export default function CategoryPageShell({
+  title = 'قسم',
+  description = '',
+  slug = '',
+  categoryKeys = [], // مثال: ['electronics'] أو ['mobiles','phones']
+}) {
+  const [listings, setListings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setLoading(true);
+    setError('');
+
+    try {
+      // ✅ نفس فكرة الهوم: نجلب آخر 300 إعلان ثم نفلتر محلياً (بدون where/index)
+      const ref = db.collection('listings').orderBy('createdAt', 'desc').limit(300);
+
+      const unsub = ref.onSnapshot(
+        (snap) => {
+          const data = snap.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter((x) => x.isActive !== false && x.hidden !== true);
+
+          setListings(data);
+          setLoading(false);
+        },
+        (err) => {
+          console.error('Category fetch error:', err);
+          setError(err?.message || 'حدث خطأ في جلب الإعلانات');
+          setLoading(false);
+        }
+      );
+
+      return () => unsub();
+    } catch (e) {
+      console.error('Fatal category fetch error:', e);
+      setError('تعذّر الاتصال بقاعدة البيانات');
+      setLoading(false);
+    }
+  }, []);
+
+  const keys = useMemo(() => {
+    const arr = Array.isArray(categoryKeys) ? categoryKeys : [categoryKeys];
+    return arr.map(norm).filter(Boolean);
+  }, [categoryKeys]);
+
+  const filtered = useMemo(() => {
+    if (!keys.length) return listings;
+    return listings.filter((l) => keys.includes(norm(l.category)));
+  }, [listings, keys]);
+
+  return (
+    <div className="container" style={{ padding: '18px 12px' }} dir="rtl">
+      <div className="card" style={{ padding: 16, marginBottom: 12 }}>
+        <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
+          <Link href="/" className="muted">الرئيسية</Link>
+          <span> / </span>
+          <span>{slug || title}</span>
         </div>
 
-        {msg ? (
-          <div style={{ marginTop: 12, padding: 10, borderRadius: 10, border: '1px solid rgba(0,0,0,.08)' }}>
-            {msg}
-          </div>
-        ) : null}
+        <h1 style={{ margin: 0, fontSize: 26, fontWeight: 900 }}>{title}</h1>
+        {description ? <p className="muted" style={{ margin: '8px 0 0' }}>{description}</p> : null}
+
+        <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>
+          العدد: <b>{filtered.length}</b> إعلان
+        </div>
       </div>
 
-      <style jsx>{`
-        .btn {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          padding: 10px 12px;
-          border-radius: 12px;
-          border: 1px solid rgba(0, 0, 0, 0.12);
-          background: #fff;
-          text-decoration: none;
-          color: #0f172a;
-          font-weight: 800;
-        }
-      `}</style>
+      {loading ? (
+        <div className="card" style={{ padding: 16 }}>جاري تحميل الإعلانات…</div>
+      ) : error ? (
+        <div className="card" style={{ padding: 16, border: '1px solid #fca5a5' }}>
+          ⚠️ {error}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="card" style={{ padding: 16 }}>
+          لا توجد إعلانات في هذا القسم حالياً.
+          <div style={{ marginTop: 10 }}>
+            <Link href="/add" className="btn btnPrimary">➕ أضف إعلان</Link>
+          </div>
+          <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+            ملاحظة: إذا عندك إعلانات بالقسم لكن ما ظهرت، فغالباً قيمة <b>category</b> داخل قاعدة البيانات مختلفة عن اسم الرابط.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
+          {filtered.map((l) => (
+            <ListingCard key={l.id} listing={l} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
