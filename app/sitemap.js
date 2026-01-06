@@ -1,51 +1,66 @@
-import { db } from '@/lib/firebaseClient';
-
+export const runtime = 'nodejs';
 export const revalidate = 3600; // تحديث الخريطة كل ساعة
 
 export default async function sitemap() {
-  const baseUrl = 'https://www.sooqyemen.com';
-  
-  // 1. تعريف الصفحات الثابتة والأقسام (مأخوذة من كودك القديم)
-  const staticRoutes = [
-    { url: '', priority: 1.0, freq: 'daily' },           // الرئيسية
-    { url: '/login', priority: 0.8, freq: 'monthly' },   // دخول
-    { url: '/register', priority: 0.8, freq: 'monthly' },// تسجيل
-    { url: '/add', priority: 0.8, freq: 'monthly' },     // إضافة إعلان
-    
-    // الأقسام الرئيسية
-    { url: '/cars', priority: 0.8, freq: 'weekly' },
-    { url: '/real_estate', priority: 0.8, freq: 'weekly' }, // تأكد هل الرابط realestate أم real_estate حسب مجلداتك
-    { url: '/phones', priority: 0.8, freq: 'weekly' },
-    { url: '/electronics', priority: 0.8, freq: 'weekly' },
-    { url: '/solar', priority: 0.8, freq: 'weekly' },
-    { url: '/furniture', priority: 0.8, freq: 'weekly' },
-    { url: '/services', priority: 0.8, freq: 'weekly' },
-  ].map((route) => ({
-    url: `${baseUrl}${route.url}`,
-    lastModified: new Date(),
-    changeFrequency: route.freq,
-    priority: route.priority,
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sooqyemen.com';
+
+  // 1) صفحات ثابتة + أقسام
+  const staticDefs = [
+    { path: '/', priority: 1.0, freq: 'daily' },
+
+    { path: '/login', priority: 0.8, freq: 'monthly' },
+    { path: '/register', priority: 0.8, freq: 'monthly' },
+    { path: '/add', priority: 0.8, freq: 'monthly' },
+
+    // أقسام (عدّلها حسب مسارات مشروعك الفعلية)
+    { path: '/cars', priority: 0.8, freq: 'weekly' },
+    { path: '/realestate', priority: 0.8, freq: 'weekly' }, // ✅ بدل real_estate
+    { path: '/phones', priority: 0.8, freq: 'weekly' },
+    { path: '/electronics', priority: 0.8, freq: 'weekly' },
+    { path: '/solar', priority: 0.8, freq: 'weekly' },
+    { path: '/furniture', priority: 0.8, freq: 'weekly' },
+    { path: '/services', priority: 0.8, freq: 'weekly' },
+  ];
+
+  const now = new Date();
+
+  const staticRoutes = staticDefs.map((r) => ({
+    url: `${baseUrl}${r.path === '/' ? '' : r.path}`,
+    lastModified: now,
+    changeFrequency: r.freq,
+    priority: r.priority,
   }));
 
-  // 2. جلب الإعلانات من قاعدة البيانات
+  // 2) روابط الإعلانات من Firestore
   let listingRoutes = [];
   try {
-    // نستخدم db العادية (Client SDK) التي لا تسبب مشاكل
-    const snapshot = await db.collection('listings') // تأكد أن اسم المجموعة listings وليس ads كما في كودك القديم
+    // ✅ Dynamic import (أفضل للبناء على Vercel)
+    const { db } = await import('@/lib/firebaseClient');
+
+    const snapshot = await db
+      .collection('listings') // تأكد أن اسم المجموعة listings
       .orderBy('createdAt', 'desc')
       .limit(1000)
       .get();
 
-    listingRoutes = snapshot.docs.map((doc) => ({
-      url: `${baseUrl}/listing/${doc.id}`,
-      lastModified: new Date(),
-      changeFrequency: 'weekly',
-      priority: 0.6,
-    }));
+    listingRoutes = snapshot.docs.map((doc) => {
+      const data = doc.data?.() || {};
+
+      const lastModified =
+        (data.updatedAt?.toDate && data.updatedAt.toDate()) ||
+        (data.createdAt?.toDate && data.createdAt.toDate()) ||
+        now;
+
+      return {
+        url: `${baseUrl}/listing/${doc.id}`,
+        lastModified,
+        changeFrequency: 'weekly',
+        priority: 0.6,
+      };
+    });
   } catch (error) {
     console.error('Sitemap Generation Error:', error);
   }
 
-  // دمج الكل وإرجاع النتيجة بتنسيق Next.js الجديد
   return [...staticRoutes, ...listingRoutes];
 }
