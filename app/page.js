@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import Price from '@/components/Price';
@@ -18,7 +19,7 @@ const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
   ),
 });
 
-// ✅ إعدادات الأقسام (متوافقة مع صفحات الأقسام اللي سويناها)
+// ✅ إعدادات الأقسام (مربوطة مع صفحات الأقسام)
 const CATEGORY_CONFIG = [
   { key: 'all', label: 'الكل', icon: '📋', href: '/' },
 
@@ -29,6 +30,7 @@ const CATEGORY_CONFIG = [
 
   { key: 'motorcycles', label: 'دراجات نارية', icon: '🏍️', href: '/motorcycles' },
   { key: 'heavy_equipment', label: 'معدات ثقيلة', icon: '🚜', href: '/heavy_equipment' },
+
   { key: 'solar', label: 'طاقة شمسية', icon: '☀️', href: '/solar' },
   { key: 'networks', label: 'نت وشبكات', icon: '📡', href: '/networks' },
 
@@ -37,9 +39,6 @@ const CATEGORY_CONFIG = [
 
   { key: 'jobs', label: 'وظائف', icon: '💼', href: '/jobs' },
   { key: 'services', label: 'خدمات', icon: '🧰', href: '/services' },
-
-  // إذا عندك قسم صيانة فعلاً بقاعدة البيانات أضفه/اتركه
-  // { key: 'maintenance', label: 'صيانة', icon: '🛠️', href: '/maintenance' },
 ];
 
 // ✅ دوال مساعدة
@@ -89,10 +88,12 @@ function GridListingCard({ listing }) {
               loading="lazy"
               onError={(e) => {
                 e.target.style.display = 'none';
-                e.target.parentElement.querySelector('.img-fallback').style.display = 'flex';
+                const fb = e.target.parentElement.querySelector('.img-fallback');
+                if (fb) fb.style.display = 'flex';
               }}
             />
           ) : null}
+
           <div className={`img-fallback ${img ? 'hidden' : ''}`}>{catObj?.icon || '🖼️'}</div>
 
           {listing.auctionEnabled && <div className="auction-badge">⚡ مزاد</div>}
@@ -156,10 +157,12 @@ function ListListingCard({ listing }) {
               loading="lazy"
               onError={(e) => {
                 e.target.style.display = 'none';
-                e.target.parentElement.querySelector('.list-img-fallback').style.display = 'flex';
+                const fb = e.target.parentElement.querySelector('.list-img-fallback');
+                if (fb) fb.style.display = 'flex';
               }}
             />
           ) : null}
+
           <div className={`list-img-fallback ${img ? 'hidden' : ''}`}>{catObj?.icon || '🖼️'}</div>
         </div>
 
@@ -287,6 +290,8 @@ function SearchBar({ search, setSearch, suggestions }) {
 
 // ✅ الصفحة الرئيسية
 export default function HomePage() {
+  const router = useRouter();
+
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -334,6 +339,21 @@ export default function HomePage() {
     }
   }, []);
 
+  // ✅ عند الضغط على القسم: يفتح صفحة القسم مباشرة (بدون كلمة "فتح")
+  const handleCategoryClick = (category) => {
+    if (!category) return;
+
+    if (category.key === 'all') {
+      setSelectedCategory('all');
+      return;
+    }
+
+    // نخلي تمييز سريع قبل الانتقال (اختياري)
+    setSelectedCategory(category.key);
+
+    if (category.href) router.push(category.href);
+  };
+
   // ✅ اقتراحات البحث الذكي
   const suggestions = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -359,7 +379,7 @@ export default function HomePage() {
     return Array.from(results).slice(0, 8);
   }, [search, listings]);
 
-  // ✅ فلترة الإعلانات
+  // ✅ فلترة الإعلانات (ملاحظة: الأقسام الآن تفتح صفحاتها، لذلك على الهوم غالبًا "الكل")
   const filteredListings = useMemo(() => {
     const q = search.trim().toLowerCase();
     const catSelected = String(selectedCategory || 'all').toLowerCase();
@@ -373,7 +393,7 @@ export default function HomePage() {
       if (!q) return true;
 
       const title = safeText(listing.title).toLowerCase();
-      const city = safeText(listing.city).toLowerCase(); // ✅ كان فيها خطأ
+      const city = safeText(listing.city).toLowerCase(); // ✅ إصلاح typo
       const locationLabel = safeText(listing.locationLabel).toLowerCase();
       const description = safeText(listing.description).toLowerCase();
       const category = String(listing.category || '').toLowerCase();
@@ -414,29 +434,21 @@ export default function HomePage() {
             <div className="categories-scroll" role="tablist">
               {CATEGORY_CONFIG.map((category) => {
                 const isActive = selectedCategory === category.key;
-
                 return (
-                  <div key={category.key} className="category-wrap">
-                    <button
-                      type="button"
-                      className={`category-button focus-ring ${isActive ? 'active' : ''}`}
-                      onClick={() => setSelectedCategory(category.key)}
-                      role="tab"
-                      aria-selected={isActive}
-                      aria-controls={`category-${category.key}`}
-                    >
-                      <span className="category-button-icon" aria-hidden="true">
-                        {category.icon}
-                      </span>
-                      <span className="category-button-label">{category.label}</span>
-                    </button>
-
-                    {category.key !== 'all' && category.href ? (
-                      <Link className="category-open-link" href={category.href} title={`فتح قسم ${category.label}`}>
-                        فتح
-                      </Link>
-                    ) : null}
-                  </div>
+                  <button
+                    key={category.key}
+                    type="button"
+                    className={`category-button focus-ring ${isActive ? 'active' : ''}`}
+                    onClick={() => handleCategoryClick(category)}
+                    role="tab"
+                    aria-selected={isActive}
+                    aria-controls={`category-${category.key}`}
+                  >
+                    <span className="category-button-icon" aria-hidden="true">
+                      {category.icon}
+                    </span>
+                    <span className="category-button-label">{category.label}</span>
+                  </button>
                 );
               })}
             </div>
@@ -557,33 +569,35 @@ export default function HomePage() {
       </Link>
 
       <style jsx>{`
-        .hidden { display: none !important; }
-        .map-view { height: 500px; border-radius: 12px; overflow: hidden; margin-bottom: 2.5rem; }
-        .list-category-label { margin-right: 4px; }
-        .results-number { font-weight: 700; color: var(--color-primary-light); }
-        .view-toggle-label { font-size: 0.875rem; }
-
-        .category-wrap{
-          display:flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 6px;
-          margin-left: 10px;
+        .hidden {
+          display: none !important;
         }
-        .category-open-link{
-          font-size: 12px;
-          font-weight: 900;
-          color: #0F3460;
-          text-decoration: none;
-          opacity: .9;
+        .map-view {
+          height: 500px;
+          border-radius: 12px;
+          overflow: hidden;
+          margin-bottom: 2.5rem;
         }
-        .category-open-link:hover{ text-decoration: underline; opacity: 1; }
-
+        .list-category-label {
+          margin-right: 4px;
+        }
+        .results-number {
+          font-weight: 700;
+          color: var(--color-primary-light);
+        }
+        .view-toggle-label {
+          font-size: 0.875rem;
+        }
         @media (max-width: 768px) {
-          .map-view { height: 400px; }
-          .view-toggle-label { display: none; }
-          .view-toggle-button { padding: 0.5rem; }
-          .category-open-link{ font-size: 11px; }
+          .map-view {
+            height: 400px;
+          }
+          .view-toggle-label {
+            display: none;
+          }
+          .view-toggle-button {
+            padding: 0.5rem;
+          }
         }
       `}</style>
     </div>
