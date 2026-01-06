@@ -11,24 +11,53 @@ const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
   ssr: false,
 });
 
-function normalizeSlug(slug) {
-  const s = String(slug || '').trim();
-  if (s === 'real_estate') return 'realestate';
-  if (s === 'heavy-equipment') return 'heavy_equipment';
-  if (s === 'heavyEquipment') return 'heavy_equipment';
-  if (s === 'net') return 'networks';
-  if (s === 'network') return 'networks';
-  return s;
+// ✅ خرائط توافق (عربي/إنجليزي/اختلافات شائعة)
+const ALIASES = {
+  real_estate: 'realestate',
+  'heavy-equipment': 'heavy_equipment',
+  heavyEquipment: 'heavy_equipment',
+  net: 'networks',
+  network: 'networks',
+
+  // عربي -> سلاج
+  'عقارات': 'realestate',
+  'العقارات': 'realestate',
+  'سيارات': 'cars',
+  'السيارات': 'cars',
+  'جوالات': 'phones',
+  'الجوالات': 'phones',
+  'الكترونيات': 'electronics',
+  'إلكترونيات': 'electronics',
+  'الإلكترونيات': 'electronics',
+  'شبكات': 'networks',
+  'صيانة': 'maintenance',
+  'خدمات': 'services',
+  'وظائف': 'jobs',
+  'طاقة شمسية': 'solar',
+};
+
+function normalizeSlug(v) {
+  const raw = String(v || '').trim();
+  if (!raw) return '';
+
+  const mapped = ALIASES[raw] || raw;
+
+  return String(mapped)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/-+/g, '_');
 }
 
-function tsToMillis(v) {
-  // Firestore Timestamp
-  if (v && typeof v.toMillis === 'function') return v.toMillis();
-  // {seconds, nanoseconds}
-  if (v && typeof v.seconds === 'number') return v.seconds * 1000;
-  // JS Date
-  if (v instanceof Date) return v.getTime();
-  return 0;
+function listingCategorySlug(listing) {
+  const raw =
+    listing?.category ??
+    listing?.categorySlug ??
+    listing?.categoryId ??
+    listing?.cat ??
+    '';
+
+  return normalizeSlug(raw);
 }
 
 export default function CategoryListings({ category }) {
@@ -39,43 +68,81 @@ export default function CategoryListings({ category }) {
   const [err, setErr] = useState('');
 
   useEffect(() => {
-    const cat = normalizeSlug(category);
+    // ✅ category قد يكون string أو array
+    const catsRaw = Array.isArray(category) ? category : [category];
+    const cats = catsRaw.map(normalizeSlug).filter(Boolean);
+    const catsSet = new Set(cats);
+
     setLoading(true);
     setErr('');
 
-    const base = db.collection('listings');
+    let unsub = null;
 
-    // ✅ نتجنب orderBy مع where لتفادي مشكلة الـ index
-    const ref =
-      cat && cat !== 'all'
-        ? base.where('category', '==', cat).limit(300)
-        : base.orderBy('createdAt', 'desc').limit(300);
+    if (!cats.length) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
 
-    const unsub = ref.onSnapshot(
-      (snap) => {
-        let data = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
-          .filter((l) => l.isActive !== false && l.hidden !== true);
+    // ✅ إذا قسم واحد فقط، نحاول Query مباشر (أسرع)
+    const single = cats.length === 1 ? cats[0] : '';
 
-        // ✅ فلترة محلية “دائمًا” كحزام أمان
-        if (cat && cat !== 'all') {
-          data = data.filter((l) => normalizeSlug(l.category) === cat);
+    const fallbackFetchAndFilter = () => {
+      const ref2 = db.collection('listings').orderBy('createdAt', 'desc').limit(400);
+      unsub = ref2.onSnapshot(
+        (snap2) => {
+          const all = snap2.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter((l) => l.isActive !== false && l.hidden !== true);
+
+          const filtered = all.filter((l) => catsSet.has(listingCategorySlug(l)));
+
+          setItems(filtered);
+          setLoading(false);
+        },
+        (e2) => {
+          console.error(e2);
+          setErr(e2?.message || 'فشل تحميل إعلانات القسم');
+          setLoading(false);
         }
+      );
+    };
 
-        // ✅ ترتيب محلي بالوقت
-        data.sort((a, b) => tsToMillis(b.createdAt) - tsToMillis(a.createdAt));
+    try {
+      if (!single) {
+        // عدة أسماء للقسم -> استخدم fallback مباشرة
+        fallbackFetchAndFilter();
+      } else {
+        const ref = db
+          .collection('listings')
+          .where('category', '==', single)
+          .orderBy('createdAt', 'desc')
+          .limit(200);
 
-        setItems(data);
-        setLoading(false);
-      },
-      (e) => {
-        console.error(e);
-        setErr(e?.message || 'فشل تحميل الإعلانات');
-        setLoading(false);
+        unsub = ref.onSnapshot(
+          (snap) => {
+            const data = snap.docs
+              .map((d) => ({ id: d.id, ...d.data() }))
+              .filter((l) => l.isActive !== false && l.hidden !== true);
+
+            setItems(data);
+            setLoading(false);
+          },
+          (e) => {
+            console.error('Category query failed (maybe needs index):', e);
+            fallbackFetchAndFilter();
+          }
+        );
       }
-    );
+    } catch (e) {
+      console.error(e);
+      setErr('فشل الاتصال بقاعدة البيانات');
+      setLoading(false);
+    }
 
-    return () => unsub();
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
   }, [category]);
 
   const filtered = useMemo(() => {
@@ -84,7 +151,7 @@ export default function CategoryListings({ category }) {
 
     return items.filter((l) => {
       const title = String(l.title || '').toLowerCase();
-      const city = String(l.city || '').toLowerCase();
+      const city = String(l.city || l.region || '').toLowerCase();
       const desc = String(l.description || '').toLowerCase();
       return title.includes(s) || city.includes(s) || desc.includes(s);
     });
@@ -111,14 +178,14 @@ export default function CategoryListings({ category }) {
     <div>
       <div className="card" style={{ padding: 12, marginBottom: 12 }}>
         <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-            <button className={'btn ' + (view === 'grid' ? 'btnPrimary' : '')} onClick={() => setView('grid')}>
+          <div className="row" style={{ gap: 8 }}>
+            <button className={`btn ${view === 'grid' ? 'btnPrimary' : ''}`} onClick={() => setView('grid')}>
               ◼️ شبكة
             </button>
-            <button className={'btn ' + (view === 'list' ? 'btnPrimary' : '')} onClick={() => setView('list')}>
+            <button className={`btn ${view === 'list' ? 'btnPrimary' : ''}`} onClick={() => setView('list')}>
               ☰ قائمة
             </button>
-            <button className={'btn ' + (view === 'map' ? 'btnPrimary' : '')} onClick={() => setView('map')}>
+            <button className={`btn ${view === 'map' ? 'btnPrimary' : ''}`} onClick={() => setView('map')}>
               🗺️ خريطة
             </button>
           </div>
