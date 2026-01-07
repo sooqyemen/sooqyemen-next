@@ -1,5 +1,5 @@
 // app/listings/page.js - Server Component with SSR
-import { fetchPublicListings } from '@/lib/firestoreRest';
+import { getLatestListings } from '@/lib/getListings.server';
 import ListingsPageClient from './page-client';
 
 export const revalidate = 60; // إعادة التحقق كل 60 ثانية
@@ -13,11 +13,11 @@ export const metadata = {
 };
 
 export default async function ListingsPage() {
-  // جلب أول 24 إعلان من السيرفر (SSR)
+  // جلب أول 24 إعلان من السيرفر (SSR/ISR with cached query)
   let initialListings = [];
   
   try {
-    initialListings = await fetchPublicListings({ limit: 24 });
+    initialListings = await getLatestListings(24);
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
       console.error('[ListingsPage SSR] Failed to fetch initial listings:', error);
