@@ -1,7 +1,7 @@
-// app/sitemap.xml/route.js
-import { fetchListingIdsForSitemap } from '@/lib/firestoreRest';
+// 📁 /app/sitemap.xml/route.js
+import { fetchListingIdsForSitemap } from '../../lib/firestoreRest';
 
-const SITE_URL = 'https://sooqyemen.com';
+const SITE_URL = 'https://www.sooqyemen.com';
 
 // Category pages
 const CATEGORIES = [
@@ -18,6 +18,7 @@ const CATEGORIES = [
   'home_tools',
   'clothes',
   'animals',
+  'animals-birds',
   'jobs',
   'services',
   'other',
@@ -27,6 +28,7 @@ const CATEGORIES = [
 const STATIC_PAGES = [
   { url: '/', priority: 1.0, changefreq: 'daily' },
   { url: '/listings', priority: 0.9, changefreq: 'daily' },
+  { url: '/categories', priority: 0.7, changefreq: 'weekly' },
   { url: '/about', priority: 0.5, changefreq: 'monthly' },
   { url: '/contact', priority: 0.5, changefreq: 'monthly' },
   { url: '/help', priority: 0.5, changefreq: 'monthly' },
@@ -35,7 +37,7 @@ const STATIC_PAGES = [
 ];
 
 function escapeXml(str) {
-  return String(str)
+  return String(str || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -44,62 +46,69 @@ function escapeXml(str) {
 }
 
 export async function GET() {
+  const nowIso = new Date().toISOString();
+
   try {
-    // Fetch recent listings
     const listingIds = await fetchListingIdsForSitemap(500);
 
     let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
     xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
 
-    // Add static pages
+    // Static pages
     for (const page of STATIC_PAGES) {
       xml += '  <url>\n';
       xml += `    <loc>${escapeXml(SITE_URL + page.url)}</loc>\n`;
-      xml += `    <changefreq>${page.changefreq}</changefreq>\n`;
+      xml += `    <lastmod>${escapeXml(nowIso)}</lastmod>\n`;
+      xml += `    <changefreq>${escapeXml(page.changefreq)}</changefreq>\n`;
       xml += `    <priority>${page.priority}</priority>\n`;
       xml += '  </url>\n';
     }
 
-    // Add category pages
+    // Category pages
     for (const category of CATEGORIES) {
       xml += '  <url>\n';
       xml += `    <loc>${escapeXml(SITE_URL + '/' + category)}</loc>\n`;
+      xml += `    <lastmod>${escapeXml(nowIso)}</lastmod>\n`;
       xml += '    <changefreq>daily</changefreq>\n';
       xml += '    <priority>0.8</priority>\n';
       xml += '  </url>\n';
     }
 
-    // Add listing pages
-    for (const listing of listingIds) {
+    // Listing pages
+    for (const listing of listingIds || []) {
+      if (!listing?.id) continue;
+
       xml += '  <url>\n';
-      xml += `    <loc>${escapeXml(SITE_URL + '/listing/' + listing.id)}</loc>\n`;
-      if (listing.updatedAt) {
-        xml += `    <lastmod>${escapeXml(listing.updatedAt.split('T')[0])}</lastmod>\n`;
-      }
+      xml += `    <loc>${escapeXml(SITE_URL + '/listing/' + encodeURIComponent(listing.id))}</loc>\n`;
+
+      const lastmod = listing.updatedAt || nowIso; // نتركه ISO كامل
+      xml += `    <lastmod>${escapeXml(lastmod)}</lastmod>\n`;
+
       xml += '    <changefreq>weekly</changefreq>\n';
       xml += '    <priority>0.6</priority>\n';
       xml += '  </url>\n';
     }
 
-    xml += '</urlset>';
+    xml += '</urlset>\n';
 
     return new Response(xml, {
       headers: {
-        'Content-Type': 'application/xml',
-        'Cache-Control': 'public, max-age=3600, s-maxage=3600',
+        'Content-Type': 'application/xml; charset=utf-8',
+        'Cache-Control': 'public, max-age=0, s-maxage=3600, stale-while-revalidate=86400',
       },
     });
   } catch (error) {
     console.error('[sitemap.xml] Error generating sitemap:', error);
 
-    // Return basic sitemap on error
+    // Basic sitemap on error
     let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
     xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
 
     for (const page of STATIC_PAGES) {
       xml += '  <url>\n';
       xml += `    <loc>${escapeXml(SITE_URL + page.url)}</loc>\n`;
-      xml += `    <changefreq>${page.changefreq}</changefreq>\n`;
+      xml += `    <lastmod>${escapeXml(nowIso)}</lastmod>\n`;
+      xml += `    <changefreq>${escapeXml(page.changefreq)}</changefreq>\n`;
       xml += `    <priority>${page.priority}</priority>\n`;
       xml += '  </url>\n';
     }
@@ -107,17 +116,18 @@ export async function GET() {
     for (const category of CATEGORIES) {
       xml += '  <url>\n';
       xml += `    <loc>${escapeXml(SITE_URL + '/' + category)}</loc>\n`;
+      xml += `    <lastmod>${escapeXml(nowIso)}</lastmod>\n`;
       xml += '    <changefreq>daily</changefreq>\n';
       xml += '    <priority>0.8</priority>\n';
       xml += '  </url>\n';
     }
 
-    xml += '</urlset>';
+    xml += '</urlset>\n';
 
     return new Response(xml, {
       headers: {
-        'Content-Type': 'application/xml',
-        'Cache-Control': 'public, max-age=600, s-maxage=600',
+        'Content-Type': 'application/xml; charset=utf-8',
+        'Cache-Control': 'public, max-age=0, s-maxage=600, stale-while-revalidate=3600',
       },
     });
   }
