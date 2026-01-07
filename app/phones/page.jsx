@@ -1,15 +1,23 @@
+import { fetchPublicListings } from '@/lib/firestoreRest';
 import CategoryPageShell from '@/components/CategoryPageShell';
 import CategoryListings from '@/components/CategoryListings';
+
+export const revalidate = 60;
 
 export const metadata = {
   title: 'جوالات للبيع | سوق اليمن',
   description: 'أحدث إعلانات الجوالات والهواتف في اليمن.',
+  alternates: {
+    canonical: '/phones',
+  },
 };
 
-export default function PhonesPage() {
+export default async function PhonesPage() {
+  const initialListings = await fetchPublicListings({ limit: 24, category: 'phones' });
+
   return (
     <CategoryPageShell title="الجوالات" description="هواتف جديدة ومستعملة بأسعار مختلفة">
-      <CategoryListings category="phones" />
+      <CategoryListings category="phones" initialListings={initialListings} />
     </CategoryPageShell>
   );
 }

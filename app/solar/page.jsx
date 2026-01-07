@@ -1,15 +1,23 @@
+import { fetchPublicListings } from '@/lib/firestoreRest';
 import CategoryPageShell from '@/components/CategoryPageShell';
 import CategoryListings from '@/components/CategoryListings';
+
+export const revalidate = 60;
 
 export const metadata = {
   title: 'الطاقة الشمسية | سوق اليمن',
   description: 'ألواح، بطاريات، انفرترات، معدات الطاقة الشمسية في اليمن.',
+  alternates: {
+    canonical: '/solar',
+  },
 };
 
-export default function SolarPage() {
+export default async function SolarPage() {
+  const initialListings = await fetchPublicListings({ limit: 24, category: 'solar' });
+
   return (
     <CategoryPageShell title="الطاقة الشمسية" description="ألواح، بطاريات، انفرترات ومستلزماتها">
-      <CategoryListings category="solar" />
+      <CategoryListings category="solar" initialListings={initialListings} />
     </CategoryPageShell>
   );
 }

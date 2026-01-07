@@ -1,15 +1,23 @@
+import { fetchPublicListings } from '@/lib/firestoreRest';
 import CategoryPageShell from '@/components/CategoryPageShell';
 import CategoryListings from '@/components/CategoryListings';
+
+export const revalidate = 60;
 
 export const metadata = {
   title: 'عقارات للبيع والإيجار | سوق اليمن',
   description: 'عقارات للبيع والإيجار في اليمن — أراضي، شقق، فلل، محلات.',
+  alternates: {
+    canonical: '/realestate',
+  },
 };
 
-export default function RealEstatePage() {
+export default async function RealEstatePage() {
+  const initialListings = await fetchPublicListings({ limit: 24, category: 'realestate' });
+
   return (
     <CategoryPageShell title="العقارات" description="أراضي، شقق، فلل، محلات — في جميع المحافظات">
-      <CategoryListings category="realestate" />
+      <CategoryListings category="realestate" initialListings={initialListings} />
     </CategoryPageShell>
   );
 }

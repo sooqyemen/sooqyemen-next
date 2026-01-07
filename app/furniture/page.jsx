@@ -1,15 +1,23 @@
+import { fetchPublicListings } from '@/lib/firestoreRest';
 import CategoryPageShell from '@/components/CategoryPageShell';
 import CategoryListings from '@/components/CategoryListings';
+
+export const revalidate = 60;
 
 export const metadata = {
   title: 'أثاث للبيع | سوق اليمن',
   description: 'أثاث منزلي ومكتبي للبيع والشراء في اليمن.',
+  alternates: {
+    canonical: '/furniture',
+  },
 };
 
-export default function FurniturePage() {
+export default async function FurniturePage() {
+  const initialListings = await fetchPublicListings({ limit: 24, category: 'furniture' });
+
   return (
     <CategoryPageShell title="الأثاث" description="أثاث منزلي ومكتبي — جديد ومستعمل">
-      <CategoryListings category="furniture" />
+      <CategoryListings category="furniture" initialListings={initialListings} />
     </CategoryPageShell>
   );
 }
