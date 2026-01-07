@@ -8,9 +8,9 @@ Gemini
 🛠️ التقنيات المستخدمة (Tech Stack)
 🧠 الواجهة الأمامية (Frontend)
 
-Framework: Next.js 14+ (App Router)
+Framework: Next.js 15+ (App Router)
 
-Language: JavaScript / React 18
+Language: JavaScript / React 19
 
 Styling: CSS-in-JS (Styled JSX) - لا نستخدم Tailwind أو MUI.
 
@@ -134,6 +134,14 @@ npm install
 شغل السيرفر:
 
 npm run dev
+
+## 📋 ملاحظة حول الترقية
+
+تم ترقية المشروع مؤخراً إلى أحدث الإصدارات (Next.js 15 + React 19). للمزيد من المعلومات، راجع ملف [UPGRADE_GUIDE.md](./UPGRADE_GUIDE.md).
+
+**ملاحظة مهمة**: عند ترقية مشروع Next.js، لا تحتاج لحذف المشروع أو ملفاته. الترقية تتم في نفس المكان (in-place upgrade) عن طريق تحديث ملف `package.json` وإعادة تثبيت التبعيات.
+
+---
 
 Souq Yemen Team © 2024
 
