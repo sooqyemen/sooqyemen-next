@@ -3,21 +3,88 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
-import { doc, getDoc, onSnapshot, updateDoc, arrayRemove, arrayUnion } from 'firebase/firestore';
-import { db } from '@/lib/firebaseClient';
+import { db, firebase } from '@/lib/firebaseClient'; // ✅ compat
 import { useAuth } from '@/lib/useAuth';
 import ChatBox from '@/components/Chat/ChatBox';
+
+// ✅ يفك chatId الثابت: "uid1_uid2__listingId"
+function parseChatId(chatId) {
+  try {
+    const [uidsPart, listingPart] = String(chatId || '').split('__');
+    if (!uidsPart || !listingPart) return null;
+
+    const parts = uidsPart.split('_').filter(Boolean);
+    if (parts.length < 2) return null;
+
+    const uid1 = parts[0];
+    const uid2 = parts[1];
+
+    return { uid1, uid2, listingIdFromChatId: listingPart };
+  } catch {
+    return null;
+  }
+}
 
 // مكون للحماية من التسرب السريع (Quick Navigation)
 function ChatPageContent({ chatId, listingId, otherUid }) {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+
   const [chatData, setChatData] = useState(null);
   const [listing, setListing] = useState(null);
   const [otherUser, setOtherUser] = useState(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isBlocked, setIsBlocked] = useState(false);
+
+  // ✅ إنشاء chat doc تلقائيًا إذا غير موجود (Fallback)
+  const ensureChatDoc = async () => {
+    if (!chatId || !user?.uid) return { ok: false, reason: 'no_user_or_chatId' };
+
+    const parsed = parseChatId(chatId);
+    const chatRef = db.collection('chats').doc(chatId);
+
+    // إذا ما قدرنا نفك الـ chatId، نحاول نعتمد otherUid + listingId
+    const inferredListingId = listingId || parsed?.listingIdFromChatId || null;
+    const uidA = parsed?.uid1 || null;
+    const uidB = parsed?.uid2 || null;
+
+    let participants = null;
+
+    if (uidA && uidB) {
+      participants = [uidA, uidB];
+    } else if (otherUid) {
+      participants = [user.uid, otherUid];
+    }
+
+    if (!participants || participants.length !== 2) {
+      return { ok: false, reason: 'cannot_infer_participants' };
+    }
+
+    // لازم المستخدم الحالي يكون أحد المشاركين
+    if (!participants.includes(user.uid)) {
+      return { ok: false, reason: 'not_participant' };
+    }
+
+    // أنشئ الوثيقة
+    await chatRef.set(
+      {
+        participants, // ✅ list
+        listingId: inferredListingId || null,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        unread: {
+          [participants[0]]: 0,
+          [participants[1]]: 0,
+        },
+        blockedBy: [],
+      },
+      { merge: true }
+    );
+
+    return { ok: true };
+  };
 
   // ✅ جلب بيانات المحادثة والإعلان
   useEffect(() => {
@@ -26,11 +93,29 @@ function ChatPageContent({ chatId, listingId, otherUid }) {
     const fetchInitialData = async () => {
       try {
         setLoading(true);
+        setError('');
 
-        const chatRef = doc(db, 'chats', chatId);
-        const chatDoc = await getDoc(chatRef);
+        if (!user?.uid) {
+          setError('يرجى تسجيل الدخول للوصول إلى المحادثة');
+          setLoading(false);
+          return;
+        }
 
-        if (!chatDoc.exists()) {
+        const chatRef = db.collection('chats').doc(chatId);
+        let chatDoc = await chatRef.get();
+
+        // ✅ لو غير موجود: أنشئها تلقائيًا ثم أعد القراءة
+        if (!chatDoc.exists) {
+          const ensured = await ensureChatDoc();
+          if (!ensured.ok) {
+            setError('المحادثة غير موجودة أو تم حذفها');
+            setLoading(false);
+            return;
+          }
+          chatDoc = await chatRef.get();
+        }
+
+        if (!chatDoc.exists) {
           setError('المحادثة غير موجودة أو تم حذفها');
           setLoading(false);
           return;
@@ -39,27 +124,27 @@ function ChatPageContent({ chatId, listingId, otherUid }) {
         const chatDataLocal = { id: chatDoc.id, ...chatDoc.data() };
         setChatData(chatDataLocal);
 
-        if (!chatDataLocal.participants?.includes(user?.uid)) {
+        if (!chatDataLocal.participants?.includes(user.uid)) {
           setError('ليس لديك صلاحية الوصول إلى هذه المحادثة');
           setLoading(false);
           return;
         }
 
-        // ✅ جلب الإعلان
-        if (listingId) {
-          const listingRef = doc(db, 'listings', listingId);
-          const listingDoc = await getDoc(listingRef);
-          if (listingDoc.exists()) setListing({ id: listingDoc.id, ...listingDoc.data() });
+        // ✅ جلب الإعلان (من query أو من chatDoc)
+        const finalListingId = listingId || chatDataLocal.listingId || parseChatId(chatId)?.listingIdFromChatId || null;
+
+        if (finalListingId) {
+          const listingDoc = await db.collection('listings').doc(finalListingId).get();
+          if (listingDoc.exists) setListing({ id: listingDoc.id, ...listingDoc.data() });
         }
 
-        // ✅ الطرف الآخر
+        // ✅ الطرف الآخر (من query أو من participants)
         const otherUserId =
-          otherUid || chatDataLocal.participants?.find((id) => id !== user?.uid);
+          otherUid || chatDataLocal.participants?.find((id) => id !== user.uid);
 
         if (otherUserId) {
-          const userRef = doc(db, 'users', otherUserId);
-          const userDoc = await getDoc(userRef);
-          if (userDoc.exists()) setOtherUser({ id: userDoc.id, ...userDoc.data() });
+          const userDoc = await db.collection('users').doc(otherUserId).get();
+          if (userDoc.exists) setOtherUser({ id: userDoc.id, ...userDoc.data() });
         }
       } catch (err) {
         console.error('خطأ في جلب بيانات المحادثة:', err);
@@ -70,26 +155,23 @@ function ChatPageContent({ chatId, listingId, otherUid }) {
     };
 
     fetchInitialData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId, listingId, otherUid, user?.uid, authLoading]);
 
-  // ✅ الاستماع للتحديثات
+  // ✅ الاستماع للتحديثات (Realtime)
   useEffect(() => {
     if (!chatId || !user?.uid) return;
 
-    const chatRef = doc(db, 'chats', chatId);
+    const chatRef = db.collection('chats').doc(chatId);
 
-    const unsubscribe = onSnapshot(
-      chatRef,
+    const unsubscribe = chatRef.onSnapshot(
       (docSnap) => {
-        if (!docSnap.exists()) return;
+        if (!docSnap.exists) return;
         const updatedChat = { id: docSnap.id, ...docSnap.data() };
         setChatData(updatedChat);
 
-        if (updatedChat.blockedBy) {
-          setIsBlocked(updatedChat.blockedBy.includes(user.uid));
-        } else {
-          setIsBlocked(false);
-        }
+        const blockedArr = Array.isArray(updatedChat.blockedBy) ? updatedChat.blockedBy : [];
+        setIsBlocked(blockedArr.includes(user.uid));
       },
       (err) => console.error('خطأ في تحديث المحادثة:', err)
     );
@@ -104,8 +186,8 @@ function ChatPageContent({ chatId, listingId, otherUid }) {
     const markAsRead = async () => {
       try {
         if (chatData.lastMessageBy && chatData.lastMessageBy !== user.uid) {
-          const chatRef = doc(db, 'chats', chatId);
-          await updateDoc(chatRef, { [`unread.${user.uid}`]: 0 });
+          const chatRef = db.collection('chats').doc(chatId);
+          await chatRef.update({ [`unread.${user.uid}`]: 0 });
         }
       } catch (err) {
         console.error('خطأ في تحديث حالة القراءة:', err);
@@ -119,14 +201,19 @@ function ChatPageContent({ chatId, listingId, otherUid }) {
     if (!chatId || !user?.uid || !chatData) return;
 
     try {
-      const chatRef = doc(db, 'chats', chatId);
-      const currentlyBlocked = chatData.blockedBy?.includes(user.uid);
+      const chatRef = db.collection('chats').doc(chatId);
+      const blockedArr = Array.isArray(chatData.blockedBy) ? chatData.blockedBy : [];
+      const currentlyBlocked = blockedArr.includes(user.uid);
 
       if (currentlyBlocked) {
-        await updateDoc(chatRef, { blockedBy: arrayRemove(user.uid) });
+        await chatRef.update({
+          blockedBy: firebase.firestore.FieldValue.arrayRemove(user.uid),
+        });
         setIsBlocked(false);
       } else {
-        await updateDoc(chatRef, { blockedBy: arrayUnion(user.uid) });
+        await chatRef.update({
+          blockedBy: firebase.firestore.FieldValue.arrayUnion(user.uid),
+        });
         setIsBlocked(true);
       }
     } catch (err) {
@@ -208,9 +295,7 @@ function ChatPageContent({ chatId, listingId, otherUid }) {
                 </div>
 
                 <div className="user-details">
-                  <h1 className="user-name">
-                    {otherUser.displayName || otherUser.email || 'مستخدم'}
-                  </h1>
+                  <h1 className="user-name">{otherUser.displayName || otherUser.email || 'مستخدم'}</h1>
                   <span className="user-status">{chatData?.lastSeen ? 'نشط الآن' : 'غير متصل'}</span>
                 </div>
               </div>
@@ -268,7 +353,12 @@ function ChatPageContent({ chatId, listingId, otherUid }) {
 
         <div className="chat-area">
           <Suspense fallback={<div className="loading-messages">جاري تحميل الرسائل...</div>}>
-            <ChatBox chatId={chatId} listingId={listingId} otherUid={otherUser?.id} isBlocked={isBlocked} />
+            <ChatBox
+              chatId={chatId}
+              listingId={listingId || chatData?.listingId || null}
+              otherUid={otherUser?.id || otherUid || null}
+              isBlocked={isBlocked}
+            />
           </Suspense>
         </div>
 
