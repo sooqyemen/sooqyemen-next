@@ -7,6 +7,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import Price from '@/components/Price';
 import { db } from '@/lib/firebaseClient';
+import WebsiteJsonLd from '@/components/StructuredData/WebsiteJsonLd';
 import './home.css';
 
 // تحميل ديناميكي للخريطة (تجنب SSR لمشاكل Leaflet)
@@ -592,7 +593,9 @@ export default function HomePageClient({ initialListings = [] }) {
   const handleRetry = () => window.location.reload();
 
   return (
-    <div className="home-page" dir="rtl">
+    <>
+      <WebsiteJsonLd />
+      <div className="home-page" dir="rtl">
       <section className="hero-section" aria-label="القسم الرئيسي">
         <div className="hero-container">
           <div className="hero-content">
@@ -775,5 +778,6 @@ export default function HomePageClient({ initialListings = [] }) {
         }
       `}</style>
     </div>
+    </>
   );
 }

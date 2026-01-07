@@ -73,6 +73,8 @@ export default function ListingCard({ listing, variant = 'grid' }) {
                 src={img}
                 alt={listing?.title || 'إعلان'}
                 className="lc-thumb-img"
+                loading="lazy"
+                decoding="async"
               />
             ) : (
               <div className="lc-thumb-empty">بدون صورة</div>
@@ -177,6 +179,8 @@ export default function ListingCard({ listing, variant = 'grid' }) {
             src={img}
             alt={listing?.title || 'إعلان'}
             className="lc-img"
+            loading="lazy"
+            decoding="async"
           />
         </div>
       ) : (
