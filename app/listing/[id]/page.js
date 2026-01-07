@@ -1,4 +1,4 @@
-// app/listing/[id]/page.js - النسخة المحسنة مع زر جوجل مابس
+// app/listing/[id]/page.js - النسخة المحسنة مع زر جوجل مابس + إصلاح المحادثات
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -10,16 +10,17 @@ import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import { logListingView } from '@/lib/analytics';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import './listing.css'; // استيراد CSS
 
-const ListingMap = dynamic(() => import('@/components/Map/ListingMap'), { 
+const ListingMap = dynamic(() => import('@/components/Map/ListingMap'), {
   ssr: false,
   loading: () => (
     <div className="map-placeholder">
       <div className="map-icon">🗺️</div>
       <p>جاري تحميل الخريطة...</p>
     </div>
-  )
+  ),
 });
 
 // نفس بريد الأدمن المستخدم في لوحة التحكم
@@ -64,11 +65,9 @@ async function bumpViewOnce(listingId) {
     return; // تم احتسابها مؤخرًا
   }
 
-  // خزّن قبل الطلب لتقليل التكرار لو المستخدم عمل Refresh سريع
   cache[listingId] = now;
   writeViewCache(cache);
 
-  // زد views في Firestore
   await db.collection('listings').doc(listingId).update({
     views: firebase.firestore.FieldValue.increment(1),
     lastViewedAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -84,7 +83,7 @@ function formatDate(date) {
       month: 'long',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     }).format(d);
   } catch {
     return 'غير معروف';
@@ -99,10 +98,15 @@ function getInitials(email) {
 
 export default function ListingDetails({ params }) {
   const { id } = params;
+  const router = useRouter();
   const { user } = useAuth();
+
   const [listing, setListing] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const [startingChat, setStartingChat] = useState(false);
+  const [chatErr, setChatErr] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -151,19 +155,19 @@ export default function ListingDetails({ params }) {
 
   const categoryIcon = (category) => {
     const icons = {
-      'cars': '🚗',
-      'real_estate': '🏡',
-      'mobiles': '📱',
-      'electronics': '💻',
-      'motorcycles': '🏍️',
-      'heavy_equipment': '🚜',
-      'solar': '☀️',
-      'networks': '📡',
-      'maintenance': '🛠️',
-      'furniture': '🛋️',
-      'animals': '🐑',
-      'jobs': '💼',
-      'services': '🧰',
+      cars: '🚗',
+      real_estate: '🏡',
+      mobiles: '📱',
+      electronics: '💻',
+      motorcycles: '🏍️',
+      heavy_equipment: '🚜',
+      solar: '☀️',
+      networks: '📡',
+      maintenance: '🛠️',
+      furniture: '🛋️',
+      animals: '🐑',
+      jobs: '💼',
+      services: '🧰',
     };
     return icons[category] || '📋';
   };
@@ -189,10 +193,7 @@ export default function ListingDetails({ params }) {
             <div className="state-icon">⚠️</div>
             <h2 className="state-title">حدث خطأ</h2>
             <p className="state-message">{error}</p>
-            <button 
-              className="retry-button"
-              onClick={() => window.location.reload()}
-            >
+            <button className="retry-button" onClick={() => window.location.reload()}>
               إعادة المحاولة
             </button>
           </div>
@@ -244,6 +245,55 @@ export default function ListingDetails({ params }) {
     );
   }
 
+  // ✅ إنشاء المحادثة ثم فتحها (حل مشكلة "المحادثة غير موجودة")
+  const handleStartChat = async () => {
+    setChatErr('');
+
+    if (!user) {
+      // يفضّل تحويله لصفحة دخول
+      router.push(`/login?next=${encodeURIComponent(`/listing/${listing.id}`)}`);
+      return;
+    }
+    if (!sellerUid) {
+      setChatErr('لا يمكن بدء محادثة: لم يتم تحديد صاحب الإعلان.');
+      return;
+    }
+    if (user.uid === sellerUid) {
+      setChatErr('لا يمكن بدء محادثة مع نفسك (أنت صاحب الإعلان).');
+      return;
+    }
+
+    const cid = makeChatId(user.uid, sellerUid, listing.id);
+
+    try {
+      setStartingChat(true);
+
+      const chatRef = db.collection('chats').doc(cid);
+
+      await chatRef.set(
+        {
+          participants: [user.uid, sellerUid], // لازم list
+          listingId: listing.id,
+          listingTitle: String(listing.title || ''),
+          sellerUid,
+          buyerUid: user.uid,
+          sellerEmail: String(listing.userEmail || ''),
+          buyerEmail: String(user.email || ''),
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      router.push(`/chat/${encodeURIComponent(cid)}`);
+    } catch (e) {
+      console.error('start chat failed:', e?.code || e?.message || e);
+      setChatErr('تعذر فتح المحادثة. تأكد من قواعد Firestore وصلاحيات chats.');
+    } finally {
+      setStartingChat(false);
+    }
+  };
+
   return (
     <div className="listing-details-page">
       <div className="container">
@@ -271,11 +321,7 @@ export default function ListingDetails({ params }) {
           <div className="main-card">
             {/* Listing Image */}
             {img ? (
-              <img
-                src={img}
-                alt={listing.title || 'صورة الإعلان'}
-                className="listing-image"
-              />
+              <img src={img} alt={listing.title || 'صورة الإعلان'} className="listing-image" />
             ) : (
               <div className="image-placeholder">🖼️</div>
             )}
@@ -285,11 +331,7 @@ export default function ListingDetails({ params }) {
               <div className="listing-header">
                 <div className="listing-title-row">
                   <h1 className="listing-title">{listing.title || 'بدون عنوان'}</h1>
-                  {listing.auctionEnabled && (
-                    <span className="listing-badge">
-                      ⚡ مزاد
-                    </span>
-                  )}
+                  {listing.auctionEnabled && <span className="listing-badge">⚡ مزاد</span>}
                 </div>
 
                 <div className="listing-location">
@@ -298,9 +340,7 @@ export default function ListingDetails({ params }) {
                 </div>
 
                 <div className="listing-meta">
-                  <span className="meta-item">
-                    📅 {formatDate(listing.createdAt)}
-                  </span>
+                  <span className="meta-item">📅 {formatDate(listing.createdAt)}</span>
                   {listing.category && (
                     <span className="meta-item">
                       {categoryIcon(listing.category)} {listing.category}
@@ -320,14 +360,30 @@ export default function ListingDetails({ params }) {
               {/* Description */}
               <div className="description-section">
                 <h2 className="section-title">وصف الإعلان</h2>
-                <div className="listing-description">
-                  {listing.description || 'لا يوجد وصف للإعلان.'}
-                </div>
+                <div className="listing-description">{listing.description || 'لا يوجد وصف للإعلان.'}</div>
               </div>
 
-              {/* Contact Section - بأيقونات احترافية */}
+              {/* Contact Section */}
               <div className="contact-section">
                 <h2 className="section-title">التواصل مع البائع</h2>
+
+                {chatErr ? (
+                  <div
+                    style={{
+                      marginBottom: '10px',
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(220,38,38,.25)',
+                      background: 'rgba(220,38,38,.08)',
+                      color: '#991b1b',
+                      fontWeight: 700,
+                      fontSize: '.9rem',
+                    }}
+                  >
+                    ⚠️ {chatErr}
+                  </div>
+                ) : null}
+
                 <div className="contact-buttons">
                   {/* زر الاتصال */}
                   {listing.phone && (
@@ -360,22 +416,23 @@ export default function ListingDetails({ params }) {
                     </a>
                   )}
 
-                  {/* زر المحادثة */}
+                  {/* ✅ زر المحادثة (ينشئ المحادثة ثم يفتحها) */}
                   {chatId ? (
-                    <Link
+                    <button
+                      type="button"
                       className="contact-button chat"
-                      href={`/chat/${encodeURIComponent(chatId)}?listingId=${encodeURIComponent(
-                        listing.id
-                      )}&otherUid=${encodeURIComponent(sellerUid || '')}`}
+                      onClick={handleStartChat}
+                      disabled={startingChat}
+                      style={{ cursor: startingChat ? 'not-allowed' : 'pointer' }}
                     >
                       <div className="button-content">
-                        <div className="button-icon">💭</div>
+                        <div className="button-icon">{startingChat ? '⏳' : '💭'}</div>
                         <div className="button-text">
-                          <div className="button-label">بدء محادثة</div>
+                          <div className="button-label">{startingChat ? 'جاري فتح المحادثة...' : 'بدء محادثة'}</div>
                           <div className="button-subtext">مراسلة خاصة داخل الموقع</div>
                         </div>
                       </div>
-                    </Link>
+                    </button>
                   ) : (
                     <div className="contact-button login">
                       <div className="button-content">
@@ -403,16 +460,10 @@ export default function ListingDetails({ params }) {
             <div className="sidebar-card">
               <div className="seller-info">
                 <div className="seller-header">
-                  <div className="seller-avatar">
-                    {getInitials(listing.userEmail)}
-                  </div>
+                  <div className="seller-avatar">{getInitials(listing.userEmail)}</div>
                   <div className="seller-details">
-                    <h3 className="seller-name">
-                      {listing.userEmail?.split('@')[0] || 'مستخدم'}
-                    </h3>
-                    <p className="seller-email">
-                      {listing.userEmail || 'بريد غير معروف'}
-                    </p>
+                    <h3 className="seller-name">{listing.userEmail?.split('@')[0] || 'مستخدم'}</h3>
+                    <p className="seller-email">{listing.userEmail || 'بريد غير معروف'}</p>
                   </div>
                 </div>
 
@@ -448,10 +499,10 @@ export default function ListingDetails({ params }) {
                     <div className="map-container">
                       <ListingMap coords={coords} label={listing.locationLabel || listing.city || ''} />
                     </div>
-                    
+
                     {/* أزرار خرائط جوجل */}
                     <div className="google-maps-buttons">
-                      <a 
+                      <a
                         href={`https://www.google.com/maps?q=${coords[0]},${coords[1]}&z=15&hl=ar`}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -460,8 +511,8 @@ export default function ListingDetails({ params }) {
                         <span className="google-maps-icon">🗺️</span>
                         <span className="google-maps-text">فتح في خرائط جوجل</span>
                       </a>
-                      
-                      <a 
+
+                      <a
                         href={`https://www.google.com/maps/@${coords[0]},${coords[1]},15z?hl=ar&entry=ttu`}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -484,7 +535,6 @@ export default function ListingDetails({ params }) {
         </div>
       </div>
 
-      {/* أضف هذه الأنماط إذا لم يكن لديك ملف listing.css */}
       <style jsx>{`
         .google-maps-buttons {
           display: grid;
@@ -492,7 +542,7 @@ export default function ListingDetails({ params }) {
           gap: 0.75rem;
           margin-top: 1rem;
         }
-        
+
         .google-maps-button {
           display: flex;
           align-items: center;
@@ -509,7 +559,7 @@ export default function ListingDetails({ params }) {
           text-align: center;
           border: 2px solid transparent;
         }
-        
+
         .google-maps-button:hover {
           background: #3367d6;
           transform: translateY(-2px);
@@ -517,20 +567,20 @@ export default function ListingDetails({ params }) {
           text-decoration: none;
           color: white;
         }
-        
+
         .google-maps-button.satellite {
           background: #10b981;
         }
-        
+
         .google-maps-button.satellite:hover {
           background: #059669;
           box-shadow: 0 6px 15px rgba(16, 185, 129, 0.3);
         }
-        
+
         .google-maps-icon {
           font-size: 1.25rem;
         }
-        
+
         @media (max-width: 768px) {
           .google-maps-buttons {
             grid-template-columns: 1fr;
