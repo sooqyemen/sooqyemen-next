@@ -2,193 +2,330 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/useAuth';
 import { db } from '@/lib/firebaseClient';
 
-const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
-
 const COMMISSION_PER_SIGNUP_SAR = 0.25;
 const MIN_PAYOUT_SAR = 50;
+
+// 200 تسجيل = 50 ريال (0.25 لكل تسجيل)
+const REQUIRED_SIGNUPS = Math.ceil(MIN_PAYOUT_SAR / COMMISSION_PER_SIGNUP_SAR);
 
 function safeNum(v, fallback = 0) {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
 
+function toDateString(d) {
+  try {
+    if (!d) return '—';
+    const dt = d?.toDate ? d.toDate() : new Date(d);
+    if (Number.isNaN(dt.getTime())) return '—';
+    return dt.toLocaleString('ar-YE');
+  } catch (e) {
+    return '—';
+  }
+}
+
 export default function AdminPayoutsPage() {
+  const router = useRouter();
   const { user, loading } = useAuth();
-  const isAdmin = !!user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase());
 
-  const requiredSignups = useMemo(() => Math.ceil(MIN_PAYOUT_SAR / COMMISSION_PER_SIGNUP_SAR), []);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminBusy, setAdminBusy] = useState(true);
 
-  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const [eligible, setEligible] = useState([]); // [{id, userId, code, signups, clicks, email, phone, name}]
-  const [requests, setRequests] = useState([]); // pending payout requests [{id, ...}]
+  const [eligibleRefs, setEligibleRefs] = useState([]); // referral_links eligible
+  const [pendingReqs, setPendingReqs] = useState([]); // payout_requests pending
 
-  const loadUsersMap = async (uids) => {
-    const unique = Array.from(new Set((uids || []).filter(Boolean))).slice(0, 80);
-    const pairs = await Promise.all(
-      unique.map(async (uid) => {
-        try {
-          const snap = await db.collection('users').doc(uid).get();
-          const d = snap.exists ? snap.data() : null;
-          return [uid, d || null];
-        } catch {
-          return [uid, null];
-        }
-      })
-    );
-    const map = {};
-    pairs.forEach(([uid, d]) => (map[uid] = d));
-    return map;
-  };
+  const eligibleCount = eligibleRefs.length;
+  const pendingCount = pendingReqs.length;
+
+  useEffect(() => {
+    if (!loading && !user) router.push('/login');
+  }, [loading, user, router]);
+
+  // ✅ تحقق صلاحيات الإدارة من users/{uid}
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    let mounted = true;
+    const run = async () => {
+      setAdminBusy(true);
+      setErr('');
+
+      try {
+        const snap = await db.collection('users').doc(user.uid).get();
+        const data = snap.exists ? snap.data() : null;
+
+        const ok =
+          data?.isAdmin === true ||
+          String(data?.role || '').toLowerCase() === 'admin';
+
+        if (!mounted) return;
+        setIsAdmin(!!ok);
+      } catch (e) {
+        console.error(e);
+        if (!mounted) return;
+        setErr('تعذر التحقق من صلاحيات الإدارة.');
+        setIsAdmin(false);
+      } finally {
+        if (mounted) setAdminBusy(false);
+      }
+    };
+
+    run();
+    return () => {
+      mounted = false;
+    };
+  }, [user?.uid]);
 
   const loadAll = async () => {
-    if (!isAdmin) return;
-
-    setBusy(true);
+    if (!user?.uid) return;
     setErr('');
+    setBusy(true);
 
     try {
-      // 1) Eligible referral links (signups >= requiredSignups)
-      // ترتيب: لازم orderBy على نفس الحقل
-      const snapEligible = await db
-        .collection('referral_links')
-        .where('signups', '>=', requiredSignups)
-        .orderBy('signups', 'desc')
-        .limit(200)
-        .get();
+      // ===== 1) المؤهلين تلقائيًا =====
+      // نحاول: where + orderBy، ولو فشل بسبب Index نعمل fallback بدون orderBy ونرتب محليًا
+      let eligible = [];
+      try {
+        const q = await db
+          .collection('referral_links')
+          .where('signups', '>=', REQUIRED_SIGNUPS)
+          .orderBy('signups', 'desc')
+          .limit(200)
+          .get();
 
-      const eligibleRaw = snapEligible.docs.map((d) => {
-        const data = d.data() || {};
-        const userId = String(data.userId || data.ownerUid || '');
-        const code = String(data.code || d.id || '');
-        const signups = safeNum(data.signups, 0);
-        const clicks = safeNum(data.clicks, 0);
-        const ownerEmail = String(data.userEmail || data.ownerEmail || '');
-        return { id: d.id, userId, code, signups, clicks, ownerEmail };
-      });
+        eligible = q.docs.map((d) => {
+          const x = d.data() || {};
+          const signups = safeNum(x.signups, 0);
+          const earningsSAR = signups * COMMISSION_PER_SIGNUP_SAR;
 
-      // 2) Pending payout requests
-      // لتجنب متطلبات Index، بدون orderBy
-      const snapReq = await db
-        .collection('payout_requests')
-        .where('status', '==', 'pending')
-        .limit(200)
-        .get();
+          return {
+            id: d.id,
+            code: String(x.code || d.id || ''),
+            userId: String(x.userId || x.ownerUid || ''),
+            userEmail: String(x.userEmail || x.ownerEmail || ''),
+            signups,
+            clicks: safeNum(x.clicks, 0),
+            earningsSAR,
+            createdAt: x.createdAt || null,
+            updatedAt: x.updatedAt || null,
+          };
+        });
+      } catch (e1) {
+        console.warn('Eligible query with orderBy failed, fallback:', e1?.message || e1);
 
-      const reqRaw = snapReq.docs.map((d) => {
-        const data = d.data() || {};
-        return {
-          id: d.id,
-          userId: String(data.userId || ''),
-          userEmail: String(data.userEmail || ''),
-          referralCode: String(data.referralCode || ''),
-          amountSAR: safeNum(data.amountSAR, 0),
-          signupsAtRequest: safeNum(data.signupsAtRequest, 0),
-          method: String(data.method || 'Al-Kuraimi'),
-          fullName: String(data.fullName || ''),
-          phone: String(data.phone || ''),
-          status: String(data.status || 'pending'),
-          createdAt: data.createdAt || null,
-        };
-      });
+        const q = await db
+          .collection('referral_links')
+          .where('signups', '>=', REQUIRED_SIGNUPS)
+          .limit(200)
+          .get();
 
-      const uids = [
-        ...eligibleRaw.map((x) => x.userId),
-        ...reqRaw.map((x) => x.userId),
-      ].filter(Boolean);
+        eligible = q.docs
+          .map((d) => {
+            const x = d.data() || {};
+            const signups = safeNum(x.signups, 0);
+            const earningsSAR = signups * COMMISSION_PER_SIGNUP_SAR;
 
-      const usersMap = await loadUsersMap(uids);
+            return {
+              id: d.id,
+              code: String(x.code || d.id || ''),
+              userId: String(x.userId || x.ownerUid || ''),
+              userEmail: String(x.userEmail || x.ownerEmail || ''),
+              signups,
+              clicks: safeNum(x.clicks, 0),
+              earningsSAR,
+              createdAt: x.createdAt || null,
+              updatedAt: x.updatedAt || null,
+            };
+          })
+          .sort((a, b) => b.signups - a.signups);
+      }
 
-      const eligibleEnriched = eligibleRaw.map((x) => {
-        const u = usersMap[x.userId] || {};
-        return {
-          ...x,
-          name: String(u?.name || '').trim(),
-          phone: String(u?.phone || '').trim(),
-          email: String(u?.email || x.ownerEmail || '').trim(),
-        };
-      });
+      // ===== 2) طلبات السحب pending =====
+      let pending = [];
+      try {
+        const r = await db
+          .collection('payout_requests')
+          .where('status', '==', 'pending')
+          .orderBy('createdAt', 'desc')
+          .limit(200)
+          .get();
 
-      const reqEnriched = reqRaw.map((x) => {
-        const u = usersMap[x.userId] || {};
-        return {
-          ...x,
-          name: String(x.fullName || u?.name || '').trim(),
-          phoneFinal: String(x.phone || u?.phone || '').trim(),
-        };
-      });
+        pending = r.docs.map((d) => {
+          const x = d.data() || {};
+          return {
+            id: d.id,
+            userId: String(x.userId || ''),
+            userEmail: String(x.userEmail || ''),
+            fullName: String(x.fullName || ''),
+            phone: String(x.phone || ''),
+            amountSAR: safeNum(x.amountSAR, 0),
+            method: String(x.method || ''),
+            referralId: String(x.referralId || ''),
+            referralCode: String(x.referralCode || ''),
+            signupsAtRequest: safeNum(x.signupsAtRequest, 0),
+            status: String(x.status || 'pending'),
+            createdAt: x.createdAt || null,
+            updatedAt: x.updatedAt || null,
+            note: String(x.note || ''),
+          };
+        });
+      } catch (e2) {
+        console.warn('Pending query with orderBy failed, fallback:', e2?.message || e2);
 
-      setEligible(eligibleEnriched);
-      setRequests(reqEnriched);
+        const r = await db
+          .collection('payout_requests')
+          .where('status', '==', 'pending')
+          .limit(200)
+          .get();
+
+        pending = r.docs.map((d) => {
+          const x = d.data() || {};
+          return {
+            id: d.id,
+            userId: String(x.userId || ''),
+            userEmail: String(x.userEmail || ''),
+            fullName: String(x.fullName || ''),
+            phone: String(x.phone || ''),
+            amountSAR: safeNum(x.amountSAR, 0),
+            method: String(x.method || ''),
+            referralId: String(x.referralId || ''),
+            referralCode: String(x.referralCode || ''),
+            signupsAtRequest: safeNum(x.signupsAtRequest, 0),
+            status: String(x.status || 'pending'),
+            createdAt: x.createdAt || null,
+            updatedAt: x.updatedAt || null,
+            note: String(x.note || ''),
+          };
+        });
+      }
+
+      setEligibleRefs(eligible);
+      setPendingReqs(pending);
     } catch (e) {
       console.error(e);
-      setErr('تعذر تحميل بيانات العمولة/السحب. تأكد من الصلاحيات ووجود الحقول.');
+      setErr(
+        e?.code === 'permission-denied'
+          ? 'رفض صلاحيات Firestore (permission-denied) — راجع Rules للوحة الإدارة.'
+          : e?.message
+          ? `تعذر تحميل بيانات الإدارة: ${e.message}`
+          : 'تعذر تحميل بيانات الإدارة.'
+      );
     } finally {
       setBusy(false);
     }
   };
 
   useEffect(() => {
-    if (!loading && isAdmin) loadAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, isAdmin]);
-
-  const markRequest = async (id, status) => {
     if (!isAdmin) return;
-    const ok = window.confirm(status === 'paid' ? 'تأكيد: تم السداد؟' : 'تأكيد: رفض الطلب؟');
-    if (!ok) return;
+    loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
+
+  const setStatus = async (id, newStatus) => {
+    if (!id) return;
+    setErr('');
+    setBusy(true);
 
     try {
-      await db.collection('payout_requests').doc(id).update({
-        status,
+      const patch = {
+        status: newStatus,
         updatedAt: new Date(),
-        paidAt: status === 'paid' ? new Date() : null,
-      });
-      await loadAll();
+      };
+
+      if (newStatus === 'contacted') patch.contactedAt = new Date();
+      if (newStatus === 'paid') patch.paidAt = new Date();
+      if (newStatus === 'rejected') patch.rejectedAt = new Date();
+
+      await db.collection('payout_requests').doc(id).set(patch, { merge: true });
+
+      // تحديث محلي
+      setPendingReqs((prev) =>
+        prev
+          .map((x) => (x.id === id ? { ...x, status: newStatus, updatedAt: patch.updatedAt } : x))
+          .filter((x) => x.status === 'pending') // نخفي اللي تغيرت حالتها
+      );
     } catch (e) {
       console.error(e);
-      alert('فشل تحديث حالة الطلب. تأكد من الصلاحيات.');
+      setErr(
+        e?.code === 'permission-denied'
+          ? 'رفض صلاحيات Firestore (permission-denied) — لازم الإدارة تكون لها صلاحيات تعديل payout_requests.'
+          : e?.message
+          ? `تعذر تحديث الحالة: ${e.message}`
+          : 'تعذر تحديث الحالة.'
+      );
+    } finally {
+      setBusy(false);
     }
   };
 
-  if (loading) {
+  const copyText = async (txt) => {
+    const t = String(txt || '').trim();
+    if (!t) return;
+    try {
+      await navigator.clipboard.writeText(t);
+      alert('✅ تم النسخ');
+    } catch (e) {
+      window.prompt('انسخ النص:', t);
+    }
+  };
+
+  if (loading || adminBusy) {
     return (
-      <div className="container" style={{ paddingTop: 24 }}>
+      <div className="container" style={{ paddingTop: 24, paddingBottom: 40 }}>
         <div className="card" style={{ padding: 16 }}>جاري التحميل…</div>
       </div>
     );
   }
 
+  if (!user) return null;
+
   if (!isAdmin) {
     return (
-      <div className="container" style={{ paddingTop: 24 }}>
+      <div className="container" style={{ paddingTop: 24, paddingBottom: 40 }}>
         <div className="card" style={{ padding: 16 }}>
-          <h2 style={{ margin: 0 }}>⛔ لا تملك صلاحية</h2>
-          <p className="muted" style={{ marginTop: 8 }}>هذه الصفحة للمدراء فقط.</p>
-          <Link className="btn" href="/">رجوع</Link>
+          <h1 style={{ margin: 0 }}>لوحة الإدارة المالية</h1>
+          <p className="muted" style={{ marginTop: 8 }}>
+            صلاحيات غير كافية. لتفعيل الإدارة لحسابك أضف في Firestore:
+            <br />
+            <b>users/{user.uid}</b> → <b>isAdmin: true</b> (أو role: "admin")
+          </p>
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+            <Link className="btn" href="/">رجوع للرئيسية</Link>
+            <Link className="btn" href="/profile">الملف الشخصي</Link>
+          </div>
+
+          {err ? (
+            <div className="card" style={{ marginTop: 12, padding: 12, borderColor: 'rgba(220,38,38,.35)', color: '#991b1b' }}>
+              {err}
+            </div>
+          ) : null}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="container" style={{ paddingTop: 24, paddingBottom: 40 }}>
+    <div className="container" style={{ paddingTop: 24, paddingBottom: 60 }}>
       <div className="card" style={{ padding: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <div>
-            <h1 style={{ margin: 0 }}>💰 إدارة السحب والعمولات</h1>
-            <p className="muted" style={{ marginTop: 8 }}>
-              المؤهل للسحب: <b>{MIN_PAYOUT_SAR}</b> ريال (يعادل <b>{requiredSignups}</b> تسجيل مؤهل) — العمولة: {COMMISSION_PER_SIGNUP_SAR} SAR
+            <h1 style={{ margin: 0 }}>🏦 الإدارة المالية</h1>
+            <p className="muted" style={{ marginTop: 6 }}>
+              الحد الأدنى للسحب: <b>{MIN_PAYOUT_SAR}</b> SAR — (يعادل <b>{REQUIRED_SIGNUPS}</b> تسجيل مؤهل)
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button className="btn btnPrimary" type="button" onClick={loadAll} disabled={busy}>
-              {busy ? '⏳ تحديث…' : '🔄 تحديث'}
+              {busy ? 'جاري التحديث…' : '🔄 تحديث'}
             </button>
             <Link className="btn" href="/admin">لوحة الإدارة</Link>
           </div>
@@ -200,110 +337,135 @@ export default function AdminPayoutsPage() {
           </div>
         ) : null}
 
-        {/* Eligible */}
+        {/* ===== طلبات السحب pending ===== */}
         <div className="card" style={{ marginTop: 14, padding: 12 }}>
-          <div style={{ fontWeight: 950, marginBottom: 8 }}>✅ المؤهلين تلقائيًا (بدون طلب)</div>
-          <div className="muted" style={{ marginBottom: 10 }}>
-            هذا يساعد المالية تجهّز الميزانية حتى لو المستخدم ما طلب سحب.
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontWeight: 900 }}>📨 طلبات السحب (قيد المراجعة)</div>
+            <div className="muted">عددها: <b>{pendingCount}</b></div>
           </div>
 
-          {eligible.length === 0 ? (
-            <div className="muted">لا يوجد مؤهلين حالياً.</div>
+          {pendingCount === 0 ? (
+            <div className="muted" style={{ marginTop: 10 }}>لا توجد طلبات سحب pending حالياً.</div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-                <thead>
-                  <tr style={{ textAlign: 'right' }}>
-                    <th style={{ padding: 8, borderBottom: '1px solid #e2e8f0' }}>المستخدم</th>
-                    <th style={{ padding: 8, borderBottom: '1px solid #e2e8f0' }}>الجوال</th>
-                    <th style={{ padding: 8, borderBottom: '1px solid #e2e8f0' }}>التسجيلات</th>
-                    <th style={{ padding: 8, borderBottom: '1px solid #e2e8f0' }}>الأرباح (SAR)</th>
-                    <th style={{ padding: 8, borderBottom: '1px solid #e2e8f0' }}>الكود</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {eligible.map((x) => {
-                    const earnings = x.signups * COMMISSION_PER_SIGNUP_SAR;
-                    return (
-                      <tr key={x.id}>
-                        <td style={{ padding: 8, borderBottom: '1px solid #f1f5f9' }}>
-                          <div style={{ fontWeight: 900 }}>{x.name || x.email || x.ownerEmail || x.userId}</div>
-                          <div className="muted" style={{ fontSize: 12 }}>{x.email || ''}</div>
-                        </td>
-                        <td style={{ padding: 8, borderBottom: '1px solid #f1f5f9' }}>
-                          {x.phone || '—'}
-                        </td>
-                        <td style={{ padding: 8, borderBottom: '1px solid #f1f5f9' }}>
-                          {safeNum(x.signups, 0).toLocaleString('ar-YE')}
-                        </td>
-                        <td style={{ padding: 8, borderBottom: '1px solid #f1f5f9', fontWeight: 900 }}>
-                          {earnings.toLocaleString('ar-YE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                        <td style={{ padding: 8, borderBottom: '1px solid #f1f5f9' }}>
-                          <span style={{ fontWeight: 900 }}>{x.code}</span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Requests */}
-        <div className="card" style={{ marginTop: 14, padding: 12 }}>
-          <div style={{ fontWeight: 950, marginBottom: 8 }}>📥 طلبات السحب (Pending)</div>
-
-          {requests.length === 0 ? (
-            <div className="muted">لا يوجد طلبات سحب حالياً.</div>
-          ) : (
-            <div style={{ display: 'grid', gap: 10 }}>
-              {requests.map((r) => (
-                <div key={r.id} className="card" style={{ padding: 12, borderColor: '#fde68a' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                    <div>
-                      <div style={{ fontWeight: 950 }}>
-                        {r.name || r.userEmail || r.userId}
+            <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+              {pendingReqs.map((r) => (
+                <div key={r.id} className="card" style={{ padding: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 220 }}>
+                      <div style={{ fontWeight: 950 }}>{r.fullName || '—'}</div>
+                      <div className="muted" style={{ marginTop: 4 }}>
+                        📧 {r.userEmail || '—'}
                       </div>
-                      <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                        جوال: <b>{r.phoneFinal || '—'}</b> — طريقة: <b>{r.method}</b>
+                      <div className="muted" style={{ marginTop: 4 }}>
+                        📞 {r.phone || '—'}
                       </div>
-                      <div className="muted" style={{ fontSize: 13 }}>
-                        الكود: <b>{r.referralCode || '—'}</b> — تسجيلات عند الطلب: {safeNum(r.signupsAtRequest, 0).toLocaleString('ar-YE')}
-                      </div>
-                      <div style={{ marginTop: 6, fontWeight: 900 }}>
-                        المبلغ: {safeNum(r.amountSAR, 0).toLocaleString('ar-YE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR
+                      <div className="muted" style={{ marginTop: 4 }}>
+                        ⏱️ {toDateString(r.createdAt)}
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                      <button className="btn" type="button" onClick={() => navigator.clipboard?.writeText(r.phoneFinal || '')}>
-                        نسخ الجوال
+                    <div style={{ minWidth: 220 }}>
+                      <div className="muted">المبلغ:</div>
+                      <div style={{ fontWeight: 950, fontSize: 18 }}>
+                        {safeNum(r.amountSAR, 0).toLocaleString('ar-YE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR
+                      </div>
+
+                      <div className="muted" style={{ marginTop: 6 }}>
+                        طريقة التحويل: <b>{r.method || '—'}</b>
+                      </div>
+
+                      <div className="muted" style={{ marginTop: 6 }}>
+                        كود الإحالة: <b>{r.referralCode || '—'}</b> — تسجيلات عند الطلب: <b>{safeNum(r.signupsAtRequest, 0)}</b>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <button className="btn" type="button" onClick={() => copyText(r.phone)}>📋 نسخ الجوال</button>
+                      <button className="btn" type="button" onClick={() => copyText(r.userEmail)}>📋 نسخ البريد</button>
+
+                      <button className="btn" type="button" disabled={busy} onClick={() => setStatus(r.id, 'contacted')}>
+                        ✅ تم التواصل
                       </button>
-                      <button className="btn" type="button" onClick={() => markRequest(r.id, 'paid')}>
-                        ✅ تم السداد
+                      <button className="btn" type="button" disabled={busy} onClick={() => setStatus(r.id, 'paid')}>
+                        💸 تم التحويل
                       </button>
-                      <button className="btn" type="button" onClick={() => markRequest(r.id, 'rejected')}>
+                      <button className="btn" type="button" disabled={busy} onClick={() => setStatus(r.id, 'rejected')}>
                         ❌ رفض
                       </button>
                     </div>
                   </div>
 
-                  <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-                    ملاحظة: التحويل عبر بنك الكريمي بعد تواصل الإدارة مع المستفيد وأخذ بياناته.
-                  </div>
+                  {r.note ? (
+                    <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
+                      ملاحظة الطلب: {r.note}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <style jsx>{`
-          table th{color:#475569;font-weight:950}
-          .btn{padding:10px 14px;border-radius:12px;border:2px solid #e2e8f0;background:#f8fafc;font-weight:900;cursor:pointer;text-decoration:none;color:#0f172a}
-          .btnPrimary{background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;color:#fff}
-        `}</style>
+        {/* ===== المؤهلين تلقائيًا ===== */}
+        <div className="card" style={{ marginTop: 14, padding: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontWeight: 900 }}>✅ المؤهلين للسحب تلقائيًا (بدون طلب)</div>
+            <div className="muted">عددهم: <b>{eligibleCount}</b></div>
+          </div>
+
+          <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
+            معيار التأهل: <b>signups ≥ {REQUIRED_SIGNUPS}</b> (يُحسب الرصيد = signups × {COMMISSION_PER_SIGNUP_SAR})
+          </div>
+
+          {eligibleCount === 0 ? (
+            <div className="muted" style={{ marginTop: 10 }}>لا يوجد مؤهلين حالياً.</div>
+          ) : (
+            <div style={{ marginTop: 10, overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'right', padding: 10, borderBottom: '1px solid #e2e8f0' }}>المستخدم</th>
+                    <th style={{ textAlign: 'right', padding: 10, borderBottom: '1px solid #e2e8f0' }}>الكود</th>
+                    <th style={{ textAlign: 'right', padding: 10, borderBottom: '1px solid #e2e8f0' }}>التسجيلات</th>
+                    <th style={{ textAlign: 'right', padding: 10, borderBottom: '1px solid #e2e8f0' }}>الأرباح (SAR)</th>
+                    <th style={{ textAlign: 'right', padding: 10, borderBottom: '1px solid #e2e8f0' }}>إجراءات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {eligibleRefs.map((x) => (
+                    <tr key={x.id}>
+                      <td style={{ padding: 10, borderBottom: '1px solid #f1f5f9' }}>
+                        <div style={{ fontWeight: 900 }}>{x.userEmail || x.userId || '—'}</div>
+                        <div className="muted" style={{ fontSize: 12 }}>
+                          UID: {x.userId || '—'}
+                        </div>
+                      </td>
+                      <td style={{ padding: 10, borderBottom: '1px solid #f1f5f9' }}>
+                        <div style={{ fontWeight: 900 }}>{x.code || '—'}</div>
+                      </td>
+                      <td style={{ padding: 10, borderBottom: '1px solid #f1f5f9' }}>
+                        {safeNum(x.signups, 0).toLocaleString('ar-YE')}
+                      </td>
+                      <td style={{ padding: 10, borderBottom: '1px solid #f1f5f9' }}>
+                        {safeNum(x.earningsSAR, 0).toLocaleString('ar-YE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td style={{ padding: 10, borderBottom: '1px solid #f1f5f9' }}>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button className="btn" type="button" onClick={() => copyText(x.userEmail)}>📋 نسخ البريد</button>
+                          <button className="btn" type="button" onClick={() => copyText(x.code)}>📋 نسخ الكود</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="muted" style={{ marginTop: 12, fontSize: 13 }}>
+          * لو واجهت خطأ Index في الاستعلامات، هذا طبيعي أول مرة. الكود عنده fallback، ومع الوقت تقدر تعمل Index من Firebase Console لو تحب.
+        </div>
       </div>
     </div>
   );
