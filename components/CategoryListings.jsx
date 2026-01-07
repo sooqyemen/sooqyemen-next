@@ -60,14 +60,21 @@ function listingCategorySlug(listing) {
   return normalizeSlug(raw);
 }
 
-export default function CategoryListings({ category }) {
+export default function CategoryListings({ category, initialListings = [] }) {
   const [view, setView] = useState('grid'); // grid | list | map
   const [q, setQ] = useState('');
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState(initialListings);
+  const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
 
   useEffect(() => {
+    // إذا كان عندنا بيانات SSR، نخلي الاشتراك اختياري للتوفير
+    if (initialListings.length > 0) {
+      setLoading(false);
+      return;
+    }
+
+    // fallback: إذا ما كان في بيانات SSR، نجلب من Firebase
     // ✅ category قد يكون string أو array
     const catsRaw = Array.isArray(category) ? category : [category];
     const cats = catsRaw.map(normalizeSlug).filter(Boolean);
@@ -169,7 +176,7 @@ export default function CategoryListings({ category }) {
     return () => {
       if (typeof unsub === 'function') unsub();
     };
-  }, [category]);
+  }, [category, initialListings.length]);
 
   const filtered = useMemo(() => {
     const s = String(q || '').trim().toLowerCase();

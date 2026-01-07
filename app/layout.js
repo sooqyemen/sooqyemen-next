@@ -13,10 +13,20 @@ export const metadata = {
   description: 'أكبر منصة للإعلانات والمزادات في اليمن - بيع وشراء السيارات، العقارات، الجوالات، الإلكترونيات وأكثر',
   keywords: ['سوق اليمن', 'إعلانات اليمن', 'بيع وشراء', 'مزادات', 'سيارات', 'عقارات', 'جوالات'],
   authors: [{ name: 'سوق اليمن' }],
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
   openGraph: {
     type: 'website',
     locale: 'ar_YE',
-    url: 'https://sooqyemen.com',
+    url: '/',
     siteName: 'سوق اليمن',
     title: 'سوق اليمن - أكبر منصة للإعلانات والمزادات في اليمن',
     description: 'أكبر منصة للإعلانات والمزادات في اليمن - بيع وشراء السيارات، العقارات، الجوالات، الإلكترونيات وأكثر',
@@ -36,6 +46,9 @@ export const metadata = {
     images: ['/logo.png'],
   },
   manifest: '/manifest.json',
+  alternates: {
+    canonical: '/',
+  },
 };
 
 export default function RootLayout({ children }) {
