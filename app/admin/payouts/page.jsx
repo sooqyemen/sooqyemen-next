@@ -294,7 +294,7 @@ export default function AdminPayoutsPage() {
           <p className="muted" style={{ marginTop: 8 }}>
             صلاحيات غير كافية. لتفعيل الإدارة لحسابك أضف في Firestore:
             <br />
-            <b>users/{user.uid}</b> → <b>isAdmin: true</b> (أو role: "admin")
+            <b>users/{user.uid}</b> → <b>isAdmin: true</b> (أو role: &quot;admin&quot;)
           </p>
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>

@@ -86,7 +86,7 @@ export default function HelpPage() {
               <div className="step-number">2</div>
               <div className="step-content">
                 <h3>إضافة إعلان</h3>
-                <p>انقر على "أضف إعلان" واملأ المعلومات بدقة مع صور واضحة</p>
+                <p>انقر على &quot;أضف إعلان&quot; واملأ المعلومات بدقة مع صور واضحة</p>
               </div>
             </div>
             
@@ -94,7 +94,7 @@ export default function HelpPage() {
               <div className="step-number">3</div>
               <div className="step-content">
                 <h3>متابعة الإعلان</h3>
-                <p>تابع إعلاناتك ورد على رسائل المشترين من قسم "محادثاتي"</p>
+                <p>تابع إعلاناتك ورد على رسائل المشترين من قسم &quot;محادثاتي&quot;</p>
               </div>
             </div>
             
@@ -161,7 +161,7 @@ export default function HelpPage() {
               <h4>لا أتلقى رسائل المشترين</h4>
               <ul>
                 <li>تأكد من صحة رقم هاتفك</li>
-                <li>تحقق من قسم "محادثاتي" في الموقع</li>
+                <li>تحقق من قسم &quot;محادثاتي&quot; في الموقع</li>
                 <li>قد تكون الرسائل في صندوق البريد المزعج</li>
               </ul>
             </div>

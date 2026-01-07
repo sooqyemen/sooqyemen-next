@@ -123,6 +123,8 @@ export default function PayoutRequestPage() {
     return () => {
       mounted = false;
     };
+    // We use user.name in the load function, but it's optional and doesn't affect the data fetch logic
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
 
   const handleSubmit = async () => {
