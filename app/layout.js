@@ -5,8 +5,37 @@ import { AuthProvider } from '@/lib/useAuth';
 import Header from '@/components/Header';
 
 export const metadata = {
-  title: 'سوق اليمن',
-  description: 'منصتك الأولى للبيع والشراء في اليمن',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://sooqyemen.com'),
+  title: {
+    default: 'سوق اليمن - أكبر منصة للإعلانات والمزادات في اليمن',
+    template: '%s | سوق اليمن',
+  },
+  description: 'أكبر منصة للإعلانات والمزادات في اليمن - بيع وشراء السيارات، العقارات، الجوالات، الإلكترونيات وأكثر',
+  keywords: ['سوق اليمن', 'إعلانات اليمن', 'بيع وشراء', 'مزادات', 'سيارات', 'عقارات', 'جوالات'],
+  authors: [{ name: 'سوق اليمن' }],
+  openGraph: {
+    type: 'website',
+    locale: 'ar_YE',
+    url: 'https://sooqyemen.com',
+    siteName: 'سوق اليمن',
+    title: 'سوق اليمن - أكبر منصة للإعلانات والمزادات في اليمن',
+    description: 'أكبر منصة للإعلانات والمزادات في اليمن - بيع وشراء السيارات، العقارات، الجوالات، الإلكترونيات وأكثر',
+    images: [
+      {
+        url: '/logo.png',
+        width: 512,
+        height: 512,
+        alt: 'سوق اليمن',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'سوق اليمن - أكبر منصة للإعلانات والمزادات في اليمن',
+    description: 'أكبر منصة للإعلانات والمزادات في اليمن',
+    images: ['/logo.png'],
+  },
+  manifest: '/manifest.json',
 };
 
 export default function RootLayout({ children }) {

@@ -458,11 +458,27 @@ export default function HomePage() {
             .map((doc) => ({ id: doc.id, ...doc.data() }))
             .filter((listing) => listing.isActive !== false && listing.hidden !== true);
 
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`[HomePage] Loaded ${data.length} listings (withOrder: ${withOrder})`);
+            if (data.length === 0) {
+              console.warn('[HomePage] No listings found. Check Firebase rules and data.');
+            }
+          }
+
           setListings(data);
           setLoading(false);
         },
         (err) => {
           console.error('خطأ في جلب الإعلانات:', err);
+
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[HomePage] Query failed:', {
+              withOrder,
+              errorCode: err?.code,
+              errorMessage: err?.message,
+              willTryFallback: withOrder && !triedFallback,
+            });
+          }
 
           if (withOrder && !triedFallback) {
             triedFallback = true;

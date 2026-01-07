@@ -169,11 +169,18 @@ export default function ListingsPage() {
             .map((d) => ({ id: d.id, ...d.data() }))
             .filter((x) => x.isActive !== false && x.hidden !== true);
 
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`[ListingsPage] Loaded ${data.length} listings`);
+            if (data.length === 0) {
+              console.warn('[ListingsPage] No listings found. Check Firebase rules and data.');
+            }
+          }
+
           setListings(data);
           setLoading(false);
         },
         (e) => {
-          console.error(e);
+          console.error('[ListingsPage] Error loading listings:', e);
           setErr(e?.message || 'تعذّر تحميل الإعلانات');
           setLoading(false);
         }

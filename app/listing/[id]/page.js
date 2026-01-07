@@ -143,7 +143,9 @@ export default function ListingDetails({ params }) {
   // تسجيلات تحليلية
   useEffect(() => {
     if (!id) return;
+    // We only need id and user.uid, not the full user object
     logListingView(id, user).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, user?.uid]);
 
   const coords = useMemo(() => {

@@ -16,6 +16,7 @@ const LocationPicker = dynamic(
 const DEFAULT_CATEGORIES = [
   { slug: 'cars', name: 'سيارات' },
   { slug: 'realestate', name: 'عقارات' },
+  { slug: 'phones', name: 'جوالات' },
   { slug: 'electronics', name: 'إلكترونيات' },
   { slug: 'motorcycles', name: 'دراجات نارية' },
   { slug: 'heavy_equipment', name: 'معدات ثقيلة' },
@@ -23,6 +24,7 @@ const DEFAULT_CATEGORIES = [
   { slug: 'networks', name: 'نت وشبكات' },
   { slug: 'maintenance', name: 'صيانة' },
   { slug: 'furniture', name: 'أثاث' },
+  { slug: 'home_tools', name: 'أدوات منزلية' },
   { slug: 'clothes', name: 'ملابس' },
   { slug: 'animals', name: 'حيوانات وطيور' },
   { slug: 'jobs', name: 'وظائف' },
@@ -694,7 +696,7 @@ export default function AddPage() {
 
         <div className="final-notes">
           <p>
-            بعد النشر، يمكنك متابعة إعلانك من قسم <strong>"إعلاناتي"</strong>
+            بعد النشر، يمكنك متابعة إعلانك من قسم <strong>&quot;إعلاناتي&quot;</strong>
           </p>
         </div>
       </div>

@@ -195,6 +195,7 @@ function ChatPageContent({ chatId, listingId, otherUid }) {
     };
 
     markAsRead();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId, user?.uid, chatData?.lastMessageBy]);
 
   const handleToggleBlock = async () => {
