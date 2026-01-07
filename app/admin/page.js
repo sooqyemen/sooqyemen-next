@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/useAuth';
 import { db } from '@/lib/firebaseClient';
-import { collection, getCountFromServer, query, where } from 'firebase/firestore';
 
 const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
 
@@ -37,6 +36,18 @@ function ActionCard({ title, desc, href, icon }) {
       </div>
     </Link>
   );
+}
+
+// ✅ عدّاد باستخدام compat (count() إن توفر، وإلا fallback على get().size)
+async function countCompat(q) {
+  try {
+    // بعض نسخ compat تدعم count()
+    const snap = await q.count().get();
+    return snap.data().count;
+  } catch {
+    const s = await q.get();
+    return s.size;
+  }
 }
 
 export default function AdminPage() {
@@ -74,20 +85,25 @@ export default function AdminPage() {
       setErr('');
 
       try {
+        const qListingsTotal = db.collection('listings');
+        const qListingsActive = db.collection('listings').where('isActive', '==', true);
+        const qUsersTotal = db.collection('users');
+        const qChatsTotal = db.collection('chats');
+
         const [listingsTotal, listingsActive, usersTotal, chatsTotal] = await Promise.all([
-          getCountFromServer(collection(db, 'listings')),
-          getCountFromServer(query(collection(db, 'listings'), where('isActive', '==', true))),
-          getCountFromServer(collection(db, 'users')),
-          getCountFromServer(collection(db, 'chats')),
+          countCompat(qListingsTotal),
+          countCompat(qListingsActive),
+          countCompat(qUsersTotal),
+          countCompat(qChatsTotal),
         ]);
 
         if (!mounted) return;
 
         setStats({
-          listingsTotal: listingsTotal.data().count,
-          listingsActive: listingsActive.data().count,
-          usersTotal: usersTotal.data().count,
-          chatsTotal: chatsTotal.data().count,
+          listingsTotal,
+          listingsActive,
+          usersTotal,
+          chatsTotal,
         });
       } catch (e) {
         console.error('Admin stats error:', e);
@@ -177,6 +193,8 @@ export default function AdminPage() {
       <div className="actions">
         <ActionCard title="إدارة الإعلانات" desc="تفعيل/إخفاء/حذف الإعلانات" href="/admin/listings" icon="🧰" />
         <ActionCard title="إدارة المستخدمين" desc="عرض/حظر/فك حظر المستخدمين" href="/admin/users" icon="🛡️" />
+        {/* ✅ أضفت لوحة الإدارة المالية */}
+        <ActionCard title="الإدارة المالية" desc="طلبات السحب + المؤهلين للتحويل" href="/admin/payouts" icon="💼" />
       </div>
 
       <div className="footer">
