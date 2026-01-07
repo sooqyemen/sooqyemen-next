@@ -88,6 +88,9 @@ export default function CategoryListings({ category }) {
     const single = cats.length === 1 ? cats[0] : '';
 
     const fallbackFetchAndFilter = () => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[CategoryListings] Using fallback fetch for category: ${single || cats.join(', ')}`);
+      }
       const ref2 = db.collection('listings').orderBy('createdAt', 'desc').limit(400);
       unsub = ref2.onSnapshot(
         (snap2) => {
@@ -96,6 +99,15 @@ export default function CategoryListings({ category }) {
             .filter((l) => l.isActive !== false && l.hidden !== true);
 
           const filtered = all.filter((l) => catsSet.has(listingCategorySlug(l)));
+
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`[CategoryListings] Fallback fetch: ${all.length} total listings, ${filtered.length} match category`);
+            if (filtered.length === 0 && all.length > 0) {
+              const categories = all.slice(0, 5).map(l => `${l.id}: ${l.category}`);
+              console.log('[CategoryListings] Sample categories from listings:', categories);
+              console.log('[CategoryListings] Looking for categories:', Array.from(catsSet));
+            }
+          }
 
           setItems(filtered);
           setLoading(false);
@@ -113,6 +125,9 @@ export default function CategoryListings({ category }) {
         // عدة أسماء للقسم -> استخدم fallback مباشرة
         fallbackFetchAndFilter();
       } else {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[CategoryListings] Attempting direct query for category: "${single}"`);
+        }
         const ref = db
           .collection('listings')
           .where('category', '==', single)
@@ -125,11 +140,19 @@ export default function CategoryListings({ category }) {
               .map((d) => ({ id: d.id, ...d.data() }))
               .filter((l) => l.isActive !== false && l.hidden !== true);
 
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`[CategoryListings] Direct query success: ${data.length} listings found for "${single}"`);
+            }
+
             setItems(data);
             setLoading(false);
           },
           (e) => {
-            console.error('Category query failed (maybe needs index):', e);
+            if (process.env.NODE_ENV === 'development') {
+              console.warn(`[CategoryListings] Direct query failed for "${single}", falling back to filter:`, e.code || e.message);
+            } else {
+              console.error('Category query failed (maybe needs index):', e);
+            }
             fallbackFetchAndFilter();
           }
         );
