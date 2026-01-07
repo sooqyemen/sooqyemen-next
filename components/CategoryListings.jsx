@@ -102,10 +102,13 @@ export default function CategoryListings({ category }) {
 
           if (process.env.NODE_ENV === 'development') {
             console.log(`[CategoryListings] Fallback fetch: ${all.length} total listings, ${filtered.length} match category`);
-            if (filtered.length === 0 && all.length > 0) {
-              const categories = all.slice(0, 5).map(l => `${l.id}: ${l.category}`);
+            if (filtered.length === 0 && all.length > 0 && all.length <= 10) {
+              // Only show sample when we have a small dataset to avoid performance issues
+              const categories = all.map(l => `${l.id}: ${l.category}`);
               console.log('[CategoryListings] Sample categories from listings:', categories);
               console.log('[CategoryListings] Looking for categories:', Array.from(catsSet));
+            } else if (filtered.length === 0 && all.length > 10) {
+              console.log('[CategoryListings] No matches found. Try checking category field names in Firebase.');
             }
           }
 

@@ -5,7 +5,7 @@ import { AuthProvider } from '@/lib/useAuth';
 import Header from '@/components/Header';
 
 export const metadata = {
-  metadataBase: new URL('https://sooqyemen.com'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://sooqyemen.com'),
   title: {
     default: 'سوق اليمن - أكبر منصة للإعلانات والمزادات في اليمن',
     template: '%s | سوق اليمن',

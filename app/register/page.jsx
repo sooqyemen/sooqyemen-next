@@ -9,16 +9,15 @@ export default function RegisterPage() {
   const { user, loading } = useAuth();
 
   useEffect(() => {
-    // If user is already logged in, redirect to profile
-    if (!loading && user) {
-      router.push('/profile');
-    }
-  }, [user, loading, router]);
-
-  // Since we use Google Sign-In only, redirect to login page
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
+    // Since we use Google Sign-In only, redirect accordingly
+    if (!loading) {
+      if (user) {
+        // User already logged in, go to profile
+        router.push('/profile');
+      } else {
+        // Not logged in, go to login page
+        router.push('/login');
+      }
     }
   }, [user, loading, router]);
 

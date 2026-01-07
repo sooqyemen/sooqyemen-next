@@ -22,7 +22,9 @@ export default function ContactPage() {
     e.preventDefault();
     setSubmitting(true);
 
-    // Simulate form submission (in production, this would send to a backend/email service)
+    // TODO: Replace with actual form submission logic
+    // This should send the form data to a backend API or email service
+    // For now, we simulate the submission
     setTimeout(() => {
       setSubmitted(true);
       setSubmitting(false);
