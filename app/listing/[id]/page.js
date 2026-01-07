@@ -7,7 +7,16 @@ export const revalidate = 300; // 5 دقائق
 // Generate dynamic metadata for SEO
 export async function generateMetadata({ params }) {
   const { id } = params;
-  const listing = await fetchListingById(id);
+  
+  let listing = null;
+  
+  try {
+    listing = await fetchListingById(id);
+  } catch (error) {
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[generateMetadata] Failed to fetch listing:', error);
+    }
+  }
 
   if (!listing) {
     return {
@@ -60,7 +69,16 @@ export default async function ListingDetailsPage({ params }) {
   const { id } = params;
   
   // Fetch initial listing data on server
-  const initialListing = await fetchListingById(id);
+  let initialListing = null;
+  
+  try {
+    initialListing = await fetchListingById(id);
+  } catch (error) {
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[ListingDetailsPage SSR] Failed to fetch listing:', error);
+    }
+    // في حالة الفشل، سيتم جلب البيانات من الكلاينت
+  }
 
   return <ListingDetailsClient params={params} initialListing={initialListing} />;
 }

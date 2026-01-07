@@ -14,7 +14,16 @@ export const metadata = {
 
 export default async function ListingsPage() {
   // جلب أول 24 إعلان من السيرفر (SSR)
-  const initialListings = await fetchPublicListings({ limit: 24 });
+  let initialListings = [];
+  
+  try {
+    initialListings = await fetchPublicListings({ limit: 24 });
+  } catch (error) {
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[ListingsPage SSR] Failed to fetch initial listings:', error);
+    }
+    // في حالة الفشل، سيتم جلب البيانات من الكلاينت
+  }
 
   return <ListingsPageClient initialListings={initialListings} />;
 }
