@@ -5,16 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/useAuth';
 import { db } from '@/lib/firebaseClient';
-import {
-  collection,
-  deleteDoc,
-  doc,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  updateDoc,
-} from 'firebase/firestore';
 
 const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
 
@@ -40,18 +30,20 @@ export default function AdminListingsPage() {
     if (!user || !isAdmin) return;
 
     setErr('');
-    const qy = query(collection(db, 'listings'), orderBy('createdAt', 'desc'), limit(200));
-    const unsub = onSnapshot(
-      qy,
-      (snap) => {
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setItems(rows);
-      },
-      (e) => {
-        console.error(e);
-        setErr('تعذر تحميل الإعلانات. تأكد من قواعد Firestore.');
-      }
-    );
+    const unsub = db
+      .collection('listings')
+      .orderBy('createdAt', 'desc')
+      .limit(200)
+      .onSnapshot(
+        (snap) => {
+          const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setItems(rows);
+        },
+        (e) => {
+          console.error(e);
+          setErr('تعذر تحميل الإعلانات. تأكد من قواعد Firestore.');
+        }
+      );
 
     return () => unsub();
   }, [loading, user, isAdmin]);
@@ -69,16 +61,16 @@ export default function AdminListingsPage() {
   }
 
   const toggleHidden = async (id, hidden) => {
-    await updateDoc(doc(db, 'listings', id), { hidden: !hidden });
+    await db.collection('listings').doc(id).update({ hidden: !hidden });
   };
 
   const toggleActive = async (id, isActive) => {
-    await updateDoc(doc(db, 'listings', id), { isActive: !(isActive === true) });
+    await db.collection('listings').doc(id).update({ isActive: !(isActive === true) });
   };
 
   const remove = async (id) => {
     if (!confirm('هل أنت متأكد من حذف الإعلان؟')) return;
-    await deleteDoc(doc(db, 'listings', id));
+    await db.collection('listings').doc(id).delete();
   };
 
   return (

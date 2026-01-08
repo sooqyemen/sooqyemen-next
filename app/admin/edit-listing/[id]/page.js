@@ -3,9 +3,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
-import { db } from '@/lib/firebaseClient';
+import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 
 // ✅ نفس إعدادات الأدمن
@@ -56,10 +55,10 @@ export default function EditListingPage() {
 
       try {
         setPageLoading(true);
-        const ref = doc(db, 'listings', String(id));
-        const snap = await getDoc(ref);
+        const ref = db.collection('listings').doc(String(id));
+        const snap = await ref.get();
 
-        if (!snap.exists()) {
+        if (!snap.exists) {
           setErr('الإعلان غير موجود أو تم حذفه.');
           setData(null);
           setPageLoading(false);
@@ -111,16 +110,16 @@ export default function EditListingPage() {
         coords = [numLat, numLng];
       }
 
-      const ref = doc(db, 'listings', String(id));
+      const ref = db.collection('listings').doc(String(id));
 
-      await updateDoc(ref, {
+      await ref.update({
         title: String(data.title || ''),
         description: String(data.description || ''),
         priceYER: Number(data.priceYER || 0),
         city: String(data.city || ''),
         locationLabel: String(data.locationLabel || ''),
         coords: coords || null,
-        updatedAt: serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       });
 
       alert('تم حفظ التعديلات بنجاح ✅');
