@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/useAuth';
 import { db } from '@/lib/firebaseClient';
-import { collection, limit, onSnapshot, orderBy, query, updateDoc, doc } from 'firebase/firestore';
 
 const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
 
@@ -32,19 +31,20 @@ export default function AdminUsersPage() {
 
     setErr('');
     // إن لم يكن عندك createdAt في users، احذف orderBy وخليها query(collection...)
-    const qy = query(collection(db, 'users'), orderBy('createdAt', 'desc'), limit(200));
-
-    const unsub = onSnapshot(
-      qy,
-      (snap) => {
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setItems(rows);
-      },
-      (e) => {
-        console.error(e);
-        setErr('تعذر تحميل المستخدمين. إذا users ما فيها createdAt احذف orderBy.');
-      }
-    );
+    const unsub = db
+      .collection('users')
+      .orderBy('createdAt', 'desc')
+      .limit(200)
+      .onSnapshot(
+        (snap) => {
+          const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setItems(rows);
+        },
+        (e) => {
+          console.error(e);
+          setErr('تعذر تحميل المستخدمين. إذا users ما فيها createdAt احذف orderBy.');
+        }
+      );
 
     return () => unsub();
   }, [loading, user, isAdmin]);
@@ -53,7 +53,7 @@ export default function AdminUsersPage() {
   if (!isAdmin) return <div style={{ padding: 24 }}><h2>غير مصرح</h2></div>;
 
   const toggleBlock = async (id, blocked) => {
-    await updateDoc(doc(db, 'users', id), { blocked: !blocked });
+    await db.collection('users').doc(id).update({ blocked: !blocked });
   };
 
   return (

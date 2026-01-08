@@ -171,10 +171,43 @@ export default function ListingsPageClient({ initialListings = [] }) {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    // On /listings, we rely entirely on SSR data - no client-side Firebase loading
-    // This ensures Firebase Auth is never loaded on this page
-    setListings(initialListings);
-    setLoading(false);
+    // If we have initial listings from SSR, use them
+    if (initialListings && initialListings.length > 0) {
+      setListings(initialListings);
+      setLoading(false);
+      return;
+    }
+
+    // Fallback: fetch from client-side if SSR returned empty
+    const fetchClientSide = async () => {
+      setLoading(true);
+      setErr('');
+      
+      try {
+        // Dynamic import to avoid loading Firebase on initial render
+        const { db } = await import('@/lib/firebaseClient');
+        
+        const snapshot = await db
+          .collection('listings')
+          .orderBy('createdAt', 'desc')
+          .limit(24)
+          .get();
+
+        const items = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+
+        setListings(items);
+      } catch (error) {
+        console.error('[ListingsPageClient] Client-side fetch error:', error);
+        setErr('تعذر تحميل الإعلانات. يرجى المحاولة لاحقاً.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchClientSide();
   }, [initialListings]);
 
   const filtered = useMemo(() => {
