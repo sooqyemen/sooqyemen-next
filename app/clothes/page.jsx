@@ -13,7 +13,14 @@ export const metadata = {
 };
 
 export default async function ClothesPage() {
-  const initialListings = await fetchPublicListings({ limit: 24, category: 'clothes' });
+  let initialListings = [];
+  
+  try {
+    initialListings = await fetchPublicListings({ limit: 24, category: 'clothes' });
+  } catch (error) {
+    console.error('[ClothesPage] Failed to fetch listings:', error);
+    // سيتم جلب البيانات من الكلاينت في حالة الفشل
+  }
 
   return (
     <CategoryPageShell title="الملابس" description="تصفح أحدث إعلانات الملابس في اليمن">

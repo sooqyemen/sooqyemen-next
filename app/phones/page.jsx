@@ -13,7 +13,14 @@ export const metadata = {
 };
 
 export default async function PhonesPage() {
-  const initialListings = await fetchPublicListings({ limit: 24, category: 'phones' });
+  let initialListings = [];
+  
+  try {
+    initialListings = await fetchPublicListings({ limit: 24, category: 'phones' });
+  } catch (error) {
+    console.error('[PhonesPage] Failed to fetch listings:', error);
+    // سيتم جلب البيانات من الكلاينت في حالة الفشل
+  }
 
   return (
     <CategoryPageShell title="الجوالات" description="هواتف جديدة ومستعملة بأسعار مختلفة">

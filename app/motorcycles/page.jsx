@@ -13,7 +13,14 @@ export const metadata = {
 };
 
 export default async function MotorcyclesPage() {
-  const initialListings = await fetchPublicListings({ limit: 24, category: 'motorcycles' });
+  let initialListings = [];
+  
+  try {
+    initialListings = await fetchPublicListings({ limit: 24, category: 'motorcycles' });
+  } catch (error) {
+    console.error('[MotorcyclesPage] Failed to fetch listings:', error);
+    // سيتم جلب البيانات من الكلاينت في حالة الفشل
+  }
 
   return (
     <CategoryPageShell title="دراجات نارية" description="دراجات نارية للبيع والشراء — جديد ومستعمل">

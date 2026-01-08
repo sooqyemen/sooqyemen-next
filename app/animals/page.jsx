@@ -13,7 +13,14 @@ export const metadata = {
 };
 
 export default async function AnimalsPage() {
-  const initialListings = await fetchPublicListings({ limit: 24, category: 'animals' });
+  let initialListings = [];
+  
+  try {
+    initialListings = await fetchPublicListings({ limit: 24, category: 'animals' });
+  } catch (error) {
+    console.error('[AnimalsPage] Failed to fetch listings:', error);
+    // سيتم جلب البيانات من الكلاينت في حالة الفشل
+  }
 
   return (
     <CategoryPageShell title="الحيوانات والطيور" description="حيوانات وطيور للبيع والشراء في اليمن">

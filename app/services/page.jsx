@@ -13,7 +13,14 @@ export const metadata = {
 };
 
 export default async function ServicesPage() {
-  const initialListings = await fetchPublicListings({ limit: 24, category: 'services' });
+  let initialListings = [];
+  
+  try {
+    initialListings = await fetchPublicListings({ limit: 24, category: 'services' });
+  } catch (error) {
+    console.error('[ServicesPage] Failed to fetch listings:', error);
+    // سيتم جلب البيانات من الكلاينت في حالة الفشل
+  }
 
   return (
     <CategoryPageShell title="الخدمات" description="صيانة، نقل، أعمال حرة وغيرها">

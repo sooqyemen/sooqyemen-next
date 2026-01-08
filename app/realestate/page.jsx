@@ -13,7 +13,14 @@ export const metadata = {
 };
 
 export default async function RealEstatePage() {
-  const initialListings = await fetchPublicListings({ limit: 24, category: 'realestate' });
+  let initialListings = [];
+  
+  try {
+    initialListings = await fetchPublicListings({ limit: 24, category: 'realestate' });
+  } catch (error) {
+    console.error('[RealEstatePage] Failed to fetch listings:', error);
+    // سيتم جلب البيانات من الكلاينت في حالة الفشل
+  }
 
   return (
     <CategoryPageShell title="العقارات" description="أراضي، شقق، فلل، محلات — في جميع المحافظات">

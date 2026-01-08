@@ -163,19 +163,27 @@ function ListingRow({ listing }) {
   );
 }
 
-export default function ListingsPageClient({ initialListings = [] }) {
+export default function ListingsPageClient({ initialListings = [], fetchError = null }) {
   const [view, setView] = useState('grid'); // grid | list | map
   const [listings, setListings] = useState(initialListings);
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState('');
+  const [err, setErr] = useState(fetchError || '');
   const [search, setSearch] = useState('');
 
   useEffect(() => {
     // On /listings, we rely entirely on SSR data - no client-side Firebase loading
     // This ensures Firebase Auth is never loaded on this page
+    
+    // إذا كان عندنا خطأ من SSR، نعرضه
+    if (fetchError) {
+      setErr(fetchError);
+      setLoading(false);
+      return;
+    }
+    
     setListings(initialListings);
     setLoading(false);
-  }, [initialListings]);
+  }, [initialListings, fetchError]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -240,8 +248,17 @@ export default function ListingsPageClient({ initialListings = [] }) {
             <div className="muted">جاري التحميل…</div>
           </div>
         ) : err ? (
-          <div className="card" style={{ padding: 16, border: '1px solid rgba(220,38,38,.25)' }}>
-            <div style={{ fontWeight: 900, color: '#991b1b' }}>⚠️ {err}</div>
+          <div className="card" style={{ padding: 24, border: '1px solid rgba(220,38,38,.25)', textAlign: 'center' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+            <div style={{ fontWeight: 900, color: '#991b1b', fontSize: 18, marginBottom: 8 }}>حدث خطأ</div>
+            <div style={{ color: '#991b1b', marginBottom: 16 }}>{err}</div>
+            <button 
+              className="btn btnPrimary" 
+              onClick={() => window.location.reload()}
+              style={{ background: '#dc2626', borderColor: '#dc2626' }}
+            >
+              🔄 إعادة المحاولة
+            </button>
           </div>
         ) : filtered.length === 0 ? (
           <div className="card" style={{ padding: 16, textAlign: 'center' }}>

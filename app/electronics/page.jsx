@@ -13,7 +13,14 @@ export const metadata = {
 };
 
 export default async function ElectronicsPage() {
-  const initialListings = await fetchPublicListings({ limit: 24, category: 'electronics' });
+  let initialListings = [];
+  
+  try {
+    initialListings = await fetchPublicListings({ limit: 24, category: 'electronics' });
+  } catch (error) {
+    console.error('[ElectronicsPage] Failed to fetch listings:', error);
+    // سيتم جلب البيانات من الكلاينت في حالة الفشل
+  }
 
   return (
     <CategoryPageShell

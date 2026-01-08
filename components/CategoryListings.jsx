@@ -200,9 +200,17 @@ export default function CategoryListings({ category, initialListings = [] }) {
 
   if (err) {
     return (
-      <div className="card" style={{ padding: 16, border: '1px solid #fecaca' }}>
-        <div style={{ fontWeight: 900, color: '#b91c1c' }}>⚠️ حدث خطأ</div>
-        <div className="muted" style={{ marginTop: 6 }}>{err}</div>
+      <div className="card" style={{ padding: 24, border: '1px solid #fecaca', textAlign: 'center' }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+        <div style={{ fontWeight: 900, color: '#b91c1c', fontSize: 18, marginBottom: 8 }}>حدث خطأ</div>
+        <div className="muted" style={{ marginTop: 6, marginBottom: 16 }}>{err}</div>
+        <button 
+          className="btn btnPrimary" 
+          onClick={() => window.location.reload()}
+          style={{ background: '#dc2626', borderColor: '#dc2626' }}
+        >
+          🔄 إعادة المحاولة
+        </button>
       </div>
     );
   }

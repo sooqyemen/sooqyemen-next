@@ -13,7 +13,14 @@ export const metadata = {
 };
 
 export default async function MaintenancePage() {
-  const initialListings = await fetchPublicListings({ limit: 24, category: 'maintenance' });
+  let initialListings = [];
+  
+  try {
+    initialListings = await fetchPublicListings({ limit: 24, category: 'maintenance' });
+  } catch (error) {
+    console.error('[MaintenancePage] Failed to fetch listings:', error);
+    // سيتم جلب البيانات من الكلاينت في حالة الفشل
+  }
 
   return (
     <CategoryPageShell title="الصيانة" description="خدمات صيانة: كهرباء، سباكة، تكييف وغيرها">

@@ -13,7 +13,14 @@ export const metadata = {
 };
 
 export default async function HomeToolsPage() {
-  const initialListings = await fetchPublicListings({ limit: 24, category: 'home_tools' });
+  let initialListings = [];
+  
+  try {
+    initialListings = await fetchPublicListings({ limit: 24, category: 'home_tools' });
+  } catch (error) {
+    console.error('[HomeToolsPage] Failed to fetch listings:', error);
+    // سيتم جلب البيانات من الكلاينت في حالة الفشل
+  }
 
   return (
     <CategoryPageShell
