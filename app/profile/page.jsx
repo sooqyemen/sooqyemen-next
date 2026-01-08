@@ -210,7 +210,7 @@ export default function ProfilePage() {
 
     let mounted = true;
 
-    const loadUserDoc = async () {
+    const loadUserDoc = async () => {
       setErr('');
       try {
         const ref = doc(db, 'users', user.uid);
