@@ -9,8 +9,26 @@ import { db } from '@/lib/firebaseClient';
 import Price from '@/components/Price';
 import ListingCard from '@/components/ListingCard';
 
+// Dynamically import the map component with SSR disabled
 const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
   ssr: false,
+  loading: () => (
+    <div style={{ 
+      padding: '40px 20px', 
+      textAlign: 'center', 
+      background: '#f8f9fa', 
+      borderRadius: '12px',
+      border: '2px dashed #dee2e6'
+    }}>
+      <div style={{ fontSize: '48px', marginBottom: '16px' }}>🗺️</div>
+      <div style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>
+        جاري تحميل الخريطة...
+      </div>
+      <div style={{ fontSize: '14px', color: '#6c757d' }}>
+        يرجى الانتظار
+      </div>
+    </div>
+  ),
 });
 
 function safeText(v) {

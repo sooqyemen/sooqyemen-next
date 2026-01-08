@@ -4,7 +4,6 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { useAuth } from '@/lib/useAuth';
 
 // إيميلات المدراء
 const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
@@ -13,7 +12,49 @@ const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
 const AFFILIATE_CREATE_PATH = '/affiliate/create';
 
 export default function Header() {
-  const { user, loading, logout } = useAuth();
+  const pathname = usePathname();
+
+  // ملاحظة: نخلي mounted منفصلة عشان الأنيميشن
+  const [menuMounted, setMenuMounted] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  
+  // Auth state - not loaded by default
+  const [authLoaded, setAuthLoaded] = useState(false);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
+
+  const closeTimerRef = useRef(null);
+
+  // التحقق إذا كان المستخدم مديراً
+  const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase());
+  
+  // Load auth only when user clicks on something that needs it
+  useEffect(() => {
+    // Don't load auth on /listings to meet requirement
+    if (pathname === '/listings') {
+      return;
+    }
+    
+    // For other pages, load auth on mount
+    if (!authLoaded) {
+      setAuthLoaded(true);
+      setLoading(true);
+      
+      import('@/components/AuthUI').then((mod) => {
+        const { auth } = mod;
+        // This is where Firebase auth iframe gets loaded
+        import('@/lib/firebaseClient').then(({ auth }) => {
+          auth.onAuthStateChanged((firebaseUser) => {
+            setUser(firebaseUser);
+            setLoading(false);
+          });
+        });
+      });
+    }
+  }, [pathname, authLoaded]);
   const pathname = usePathname();
 
   // ملاحظة: نخلي mounted منفصلة عشان الأنيميشن
@@ -94,7 +135,9 @@ export default function Header() {
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
-      await logout();
+      const { auth } = await import('@/lib/firebaseClient');
+      await auth.signOut();
+      setUser(null);
       closeMenu(true);
     } catch (e) {
       console.error('خطأ في تسجيل الخروج:', e);
