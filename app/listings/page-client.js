@@ -169,6 +169,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [search, setSearch] = useState('');
+  const [clientFetchAttempted, setClientFetchAttempted] = useState(false);
 
   useEffect(() => {
     // If we have initial listings from SSR, use them
@@ -178,10 +179,16 @@ export default function ListingsPageClient({ initialListings = [] }) {
       return;
     }
 
+    // Only attempt client-side fetch once
+    if (clientFetchAttempted) {
+      return;
+    }
+
     // Fallback: fetch from client-side if SSR returned empty
     const fetchClientSide = async () => {
       setLoading(true);
       setErr('');
+      setClientFetchAttempted(true);
       
       try {
         // Dynamic import to avoid loading Firebase on initial render
@@ -208,7 +215,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
     };
 
     fetchClientSide();
-  }, [initialListings]);
+  }, [initialListings, clientFetchAttempted]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
