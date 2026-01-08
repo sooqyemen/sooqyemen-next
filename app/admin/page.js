@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/useAuth';
 import { db } from '@/lib/firebaseClient';
 
@@ -52,7 +52,11 @@ async function countCompat(q) {
 
 export default function AdminPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading } = useAuth();
+
+  // UI Preview mode - show layout without auth
+  const uiPreview = searchParams.get('ui') === '1';
 
   const isAdmin = useMemo(() => {
     const email = user?.email?.toLowerCase();
@@ -70,11 +74,13 @@ export default function AdminPage() {
   const [err, setErr] = useState('');
 
   useEffect(() => {
+    if (uiPreview) return; // Skip auth check in UI preview mode
     if (loading) return;
     if (!user) router.replace('/login');
-  }, [loading, user, router]);
+  }, [loading, user, router, uiPreview]);
 
   useEffect(() => {
+    if (uiPreview) return; // Skip data loading in UI preview mode
     if (loading) return;
     if (!user || !isAdmin) return;
 
@@ -118,7 +124,70 @@ export default function AdminPage() {
     return () => {
       mounted = false;
     };
-  }, [loading, user, isAdmin]);
+  }, [loading, user, isAdmin, uiPreview]);
+
+  // UI Preview mode - show layout with dummy data
+  if (uiPreview) {
+    return (
+      <div className="wrap">
+        <div className="hero">
+          <div className="heroLeft">
+            <h1>لوحة الإدارة</h1>
+            <p>إدارة المنصة، متابعة الإحصائيات، وتنفيذ إجراءات سريعة.</p>
+
+            <div className="chips">
+              <span className="chip">👤 admin@example.com</span>
+              <span className="chip subtle">✅ جاهز (وضع المعاينة)</span>
+            </div>
+          </div>
+
+          <div className="heroRight">
+            <div className="quick">
+              <Link className="qbtn" href="#preview">➕ إضافة إعلان</Link>
+              <Link className="qbtn ghost" href="#preview">📋 إعلاناتي</Link>
+              <Link className="qbtn ghost" href="#preview">💬 محادثاتي</Link>
+            </div>
+          </div>
+        </div>
+
+        <div className="alert" style={{ background: 'rgba(59,130,246,.08)', borderColor: 'rgba(59,130,246,.25)', color: '#1e40af' }}>
+          <span className="alertIcon">ℹ️</span>
+          <span>وضع معاينة الواجهة فقط - البيانات الحقيقية محمية وتحتاج تسجيل دخول</span>
+        </div>
+
+        <div className="grid">
+          <StatCard icon="📦" label="إجمالي الإعلانات" value="1,234" sub="عدد كل الإعلانات في قاعدة البيانات" />
+          <StatCard icon="✅" label="الإعلانات النشطة" value="987" sub="إعلانات isActive = true" />
+          <StatCard icon="👥" label="المستخدمون" value="567" sub="عدد حسابات المستخدمين" />
+          <StatCard icon="💬" label="المحادثات" value="2,345" sub="عدد غرف/مستندات المحادثات" />
+        </div>
+
+        <div className="sectionTitle">
+          <h2>إجراءات الإدارة</h2>
+          <p>لوحات فعلية للمدير</p>
+        </div>
+
+        <div className="actions">
+          <ActionCard title="إدارة الإعلانات" desc="تفعيل/إخفاء/حذف الإعلانات" href="#preview" icon="🧰" />
+          <ActionCard title="إدارة المستخدمين" desc="عرض/حظر/فك حظر المستخدمين" href="#preview" icon="🛡️" />
+          <ActionCard title="الإدارة المالية" desc="طلبات السحب + المؤهلين للتحويل" href="#preview" icon="💼" />
+        </div>
+
+        <div className="footer">
+          <div className="note">
+            💡 هذا وضع معاينة للواجهة فقط - للوصول للبيانات الحقيقية، سجّل دخول بحساب مدير.
+          </div>
+          <div className="row">
+            <Link className="btn ghost" href="/">الرئيسية</Link>
+            <Link className="btn ghost" href="/privacy">الخصوصية</Link>
+            <Link className="btn ghost" href="/terms">الشروط</Link>
+          </div>
+        </div>
+
+        <style jsx>{styles}</style>
+      </div>
+    );
+  }
 
   if (loading || (!loading && !user)) {
     return (
