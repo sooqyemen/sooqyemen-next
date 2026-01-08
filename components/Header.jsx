@@ -186,7 +186,7 @@ export default function Header() {
                   </Link>
 
                   <div className="user-menu">
-                    <span className="user-greeting">أهلاً، {user.name || user.email?.split('@')[0]}</span>
+                    <span className="user-greeting">أهلاً، {user.name || 'مستخدم'}</span>
 
                     <div className="dropdown">
                       <Link href="/my-listings" className="dropdown-item">
@@ -265,7 +265,7 @@ export default function Header() {
                     <div className="user-avatar">👤</div>
                     <div className="user-details">
                       <div className="user-name">{user.name || 'مستخدم'}</div>
-                      <div className="user-email">{user.email}</div>
+                      <div className="user-email">رقم المستخدم: (قيد التحميل...)</div>
                     </div>
                   </div>
                 ) : (

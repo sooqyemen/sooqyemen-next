@@ -55,7 +55,7 @@ function generateReferralCode(len = 8) {
 }
 
 export default function ProfilePage() {
-  const { user, loading } = useAuth();
+  const { user, loading, publicUserId } = useAuth();
 
   const [activeTab, setActiveTab] = useState('info');
   const [editMode, setEditMode] = useState(false);
@@ -210,7 +210,7 @@ export default function ProfilePage() {
 
     let mounted = true;
 
-    const loadUserDoc = async () => {
+    const loadUserDoc = async () {
       setErr('');
       try {
         const ref = doc(db, 'users', user.uid);
@@ -472,7 +472,7 @@ export default function ProfilePage() {
         <div className="profile-main-info">
           <div className="avatar-section">
             <div className="profile-avatar">
-              {formData.name?.charAt(0) || user.email?.charAt(0) || '👤'}
+              {formData.name?.charAt(0) || publicUserId?.charAt(0) || '👤'}
             </div>
 
             <div className="avatar-actions">
@@ -494,7 +494,7 @@ export default function ProfilePage() {
                   placeholder="الاسم الكامل"
                 />
               ) : (
-                <h2>{formData.name || user.email?.split('@')?.[0]}</h2>
+                <h2>{formData.name || publicUserId || 'مستخدم'}</h2>
               )}
 
               <div className="profile-badges">
@@ -723,8 +723,8 @@ export default function ProfilePage() {
 
               <div className="info-field">
                 <label>البريد الإلكتروني</label>
-                <p>{user.email}</p>
-                <span className="email-note">(لا يمكن تغيير البريد الإلكتروني)</span>
+                <p>رقم المستخدم: {publicUserId || '...'}</p>
+                <span className="email-note">(رقم تعريفي ثابت)</span>
               </div>
 
               <div className="info-field">
