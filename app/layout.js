@@ -1,6 +1,7 @@
 // app/layout.js
 import './globals.css';
 import Header from '@/components/Header';
+import ClientProviders from '@/components/ClientProviders';
 
 export const metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://sooqyemen.com'),
@@ -64,9 +65,11 @@ export default function RootLayout({ children }) {
       </head>
 
       <body>
-        <Header />
-        <main>{children}</main>
-        <div className="safe-area-bottom" />
+        <ClientProviders>
+          <Header />
+          <main>{children}</main>
+          <div className="safe-area-bottom" />
+        </ClientProviders>
       </body>
     </html>
   );
