@@ -1,7 +1,5 @@
 // app/layout.js
-import 'leaflet/dist/leaflet.css';
 import './globals.css';
-import { AuthProvider } from '@/lib/useAuth';
 import Header from '@/components/Header';
 
 export const metadata = {
@@ -66,11 +64,9 @@ export default function RootLayout({ children }) {
       </head>
 
       <body>
-        <AuthProvider>
-          <Header />
-          <main>{children}</main>
-          <div className="safe-area-bottom" />
-        </AuthProvider>
+        <Header />
+        <main>{children}</main>
+        <div className="safe-area-bottom" />
       </body>
     </html>
   );

@@ -5,12 +5,29 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
-import { db } from '@/lib/firebaseClient';
 import Price from '@/components/Price';
 import ListingCard from '@/components/ListingCard';
 
+// Dynamically import the map component with SSR disabled
 const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
   ssr: false,
+  loading: () => (
+    <div style={{ 
+      padding: '40px 20px', 
+      textAlign: 'center', 
+      background: '#f8f9fa', 
+      borderRadius: '12px',
+      border: '2px dashed #dee2e6'
+    }}>
+      <div style={{ fontSize: '48px', marginBottom: '16px' }}>🗺️</div>
+      <div style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>
+        جاري تحميل الخريطة...
+      </div>
+      <div style={{ fontSize: '14px', color: '#6c757d' }}>
+        يرجى الانتظار
+      </div>
+    </div>
+  ),
 });
 
 function safeText(v) {
@@ -154,54 +171,11 @@ export default function ListingsPageClient({ initialListings = [] }) {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    // إذا كان عندنا بيانات SSR، نخلي الاشتراك اختياري
-    if (initialListings.length > 0) {
-      setLoading(false);
-      return;
-    }
-
-    // fallback: إذا ما كان في بيانات SSR، نجلب من Firebase
-    setLoading(true);
-    setErr('');
-
-    // ✅ compat only (بدون modular)
-    let unsub = null;
-
-    try {
-      const ref = db.collection('listings').orderBy('createdAt', 'desc').limit(300);
-
-      unsub = ref.onSnapshot(
-        (snap) => {
-          const data = snap.docs
-            .map((d) => ({ id: d.id, ...d.data() }))
-            .filter((x) => x.isActive !== false && x.hidden !== true);
-
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`[ListingsPage] Loaded ${data.length} listings`);
-            if (data.length === 0) {
-              console.warn('[ListingsPage] No listings found. Check Firebase rules and data.');
-            }
-          }
-
-          setListings(data);
-          setLoading(false);
-        },
-        (e) => {
-          console.error('[ListingsPage] Error loading listings:', e);
-          setErr(e?.message || 'تعذّر تحميل الإعلانات');
-          setLoading(false);
-        }
-      );
-    } catch (e) {
-      console.error(e);
-      setErr('تعذّر الاتصال بقاعدة البيانات');
-      setLoading(false);
-    }
-
-    return () => {
-      if (typeof unsub === 'function') unsub();
-    };
-  }, [initialListings.length]);
+    // On /listings, we rely entirely on SSR data - no client-side Firebase loading
+    // This ensures Firebase Auth is never loaded on this page
+    setListings(initialListings);
+    setLoading(false);
+  }, [initialListings]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
