@@ -1,4 +1,4 @@
-// app/listing/[id]/page.js - Server Component with generateMetadata
+// app/listing/[id]/page.js
 import { fetchListingById } from '@/lib/firestoreRest';
 import ListingDetailsClient from './page-client';
 
@@ -6,12 +6,15 @@ export const revalidate = 300; // 5 دقائق
 
 // Generate dynamic metadata for SEO
 export async function generateMetadata({ params }) {
-  const { id } = params;
+  // ⚠️ تصحيح 1: يجب انتظار البارامترات في Next.js 15
+  const { id } = await params;
   
   let listing = null;
   
   try {
-    listing = await fetchListingById(id);
+    if (id) {
+        listing = await fetchListingById(id);
+    }
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
       console.error('[generateMetadata] Failed to fetch listing:', error);
@@ -66,13 +69,17 @@ export async function generateMetadata({ params }) {
 }
 
 export default async function ListingDetailsPage({ params }) {
-  const { id } = params;
+  // ⚠️ تصحيح 2: إضافة await هنا ضرورية جداً لفك الـ id
+  const resolvedParams = await params;
+  const { id } = resolvedParams;
   
   // Fetch initial listing data on server
   let initialListing = null;
   
   try {
-    initialListing = await fetchListingById(id);
+    if (id) {
+        initialListing = await fetchListingById(id);
+    }
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
       console.error('[ListingDetailsPage SSR] Failed to fetch listing:', error);
@@ -80,5 +87,6 @@ export default async function ListingDetailsPage({ params }) {
     // في حالة الفشل، سيتم جلب البيانات من الكلاينت
   }
 
-  return <ListingDetailsClient params={params} initialListing={initialListing} />;
+  // نمرر الـ params المفكوك (resolved) والبيانات
+  return <ListingDetailsClient params={resolvedParams} initialListing={initialListing} />;
 }
