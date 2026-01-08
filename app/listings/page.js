@@ -1,5 +1,6 @@
 // app/listings/page.js - Server Component with SSR
-import { getLatestListings } from '@/lib/getListings.server';
+// ⚠️ تصحيح الاستيراد: لاحظ أننا حذفنا حرف 's' من اسم الملف ليتطابق مع ما أنشأناه سابقاً
+import { getLatestListings } from '@/lib/getListing.server'; 
 import ListingsPageClient from './page-client';
 
 export const revalidate = 60; // إعادة التحقق كل 60 ثانية
@@ -18,11 +19,13 @@ export default async function ListingsPage() {
   
   try {
     initialListings = await getLatestListings(24);
+    
+    // فحص بسيط للتأكد من وصول البيانات في السيرفر
+    console.log(`[SSR] Listings fetched: ${initialListings?.length || 0}`);
+    
   } catch (error) {
-    if (process.env.NODE_ENV === 'development') {
-      console.error('[ListingsPage SSR] Failed to fetch initial listings:', error);
-    }
-    // في حالة الفشل، سيتم جلب البيانات من الكلاينت
+    console.error('[ListingsPage SSR] Failed to fetch initial listings:', error);
+    // في حالة الفشل، المصفوفة ستبقى فارغة وسيتم التعامل معها في الكلاينت
   }
 
   return <ListingsPageClient initialListings={initialListings} />;
