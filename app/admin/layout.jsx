@@ -33,8 +33,10 @@ export default function AdminLayout({ children }) {
 
   return (
     <div className="container" style={{ paddingTop: 18, paddingBottom: 40 }}>
-      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-        <aside className="card" style={{ padding: 12, minWidth: 220 }}>
+      <div className="adminLayout">
+        <main className="adminCard">{children}</main>
+        
+        <aside className="adminMenu card">
           <div style={{ fontWeight: 900, marginBottom: 10 }}>لوحة الإدارة</div>
           <div style={{ display: 'grid', gap: 8 }}>
             <Link className="btn" href="/admin">🏠 الرئيسية</Link>
@@ -43,9 +45,46 @@ export default function AdminLayout({ children }) {
             <Link className="btn" href="/admin/payouts">💸 طلبات السحب</Link>
           </div>
         </aside>
-
-        <main style={{ flex: 1 }}>{children}</main>
       </div>
+
+      <style jsx>{`
+        .adminLayout {
+          display: grid;
+          grid-template-columns: 1fr 320px;
+          gap: 16px;
+          max-width: 1100px;
+          margin: 0 auto;
+        }
+        .adminLayout * {
+          min-width: 0;
+        }
+        .adminCard, .adminMenu {
+          width: 100%;
+          min-width: 0;
+        }
+        .adminMenu {
+          padding: 12px;
+        }
+        .adminMenu .btn {
+          width: 100%;
+          display: flex;
+          min-height: 48px;
+        }
+        @media (max-width: 900px) {
+          .adminLayout {
+            grid-template-columns: 1fr;
+            padding: 12px;
+          }
+          .adminMenu {
+            order: -1;
+          }
+          .adminMenu .btn {
+            width: 100%;
+            display: flex;
+            min-height: 48px;
+          }
+        }
+      `}</style>
     </div>
   );
 }
