@@ -4,6 +4,7 @@
 import { useAuth } from '@/lib/useAuth';
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { getPublicUserId } from '@/lib/publicUserId';
 
 import {
   doc,
@@ -65,6 +66,7 @@ export default function ProfilePage() {
   const [err, setErr] = useState('');
 
   const [userDocData, setUserDocData] = useState(null);
+  const [publicUserId, setPublicUserId] = useState('');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -209,6 +211,11 @@ export default function ProfilePage() {
     if (!user) return;
 
     let mounted = true;
+
+    // Fetch public user ID
+    getPublicUserId(user).then(id => {
+      if (mounted) setPublicUserId(id);
+    });
 
     const loadUserDoc = async () => {
       setErr('');
@@ -472,7 +479,7 @@ export default function ProfilePage() {
         <div className="profile-main-info">
           <div className="avatar-section">
             <div className="profile-avatar">
-              {formData.name?.charAt(0) || user.email?.charAt(0) || '👤'}
+              {formData.name?.charAt(0) || publicUserId?.charAt(0) || '👤'}
             </div>
 
             <div className="avatar-actions">
@@ -494,7 +501,7 @@ export default function ProfilePage() {
                   placeholder="الاسم الكامل"
                 />
               ) : (
-                <h2>{formData.name || user.email?.split('@')?.[0]}</h2>
+                <h2>{formData.name || publicUserId || 'مستخدم'}</h2>
               )}
 
               <div className="profile-badges">
@@ -723,8 +730,8 @@ export default function ProfilePage() {
 
               <div className="info-field">
                 <label>البريد الإلكتروني</label>
-                <p>{user.email}</p>
-                <span className="email-note">(لا يمكن تغيير البريد الإلكتروني)</span>
+                <p>رقم المستخدم: {publicUserId || '...'}</p>
+                <span className="email-note">(رقم تعريفي ثابت)</span>
               </div>
 
               <div className="info-field">

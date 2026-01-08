@@ -121,7 +121,7 @@ export default function AuctionBox({ listingId, listing }) {
       <div style={{ display:'grid', gap:8 }}>
         {bids.length === 0 ? <div className="muted">لا توجد مزايدات بعد</div> : bids.map(b => (
           <div key={b.id} className="row" style={{ justifyContent:'space-between' }}>
-            <span className="muted" style={{ fontSize:12 }}>{b.email || b.uid}</span>
+            <span className="muted" style={{ fontSize:12 }}>مزايد</span>
             <span style={{ fontWeight:800 }}>{Math.round(Number(b.amountYER || 0)).toLocaleString('en-US')} YER</span>
           </div>
         ))}

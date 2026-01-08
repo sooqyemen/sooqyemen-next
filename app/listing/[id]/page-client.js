@@ -92,10 +92,12 @@ function formatDate(date) {
   }
 }
 
-function getInitials(email) {
-  if (!email) return '؟';
-  const parts = email.split('@')[0];
-  return parts.charAt(0).toUpperCase();
+function getInitials(text) {
+  if (!text) return '؟';
+  // If it's a user ID format (U-000123), return U
+  if (text.startsWith('U-')) return 'U';
+  // Otherwise get first character
+  return text.charAt(0).toUpperCase();
 }
 
 export default function ListingDetailsClient({ params, initialListing = null }) {
@@ -493,10 +495,10 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
             <div className="sidebar-card">
               <div className="seller-info">
                 <div className="seller-header">
-                  <div className="seller-avatar">{getInitials(listing.userEmail)}</div>
+                  <div className="seller-avatar">{getInitials('مستخدم')}</div>
                   <div className="seller-details">
-                    <h3 className="seller-name">{listing.userEmail?.split('@')[0] || 'مستخدم'}</h3>
-                    <p className="seller-email">{listing.userEmail || 'بريد غير معروف'}</p>
+                    <h3 className="seller-name">معلومات البائع</h3>
+                    <p className="seller-email">رقم مستخدم غير متوفر حاليًا</p>
                   </div>
                 </div>
 
