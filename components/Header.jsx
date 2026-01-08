@@ -4,7 +4,6 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { getPublicUserId } from '@/lib/publicUserId';
 
 // إيميلات المدراء
 const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
@@ -26,21 +25,11 @@ export default function Header() {
 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
-  const [publicUserId, setPublicUserId] = useState('');
 
   const closeTimerRef = useRef(null);
 
   // التحقق إذا كان المستخدم مديراً
   const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase());
-  
-  // Fetch public user ID when user is available
-  useEffect(() => {
-    if (user) {
-      getPublicUserId(user).then(setPublicUserId);
-    } else {
-      setPublicUserId('');
-    }
-  }, [user]);
   
   // Load auth only when user clicks on something that needs it
   useEffect(() => {
@@ -197,7 +186,7 @@ export default function Header() {
                   </Link>
 
                   <div className="user-menu">
-                    <span className="user-greeting">أهلاً، {publicUserId || user.name || 'مستخدم'}</span>
+                    <span className="user-greeting">أهلاً، {user.name || 'مستخدم'}</span>
 
                     <div className="dropdown">
                       <Link href="/my-listings" className="dropdown-item">
@@ -276,7 +265,7 @@ export default function Header() {
                     <div className="user-avatar">👤</div>
                     <div className="user-details">
                       <div className="user-name">{user.name || 'مستخدم'}</div>
-                      <div className="user-email">رقم المستخدم: {publicUserId || '...'}</div>
+                      <div className="user-email">رقم المستخدم: (قيد التحميل...)</div>
                     </div>
                   </div>
                 ) : (

@@ -4,7 +4,6 @@
 import { useAuth } from '@/lib/useAuth';
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { getPublicUserId } from '@/lib/publicUserId';
 
 import {
   doc,
@@ -56,7 +55,7 @@ function generateReferralCode(len = 8) {
 }
 
 export default function ProfilePage() {
-  const { user, loading } = useAuth();
+  const { user, loading, publicUserId } = useAuth();
 
   const [activeTab, setActiveTab] = useState('info');
   const [editMode, setEditMode] = useState(false);
@@ -66,7 +65,6 @@ export default function ProfilePage() {
   const [err, setErr] = useState('');
 
   const [userDocData, setUserDocData] = useState(null);
-  const [publicUserId, setPublicUserId] = useState('');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -212,12 +210,7 @@ export default function ProfilePage() {
 
     let mounted = true;
 
-    // Fetch public user ID
-    getPublicUserId(user).then(id => {
-      if (mounted) setPublicUserId(id);
-    });
-
-    const loadUserDoc = async () => {
+    const loadUserDoc = async () {
       setErr('');
       try {
         const ref = doc(db, 'users', user.uid);
