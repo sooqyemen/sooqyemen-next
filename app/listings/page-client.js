@@ -171,61 +171,11 @@ export default function ListingsPageClient({ initialListings = [] }) {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    // إذا كان عندنا بيانات SSR، نخلي الاشتراك اختياري
-    if (initialListings.length > 0) {
-      setLoading(false);
-      return;
-    }
-
-    // fallback: إذا ما كان في بيانات SSR، نجلب من Firebase
-    setLoading(true);
-    setErr('');
-
-    // ✅ compat only (بدون modular) - lazy load Firebase
-    let unsub = null;
-
-    // Dynamically import Firebase only when needed
-    import('@/lib/firebaseClient').then(({ db }) => {
-      try {
-        const ref = db.collection('listings').orderBy('createdAt', 'desc').limit(300);
-
-        unsub = ref.onSnapshot(
-          (snap) => {
-            const data = snap.docs
-              .map((d) => ({ id: d.id, ...d.data() }))
-              .filter((x) => x.isActive !== false && x.hidden !== true);
-
-            if (process.env.NODE_ENV === 'development') {
-              console.log(`[ListingsPage] Loaded ${data.length} listings`);
-              if (data.length === 0) {
-                console.warn('[ListingsPage] No listings found. Check Firebase rules and data.');
-              }
-            }
-
-            setListings(data);
-            setLoading(false);
-          },
-          (e) => {
-            console.error('[ListingsPage] Error loading listings:', e);
-            setErr(e?.message || 'تعذّر تحميل الإعلانات');
-            setLoading(false);
-          }
-        );
-      } catch (e) {
-        console.error(e);
-        setErr('تعذّر الاتصال بقاعدة البيانات');
-        setLoading(false);
-      }
-    }).catch((e) => {
-      console.error('Failed to load Firebase:', e);
-      setErr('تعذّر الاتصال بقاعدة البيانات');
-      setLoading(false);
-    });
-
-    return () => {
-      if (typeof unsub === 'function') unsub();
-    };
-  }, [initialListings.length]);
+    // On /listings, we rely entirely on SSR data - no client-side Firebase loading
+    // This ensures Firebase Auth is never loaded on this page
+    setListings(initialListings);
+    setLoading(false);
+  }, [initialListings]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
