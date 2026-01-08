@@ -1,13 +1,25 @@
-import { notFound } from 'next/navigation';
+// app/listing/[id]/page.js
+import { fetchListingById } from '@/lib/firestoreRest';
 import ListingDetailsClient from './page-client';
-import { getListingById } from '@/lib/getListing.server';
 
-export const runtime = 'nodejs';
 export const revalidate = 300; // 5 دقائق
 
+// Generate dynamic metadata for SEO
 export async function generateMetadata({ params }) {
-  const { id } = params;
-  const listing = await getListingById(id);
+  // ⚠️ تصحيح 1: يجب انتظار البارامترات في Next.js 15
+  const { id } = await params;
+  
+  let listing = null;
+  
+  try {
+    if (id) {
+        listing = await fetchListingById(id);
+    }
+  } catch (error) {
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[generateMetadata] Failed to fetch listing:', error);
+    }
+  }
 
   if (!listing) {
     return {
@@ -16,31 +28,36 @@ export async function generateMetadata({ params }) {
     };
   }
 
-  const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sooqyemen.com';
-  const canonical = new URL(`/listing/${id}`, base);
-
   const title = `${listing.title || 'إعلان'} | سوق اليمن`;
   const price = listing.priceYER || listing.currentBidYER || 0;
   const city = listing.city || listing.locationLabel || 'اليمن';
+  const description = listing.description 
+    ? `${listing.description.slice(0, 150)}... | السعر: ${price.toLocaleString('ar-YE')} ريال | ${city}`
+    : `${listing.title} - ${price.toLocaleString('ar-YE')} ريال في ${city}`;
 
-  const description = listing.description
-    ? `${String(listing.description).slice(0, 150)}... | السعر: ${Number(price).toLocaleString('ar-YE')} ريال | ${city}`
-    : `${listing.title || 'إعلان'} - ${Number(price).toLocaleString('ar-YE')} ريال في ${city}`;
+  const images = listing.images && listing.images.length > 0 
+    ? listing.images.slice(0, 4)
+    : [];
 
-  const images = Array.isArray(listing.images) ? listing.images.slice(0, 4) : [];
+  const url = `/listing/${id}`;
 
   return {
     title,
     description,
-    alternates: { canonical: canonical.href },
+    alternates: {
+      canonical: url,
+    },
     openGraph: {
       title,
       description,
-      url: canonical.href,
+      url,
       type: 'website',
       locale: 'ar_YE',
       siteName: 'سوق اليمن',
-      images: images.map((url) => ({ url, alt: listing.title || 'صورة الإعلان' })),
+      images: images.map((img) => ({
+        url: img,
+        alt: listing.title || 'صورة الإعلان',
+      })),
     },
     twitter: {
       card: 'summary_large_image',
@@ -52,11 +69,24 @@ export async function generateMetadata({ params }) {
 }
 
 export default async function ListingDetailsPage({ params }) {
-  const { id } = params;
+  // ⚠️ تصحيح 2: إضافة await هنا ضرورية جداً لفك الـ id
+  const resolvedParams = await params;
+  const { id } = resolvedParams;
+  
+  // Fetch initial listing data on server
+  let initialListing = null;
+  
+  try {
+    if (id) {
+        initialListing = await fetchListingById(id);
+    }
+  } catch (error) {
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[ListingDetailsPage SSR] Failed to fetch listing:', error);
+    }
+    // في حالة الفشل، سيتم جلب البيانات من الكلاينت
+  }
 
-  const listing = await getListingById(id);
-  if (!listing) notFound();
-
-  // الآن الكلاينت يستلم بيانات جاهزة -> ما عاد يعلق على التحميل
-  return <ListingDetailsClient params={params} initialListing={listing} />;
+  // نمرر الـ params المفكوك (resolved) والبيانات
+  return <ListingDetailsClient params={resolvedParams} initialListing={initialListing} />;
 }
