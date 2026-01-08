@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/useAuth';
 import { db } from '@/lib/firebaseClient';
 
@@ -52,7 +52,11 @@ async function countCompat(q) {
 
 export default function AdminPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading } = useAuth();
+
+  // UI Preview mode - show layout without auth
+  const uiPreview = searchParams.get('ui') === '1';
 
   const isAdmin = useMemo(() => {
     const email = user?.email?.toLowerCase();
@@ -70,11 +74,13 @@ export default function AdminPage() {
   const [err, setErr] = useState('');
 
   useEffect(() => {
+    if (uiPreview) return; // Skip auth check in UI preview mode
     if (loading) return;
     if (!user) router.replace('/login');
-  }, [loading, user, router]);
+  }, [loading, user, router, uiPreview]);
 
   useEffect(() => {
+    if (uiPreview) return; // Skip data loading in UI preview mode
     if (loading) return;
     if (!user || !isAdmin) return;
 
@@ -118,7 +124,70 @@ export default function AdminPage() {
     return () => {
       mounted = false;
     };
-  }, [loading, user, isAdmin]);
+  }, [loading, user, isAdmin, uiPreview]);
+
+  // UI Preview mode - show layout with dummy data
+  if (uiPreview) {
+    return (
+      <div className="wrap">
+        <div className="hero">
+          <div className="heroLeft">
+            <h1>لوحة الإدارة</h1>
+            <p>إدارة المنصة، متابعة الإحصائيات، وتنفيذ إجراءات سريعة.</p>
+
+            <div className="chips">
+              <span className="chip">👤 admin@example.com</span>
+              <span className="chip subtle">✅ جاهز (وضع المعاينة)</span>
+            </div>
+          </div>
+
+          <div className="heroRight">
+            <div className="quick">
+              <Link className="qbtn" href="#preview">➕ إضافة إعلان</Link>
+              <Link className="qbtn ghost" href="#preview">📋 إعلاناتي</Link>
+              <Link className="qbtn ghost" href="#preview">💬 محادثاتي</Link>
+            </div>
+          </div>
+        </div>
+
+        <div className="alert" style={{ background: 'rgba(59,130,246,.08)', borderColor: 'rgba(59,130,246,.25)', color: '#1e40af' }}>
+          <span className="alertIcon">ℹ️</span>
+          <span>وضع معاينة الواجهة فقط - البيانات الحقيقية محمية وتحتاج تسجيل دخول</span>
+        </div>
+
+        <div className="grid">
+          <StatCard icon="📦" label="إجمالي الإعلانات" value="1,234" sub="عدد كل الإعلانات في قاعدة البيانات" />
+          <StatCard icon="✅" label="الإعلانات النشطة" value="987" sub="إعلانات isActive = true" />
+          <StatCard icon="👥" label="المستخدمون" value="567" sub="عدد حسابات المستخدمين" />
+          <StatCard icon="💬" label="المحادثات" value="2,345" sub="عدد غرف/مستندات المحادثات" />
+        </div>
+
+        <div className="sectionTitle">
+          <h2>إجراءات الإدارة</h2>
+          <p>لوحات فعلية للمدير</p>
+        </div>
+
+        <div className="actions">
+          <ActionCard title="إدارة الإعلانات" desc="تفعيل/إخفاء/حذف الإعلانات" href="#preview" icon="🧰" />
+          <ActionCard title="إدارة المستخدمين" desc="عرض/حظر/فك حظر المستخدمين" href="#preview" icon="🛡️" />
+          <ActionCard title="الإدارة المالية" desc="طلبات السحب + المؤهلين للتحويل" href="#preview" icon="💼" />
+        </div>
+
+        <div className="footer">
+          <div className="note">
+            💡 هذا وضع معاينة للواجهة فقط - للوصول للبيانات الحقيقية، سجّل دخول بحساب مدير.
+          </div>
+          <div className="row">
+            <Link className="btn ghost" href="/">الرئيسية</Link>
+            <Link className="btn ghost" href="/privacy">الخصوصية</Link>
+            <Link className="btn ghost" href="/terms">الشروط</Link>
+          </div>
+        </div>
+
+        <style jsx>{styles}</style>
+      </div>
+    );
+  }
 
   if (loading || (!loading && !user)) {
     return (
@@ -214,17 +283,18 @@ export default function AdminPage() {
 }
 
 const styles = `
-/* نفس ستايلك بدون تغيير */
+/* Mobile-first responsive styles */
 .wrap{min-height: calc(100vh - 60px);padding: 24px 16px 48px;max-width: 1100px;margin: 0 auto;}
+.wrap *{min-width:0;}
 .hero{display:flex;gap:16px;justify-content:space-between;align-items:stretch;padding:18px;border:1px solid rgba(0,0,0,.08);border-radius:16px;background: linear-gradient(135deg, rgba(15,52,96,.08), rgba(59,130,246,.08));}
 .heroLeft h1{margin:0 0 8px;font-size: 1.75rem;font-weight: 800;color:#0f172a;}
 .heroLeft p{margin:0 0 12px;color:#475569;line-height:1.6;max-width: 560px;}
 .chips{display:flex; gap:10px; flex-wrap:wrap;}
-.chip{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:#fff;border:1px solid rgba(0,0,0,.08);color:#0f172a;font-weight:600;font-size:.9rem;}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:#fff;border:1px solid rgba(0,0,0,.08);color:#0f172a;font-weight:600;font-size:.9rem;word-break:break-word;overflow-wrap:anywhere;}
 .chip.subtle{opacity:.85}
 .heroRight{display:flex;align-items:center;}
 .quick{display:flex;flex-direction:column;gap:10px;min-width: 220px;}
-.qbtn{display:inline-flex;justify-content:center;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:#3b82f6;color:#fff;font-weight:700;text-decoration:none;border:1px solid rgba(0,0,0,.08);transition: transform .15s ease, box-shadow .15s ease;}
+.qbtn{display:inline-flex;justify-content:center;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:#3b82f6;color:#fff;font-weight:700;text-decoration:none;border:1px solid rgba(0,0,0,.08);transition: transform .15s ease, box-shadow .15s ease;min-height:48px;}
 .qbtn:hover{ transform: translateY(-1px); box-shadow: 0 10px 22px rgba(59,130,246,.25); }
 .qbtn.ghost{background:#fff;color:#0f172a;}
 .alert{margin-top:14px;padding:12px 14px;border-radius:12px;border:1px solid rgba(220,38,38,.25);background: rgba(220,38,38,.08);color:#991b1b;display:flex;gap:10px;align-items:flex-start;}
@@ -232,7 +302,8 @@ const styles = `
 .grid{margin-top:16px;display:grid;grid-template-columns: repeat(4, minmax(0, 1fr));gap:12px;}
 .card{background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:14px;box-shadow: 0 6px 18px rgba(0,0,0,.04);}
 .cardTop{display:flex; gap:12px; align-items:center;}
-.icon{width:46px; height:46px;border-radius:14px;display:flex; align-items:center; justify-content:center;background: rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.18);font-size:1.25rem;}
+.icon{width:46px; height:46px;border-radius:14px;display:flex; align-items:center; justify-content:center;background: rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.18);font-size:1.25rem;flex-shrink:0;}
+.meta{min-width:0;flex:1;}
 .meta .label{color:#64748b;font-weight:700;font-size:.9rem;margin-bottom:4px;}
 .meta .value{color:#0f172a;font-weight:900;font-size:1.35rem;}
 .sub{margin-top:10px;color:#64748b;font-size:.85rem;line-height:1.5;}
@@ -251,13 +322,28 @@ const styles = `
 .footer{margin-top:18px;padding-top:14px;border-top:1px solid rgba(0,0,0,.08);display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;}
 .note{color:#64748b;font-size:.9rem;max-width: 620px;line-height:1.6;}
 .row{display:flex;gap:10px;flex-wrap:wrap;}
-.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 12px;border-radius:12px;border:1px solid rgba(0,0,0,.10);background:#3b82f6;color:#fff;font-weight:800;text-decoration:none;}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 12px;border-radius:12px;border:1px solid rgba(0,0,0,.10);background:#3b82f6;color:#fff;font-weight:800;text-decoration:none;min-height:48px;}
 .btn.ghost{background:#fff;color:#0f172a;}
 .center{margin-top:60px;display:flex;flex-direction:column;align-items:center;gap:10px;color:#64748b;}
 .spinner{width:40px;height:40px;border:3px solid rgba(0,0,0,.08);border-top:3px solid rgba(59,130,246,1);border-radius:50%;animation: spin 1s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
 .panel{margin-top:60px;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:18px;padding:22px;text-align:center;box-shadow: 0 10px 26px rgba(0,0,0,.06);}
 .lock{font-size:2.2rem;margin-bottom:10px;}
-@media (max-width: 980px){.grid{grid-template-columns: repeat(2, minmax(0, 1fr));}.hero{flex-direction:column;}.quick{flex-direction:row;min-width: unset;flex-wrap:wrap;}}
-@media (max-width: 560px){.grid{grid-template-columns: 1fr;}.actions{grid-template-columns: 1fr;}}
+@media (max-width: 900px){
+  .grid{grid-template-columns: 1fr;}
+  .actions{grid-template-columns: 1fr;}
+  .hero{flex-direction:column;}
+  .quick{flex-direction:column;min-width:unset;width:100%;}
+  .qbtn{width:100%;display:flex;}
+  .btn{width:100%;min-height:48px;}
+  .wrap{padding:12px;}
+}
+@media (min-width: 901px){
+  .grid{grid-template-columns: repeat(4, minmax(0, 1fr));}
+  .actions{grid-template-columns: repeat(2, minmax(0, 1fr));}
+}
+@media (max-width: 560px){
+  .hero h1{font-size:1.5rem;}
+  .heroLeft p{font-size:0.95rem;}
+}
 `;
