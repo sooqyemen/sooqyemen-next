@@ -1,6 +1,5 @@
 // app/listings/page.js - Server Component with SSR
-// ⚠️ تصحيح الاستيراد: لاحظ أننا حذفنا حرف 's' من اسم الملف ليتطابق مع ما أنشأناه سابقاً
-import { getLatestListings } from '@/lib/getListing.server'; 
+import { getLatestListings } from '@/lib/getListings.server'; 
 import ListingsPageClient from './page-client';
 
 export const revalidate = 60; // إعادة التحقق كل 60 ثانية

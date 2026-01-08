@@ -13,7 +13,14 @@ export const metadata = {
 };
 
 export default async function FurniturePage() {
-  const initialListings = await fetchPublicListings({ limit: 24, category: 'furniture' });
+  let initialListings = [];
+  
+  try {
+    initialListings = await fetchPublicListings({ limit: 24, category: 'furniture' });
+  } catch (error) {
+    console.error('[FurniturePage] Failed to fetch listings:', error);
+    // سيتم جلب البيانات من الكلاينت في حالة الفشل
+  }
 
   return (
     <CategoryPageShell title="الأثاث" description="أثاث منزلي ومكتبي — جديد ومستعمل">

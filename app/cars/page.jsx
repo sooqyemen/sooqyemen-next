@@ -14,7 +14,14 @@ export const metadata = {
 
 export default async function CarsPage() {
   // جلب الإعلانات من السيرفر
-  const initialListings = await fetchPublicListings({ limit: 24, category: 'cars' });
+  let initialListings = [];
+  
+  try {
+    initialListings = await fetchPublicListings({ limit: 24, category: 'cars' });
+  } catch (error) {
+    console.error('[CarsPage] Failed to fetch listings:', error);
+    // سيتم جلب البيانات من الكلاينت في حالة الفشل
+  }
 
   return (
     <CategoryPageShell title="السيارات" description="تصفح أحدث إعلانات السيارات في اليمن">

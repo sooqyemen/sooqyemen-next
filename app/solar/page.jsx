@@ -13,7 +13,14 @@ export const metadata = {
 };
 
 export default async function SolarPage() {
-  const initialListings = await fetchPublicListings({ limit: 24, category: 'solar' });
+  let initialListings = [];
+  
+  try {
+    initialListings = await fetchPublicListings({ limit: 24, category: 'solar' });
+  } catch (error) {
+    console.error('[SolarPage] Failed to fetch listings:', error);
+    // سيتم جلب البيانات من الكلاينت في حالة الفشل
+  }
 
   return (
     <CategoryPageShell title="الطاقة الشمسية" description="ألواح، بطاريات، انفرترات ومستلزماتها">

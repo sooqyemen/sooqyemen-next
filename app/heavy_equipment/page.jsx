@@ -13,7 +13,14 @@ export const metadata = {
 };
 
 export default async function HeavyEquipmentPage() {
-  const initialListings = await fetchPublicListings({ limit: 24, category: 'heavy_equipment' });
+  let initialListings = [];
+  
+  try {
+    initialListings = await fetchPublicListings({ limit: 24, category: 'heavy_equipment' });
+  } catch (error) {
+    console.error('[HeavyEquipmentPage] Failed to fetch listings:', error);
+    // سيتم جلب البيانات من الكلاينت في حالة الفشل
+  }
 
   return (
     <CategoryPageShell title="معدات ثقيلة" description="حفارات، شيولات، رافعات، آليات ومعدات ثقيلة">

@@ -13,7 +13,14 @@ export const metadata = {
 };
 
 export default async function OtherPage() {
-  const initialListings = await fetchPublicListings({ limit: 24, category: 'other' });
+  let initialListings = [];
+  
+  try {
+    initialListings = await fetchPublicListings({ limit: 24, category: 'other' });
+  } catch (error) {
+    console.error('[OtherPage] Failed to fetch listings:', error);
+    // سيتم جلب البيانات من الكلاينت في حالة الفشل
+  }
 
   return (
     <CategoryPageShell

@@ -13,7 +13,14 @@ export const metadata = {
 };
 
 export default async function NetworksPage() {
-  const initialListings = await fetchPublicListings({ limit: 24, category: 'networks' });
+  let initialListings = [];
+  
+  try {
+    initialListings = await fetchPublicListings({ limit: 24, category: 'networks' });
+  } catch (error) {
+    console.error('[NetworksPage] Failed to fetch listings:', error);
+    // سيتم جلب البيانات من الكلاينت في حالة الفشل
+  }
 
   return (
     <CategoryPageShell title="نت وشبكات" description="راوترات، مقويات، سويتشات، كابلات وغيرها">

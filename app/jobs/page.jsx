@@ -13,7 +13,14 @@ export const metadata = {
 };
 
 export default async function JobsPage() {
-  const initialListings = await fetchPublicListings({ limit: 24, category: 'jobs' });
+  let initialListings = [];
+  
+  try {
+    initialListings = await fetchPublicListings({ limit: 24, category: 'jobs' });
+  } catch (error) {
+    console.error('[JobsPage] Failed to fetch listings:', error);
+    // سيتم جلب البيانات من الكلاينت في حالة الفشل
+  }
 
   return (
     <CategoryPageShell title="الوظائف" description="تصفح أحدث فرص العمل والوظائف في اليمن">
