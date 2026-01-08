@@ -43,14 +43,11 @@ export default function Header() {
       setAuthLoaded(true);
       setLoading(true);
       
-      import('@/components/AuthUI').then((mod) => {
-        const { auth } = mod;
-        // This is where Firebase auth iframe gets loaded
-        import('@/lib/firebaseClient').then(({ auth }) => {
-          auth.onAuthStateChanged((firebaseUser) => {
-            setUser(firebaseUser);
-            setLoading(false);
-          });
+      // This is where Firebase auth iframe gets loaded
+      import('@/lib/firebaseClient').then(({ auth }) => {
+        auth.onAuthStateChanged((firebaseUser) => {
+          setUser(firebaseUser);
+          setLoading(false);
         });
       });
     }
