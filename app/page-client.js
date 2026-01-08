@@ -387,12 +387,12 @@ function SearchBar({ search, setSearch, suggestions }) {
   );
 }
 
-export default function HomePageClient({ initialListings = [] }) {
+export default function HomePageClient({ initialListings = [], fetchError = null }) {
   const router = useRouter();
 
   const [listings, setListings] = useState(initialListings);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(fetchError || '');
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -443,6 +443,13 @@ export default function HomePageClient({ initialListings = [] }) {
 
   // ✅ جلب المزيد من الإعلانات في الوقت الفعلي (اختياري - للتحديثات المباشرة)
   useEffect(() => {
+    // إذا كان عندنا خطأ SSR، لا نحاول جلب من Firebase (نعرض الخطأ فوراً)
+    if (fetchError) {
+      setError(fetchError);
+      setLoading(false);
+      return;
+    }
+
     // إذا كان عندنا بيانات SSR، نخلي الاشتراك اختياري
     if (initialListings.length > 0) {
       // نبقى على البيانات الأولية ونقلل الاشتراك لتوفير الموارد
@@ -517,7 +524,7 @@ export default function HomePageClient({ initialListings = [] }) {
         if (unsub) unsub();
       } catch {}
     };
-  }, [initialListings.length]);
+  }, [initialListings.length, fetchError]);
 
   const handleCategoryClick = (category) => {
     if (!category) return;

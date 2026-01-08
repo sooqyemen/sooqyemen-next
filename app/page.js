@@ -15,6 +15,7 @@ export const metadata = {
 export default async function HomePage() {
   // جلب أول 12 إعلان من السيرفر (SSR)
   let initialListings = [];
+  let fetchError = null;
   
   try {
     initialListings = await fetchPublicListings({ limit: 12 });
@@ -22,8 +23,9 @@ export default async function HomePage() {
     if (process.env.NODE_ENV === 'development') {
       console.error('[HomePage SSR] Failed to fetch initial listings:', error);
     }
-    // في حالة الفشل، سيتم جلب البيانات من الكلاينت
+    // تمرير الخطأ للكلاينت
+    fetchError = error?.message || 'فشل جلب الإعلانات من قاعدة البيانات';
   }
 
-  return <HomePageClient initialListings={initialListings} />;
+  return <HomePageClient initialListings={initialListings} fetchError={fetchError} />;
 }

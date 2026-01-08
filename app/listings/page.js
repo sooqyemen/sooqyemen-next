@@ -16,6 +16,7 @@ export const metadata = {
 export default async function ListingsPage() {
   // جلب أول 24 إعلان من السيرفر (SSR/ISR with cached query)
   let initialListings = [];
+  let fetchError = null;
   
   try {
     initialListings = await getLatestListings(24);
@@ -25,8 +26,9 @@ export default async function ListingsPage() {
     
   } catch (error) {
     console.error('[ListingsPage SSR] Failed to fetch initial listings:', error);
-    // في حالة الفشل، المصفوفة ستبقى فارغة وسيتم التعامل معها في الكلاينت
+    // تمرير الخطأ للكلاينت
+    fetchError = error?.message || 'فشل جلب الإعلانات من قاعدة البيانات';
   }
 
-  return <ListingsPageClient initialListings={initialListings} />;
+  return <ListingsPageClient initialListings={initialListings} fetchError={fetchError} />;
 }
