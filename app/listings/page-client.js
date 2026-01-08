@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
-import { db } from '@/lib/firebaseClient';
 import Price from '@/components/Price';
 import ListingCard from '@/components/ListingCard';
 
@@ -182,39 +181,46 @@ export default function ListingsPageClient({ initialListings = [] }) {
     setLoading(true);
     setErr('');
 
-    // ✅ compat only (بدون modular)
+    // ✅ compat only (بدون modular) - lazy load Firebase
     let unsub = null;
 
-    try {
-      const ref = db.collection('listings').orderBy('createdAt', 'desc').limit(300);
+    // Dynamically import Firebase only when needed
+    import('@/lib/firebaseClient').then(({ db }) => {
+      try {
+        const ref = db.collection('listings').orderBy('createdAt', 'desc').limit(300);
 
-      unsub = ref.onSnapshot(
-        (snap) => {
-          const data = snap.docs
-            .map((d) => ({ id: d.id, ...d.data() }))
-            .filter((x) => x.isActive !== false && x.hidden !== true);
+        unsub = ref.onSnapshot(
+          (snap) => {
+            const data = snap.docs
+              .map((d) => ({ id: d.id, ...d.data() }))
+              .filter((x) => x.isActive !== false && x.hidden !== true);
 
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`[ListingsPage] Loaded ${data.length} listings`);
-            if (data.length === 0) {
-              console.warn('[ListingsPage] No listings found. Check Firebase rules and data.');
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`[ListingsPage] Loaded ${data.length} listings`);
+              if (data.length === 0) {
+                console.warn('[ListingsPage] No listings found. Check Firebase rules and data.');
+              }
             }
-          }
 
-          setListings(data);
-          setLoading(false);
-        },
-        (e) => {
-          console.error('[ListingsPage] Error loading listings:', e);
-          setErr(e?.message || 'تعذّر تحميل الإعلانات');
-          setLoading(false);
-        }
-      );
-    } catch (e) {
-      console.error(e);
+            setListings(data);
+            setLoading(false);
+          },
+          (e) => {
+            console.error('[ListingsPage] Error loading listings:', e);
+            setErr(e?.message || 'تعذّر تحميل الإعلانات');
+            setLoading(false);
+          }
+        );
+      } catch (e) {
+        console.error(e);
+        setErr('تعذّر الاتصال بقاعدة البيانات');
+        setLoading(false);
+      }
+    }).catch((e) => {
+      console.error('Failed to load Firebase:', e);
       setErr('تعذّر الاتصال بقاعدة البيانات');
       setLoading(false);
-    }
+    });
 
     return () => {
       if (typeof unsub === 'function') unsub();

@@ -55,19 +55,6 @@ export default function Header() {
       });
     }
   }, [pathname, authLoaded]);
-  const pathname = usePathname();
-
-  // ملاحظة: نخلي mounted منفصلة عشان الأنيميشن
-  const [menuMounted, setMenuMounted] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
-
-  const closeTimerRef = useRef(null);
-
-  // التحقق إذا كان المستخدم مديراً
-  const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase());
 
   // (اختياري) إذا ما عندك نظام رسائل غير مقروءة حقيقي خله false
   useEffect(() => {
