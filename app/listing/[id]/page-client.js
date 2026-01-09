@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import Price from '@/components/Price';
 import AuctionBox from '@/components/AuctionBox';
 import CommentsBox from '@/components/CommentsBox';
+import ImageGallery from '@/components/ImageGallery';
 import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import { logListingView } from '@/lib/analytics';
@@ -232,7 +233,10 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
     );
   }
 
-  const img = (Array.isArray(listing.images) && listing.images[0]) || listing.image || null;
+  const images = Array.isArray(listing.images) && listing.images.length > 0
+    ? listing.images
+    : (listing.image ? [listing.image] : []);
+
   const sellerUid = listing.userId;
 
   const isAdmin = !!user?.email && String(user.email).toLowerCase() === ADMIN_EMAIL;
@@ -326,12 +330,12 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
       <div className="container">
         {/* Header Bar */}
         <div className="header-bar">
-          <Link href="/" className="back-button">
-            <span>←</span>
+          <Link href="/" className="back-button" aria-label="العودة إلى الصفحة الرئيسية">
+            <span aria-hidden="true">←</span>
             <span>العودة للرئيسية</span>
           </Link>
-          <div className="views-badge">
-            <span>👁️</span>
+          <div className="views-badge" role="status" aria-live="polite">
+            <span aria-hidden="true">👁️</span>
             <span>{Number(listing.views || 0).toLocaleString('ar')} مشاهدة</span>
           </div>
         </div>
@@ -346,25 +350,22 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
         <div className="listing-layout">
           {/* Main Content */}
           <div className="main-card">
-            {/* Listing Image */}
-            {img ? (
-              <img 
-                src={img} 
-                alt={listing.title || 'صورة الإعلان'} 
-                className="listing-image"
-                loading="eager"
-                decoding="async"
-              />
-            ) : (
-              <div className="image-placeholder">🖼️</div>
-            )}
+            {/* Image Gallery with touch support and navigation buttons */}
+            <ImageGallery 
+              images={images} 
+              alt={listing.title || 'صورة الإعلان'} 
+            />
 
             <div className="listing-content">
               {/* Listing Header */}
               <div className="listing-header">
                 <div className="listing-title-row">
                   <h1 className="listing-title">{listing.title || 'بدون عنوان'}</h1>
-                  {listing.auctionEnabled && <span className="listing-badge">⚡ مزاد</span>}
+                  {listing.auctionEnabled && (
+                    <span className="listing-badge" role="status" aria-label="إعلان مزاد">
+                      <span aria-hidden="true">⚡</span> مزاد
+                    </span>
+                  )}
                 </div>
 
                 <div className="listing-location">
@@ -420,9 +421,13 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                 <div className="contact-buttons">
                   {/* زر الاتصال */}
                   {listing.phone && (
-                    <a className="contact-button call" href={`tel:${listing.phone}`}>
+                    <a 
+                      className="contact-button call" 
+                      href={`tel:${listing.phone}`}
+                      aria-label={`الاتصال بالبائع على ${listing.phone}`}
+                    >
                       <div className="button-content">
-                        <div className="button-icon">📞</div>
+                        <div className="button-icon" aria-hidden="true">📞</div>
                         <div className="button-text">
                           <div className="button-label">اتصال مباشر</div>
                           <div className="button-subtext">اتصل بالبائع الآن</div>
@@ -438,9 +443,10 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                       href={`https://wa.me/${String(listing.phone).replace(/\D/g, '')}`}
                       target="_blank"
                       rel="noopener noreferrer"
+                      aria-label={`مراسلة البائع عبر واتساب على ${listing.phone}`}
                     >
                       <div className="button-content">
-                        <div className="button-icon">💬</div>
+                        <div className="button-icon" aria-hidden="true">💬</div>
                         <div className="button-text">
                           <div className="button-label">مراسلة على واتساب</div>
                           <div className="button-subtext">تواصل فوري</div>
@@ -540,8 +546,9 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                         target="_blank"
                         rel="noopener noreferrer"
                         className="google-maps-button"
+                        aria-label="فتح الموقع في خرائط جوجل"
                       >
-                        <span className="google-maps-icon">🗺️</span>
+                        <span className="google-maps-icon" aria-hidden="true">🗺️</span>
                         <span className="google-maps-text">فتح في خرائط جوجل</span>
                       </a>
 
@@ -550,8 +557,9 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                         target="_blank"
                         rel="noopener noreferrer"
                         className="google-maps-button satellite"
+                        aria-label="عرض الموقع بالقمر الصناعي"
                       >
-                        <span className="google-maps-icon">🛰️</span>
+                        <span className="google-maps-icon" aria-hidden="true">🛰️</span>
                         <span className="google-maps-text">قمر صناعي</span>
                       </a>
                     </div>

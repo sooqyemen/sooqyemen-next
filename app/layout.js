@@ -66,13 +66,16 @@ export default function RootLayout({ children }) {
   return (
     <html lang="ar" dir="rtl">
       <head>
+        <meta charSet="utf-8" />
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, maximum-scale=3, viewport-fit=cover"
+          content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover"
         />
-        <meta name="theme-color" content="#ffffff" />
+        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="format-detection" content="telephone=no" />
         {/* Preconnect to critical domains */}
         <link rel="preconnect" href="https://firebasestorage.googleapis.com" />
         <link rel="dns-prefetch" href="https://firebasestorage.googleapis.com" />
@@ -82,9 +85,12 @@ export default function RootLayout({ children }) {
       </head>
 
       <body>
+        <a href="#main-content" className="skip-to-content">
+          الانتقال إلى المحتوى الرئيسي
+        </a>
         <ClientProviders>
           <Header />
-          <main>{children}</main>
+          <main id="main-content" role="main">{children}</main>
           <div className="safe-area-bottom" />
         </ClientProviders>
       </body>
