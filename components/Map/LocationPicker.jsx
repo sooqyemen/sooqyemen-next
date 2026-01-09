@@ -126,36 +126,40 @@ export default function LocationPicker({ value, onChange }) {
     
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
+        try {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
 
-        // تحقق من الموقع داخل اليمن
-        const inYemen =
-          lat >= YEMEN_BOUNDS[0][0] &&
-          lat <= YEMEN_BOUNDS[1][0] &&
-          lng >= YEMEN_BOUNDS[0][1] &&
-          lng <= YEMEN_BOUNDS[1][1];
+          // تحقق من الموقع داخل اليمن
+          const inYemen =
+            lat >= YEMEN_BOUNDS[0][0] &&
+            lat <= YEMEN_BOUNDS[1][0] &&
+            lng >= YEMEN_BOUNDS[0][1] &&
+            lng <= YEMEN_BOUNDS[1][1];
 
-        if (!inYemen) {
-          alert('موقعك الحالي خارج اليمن 🇾🇪');
+          if (!inYemen) {
+            alert('موقعك الحالي خارج اليمن 🇾🇪');
+            return;
+          }
+
+          // جلب اسم المكان
+          const name = await reverseName(lat, lng);
+          const label =
+            name?.trim() ||
+            `Lat: ${lat.toFixed(5)} , Lng: ${lng.toFixed(5)}`;
+
+          onChange([lat, lng], label);
+          
+          // تحريك الخريطة للموقع الجديد
+          if (map) {
+            map.setView([lat, lng], 15);
+          }
+        } catch (error) {
+          console.error('Error processing location:', error);
+          alert('حدث خطأ أثناء معالجة الموقع');
+        } finally {
           setLocatingMe(false);
-          return;
         }
-
-        // جلب اسم المكان
-        const name = await reverseName(lat, lng);
-        const label =
-          name?.trim() ||
-          `Lat: ${lat.toFixed(5)} , Lng: ${lng.toFixed(5)}`;
-
-        onChange([lat, lng], label);
-        
-        // تحريك الخريطة للموقع الجديد
-        if (map) {
-          map.setView([lat, lng], 15);
-        }
-        
-        setLocatingMe(false);
       },
       (error) => {
         console.error('Geolocation error:', error);
@@ -280,12 +284,6 @@ export default function LocationPicker({ value, onChange }) {
           لم يتم اختيار موقع بعد
         </div>
       )}
-      
-      <style jsx>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 }
