@@ -189,7 +189,8 @@ function GridListingCard({ listing }) {
               loading="lazy"
               onError={(e) => {
                 e.target.style.display = 'none';
-                const fb = e.target.parentElement?.querySelector('.img-fallback');
+                const container = e.currentTarget.closest('.image-container');
+                const fb = container?.querySelector('.img-fallback');
                 if (fb) fb.style.display = 'flex';
               }}
             />
