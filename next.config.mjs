@@ -1,20 +1,44 @@
+import bundleAnalyzer from '@next/bundle-analyzer';
+
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === 'true',
+});
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-
+  
+  // Performance optimizations
+  compiler: {
+    // Remove console.log in production
+    removeConsole: process.env.NODE_ENV === 'production' ? {
+      exclude: ['error', 'warn'],
+    } : false,
+  },
+  
+  // Optimize production builds
+  productionBrowserSourceMaps: false,
+  
+  // Compress responses
+  compress: true,
+  
+  // Optimize images
   images: {
+    formats: ['image/webp', 'image/avif'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     remotePatterns: [
       // Firebase Storage
       {
         protocol: 'https',
         hostname: 'firebasestorage.googleapis.com',
       },
-      // Google user photos (أحيانًا تظهر في حسابات جوجل)
+      // Google user photos
       {
         protocol: 'https',
         hostname: 'lh3.googleusercontent.com',
       },
-      // لو عندك صور على دومين موقعك داخل public أو عبر CDN مستقبلًا
+      // Domain images
       {
         protocol: 'https',
         hostname: 'sooqyemen.com',
@@ -24,7 +48,32 @@ const nextConfig = {
         hostname: 'www.sooqyemen.com',
       },
     ],
+    minimumCacheTTL: 60,
+  },
+  
+  // Optimize headers for better caching
+  async headers() {
+    return [
+      {
+        source: '/:path*(svg|jpg|jpeg|png|gif|ico|webp|avif)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      {
+        source: '/_next/static/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+    ];
   },
 };
 
-export default nextConfig;
+export default withBundleAnalyzer(nextConfig);

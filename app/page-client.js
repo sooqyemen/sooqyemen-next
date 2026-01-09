@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
+import Image from 'next/image';
 import Price from '@/components/Price';
 import { db } from '@/lib/firebaseClient';
 import WebsiteJsonLd from '@/components/StructuredData/WebsiteJsonLd';
@@ -178,15 +179,18 @@ function GridListingCard({ listing }) {
       <div className="listing-card grid-card">
         <div className="image-container">
           {img ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
               src={img}
               alt={listing.title || 'صورة الإعلان'}
               className="listing-img"
+              width={300}
+              height={200}
+              style={{ objectFit: 'cover' }}
               loading="lazy"
               onError={(e) => {
                 e.target.style.display = 'none';
-                const fb = e.target.parentElement.querySelector('.img-fallback');
+                const container = e.currentTarget.closest('.image-container');
+                const fb = container?.querySelector('.img-fallback');
                 if (fb) fb.style.display = 'flex';
               }}
             />
@@ -248,15 +252,17 @@ function ListListingCard({ listing }) {
       <div className="listing-card list-card">
         <div className="list-image-container">
           {img ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
               src={img}
               alt={listing.title || 'صورة الإعلان'}
               className="list-img"
+              width={150}
+              height={150}
+              style={{ objectFit: 'cover' }}
               loading="lazy"
               onError={(e) => {
                 e.target.style.display = 'none';
-                const fb = e.target.parentElement.querySelector('.list-img-fallback');
+                const fb = e.target.parentElement?.querySelector('.list-img-fallback');
                 if (fb) fb.style.display = 'flex';
               }}
             />

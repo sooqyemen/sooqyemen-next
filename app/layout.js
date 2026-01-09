@@ -31,7 +31,7 @@ export const metadata = {
     description: 'أكبر منصة للإعلانات والمزادات في اليمن - بيع وشراء السيارات، العقارات، الجوالات، الإلكترونيات وأكثر',
     images: [
       {
-        url: '/logo.png',
+        url: '/icon-512.png',
         width: 512,
         height: 512,
         alt: 'سوق اليمن',
@@ -42,7 +42,7 @@ export const metadata = {
     card: 'summary_large_image',
     title: 'سوق اليمن - أكبر منصة للإعلانات والمزادات في اليمن',
     description: 'أكبر منصة للإعلانات والمزادات في اليمن',
-    images: ['/logo.png'],
+    images: ['/icon-512.png'],
   },
   manifest: '/manifest.json',
   alternates: {
@@ -68,11 +68,17 @@ export default function RootLayout({ children }) {
       <head>
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
+          content="width=device-width, initial-scale=1, maximum-scale=3, viewport-fit=cover"
         />
         <meta name="theme-color" content="#ffffff" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        {/* Preconnect to critical domains */}
+        <link rel="preconnect" href="https://firebasestorage.googleapis.com" />
+        <link rel="dns-prefetch" href="https://firebasestorage.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* Performance hints */}
+        <meta httpEquiv="x-dns-prefetch-control" content="on" />
       </head>
 
       <body>
