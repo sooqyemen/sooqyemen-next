@@ -22,6 +22,7 @@ const YEMEN_BOUNDS = [
 const DEFAULT_CENTER = [15.3694, 44.1910];
 
 // يجيب اسم المكان من OSM مع تفاصيل أكثر (المنطقة، القرية، الشارع)
+// يرجع { label, cityName } حيث label هو التفاصيل الكاملة و cityName هو اسم المدينة فقط
 async function reverseName(lat, lng) {
   try {
     const url =
@@ -51,17 +52,27 @@ async function reverseName(lat, lng) {
     else if (a.hamlet) parts.push(a.hamlet);
     
     // المنطقة أو المدينة
-    if (a.city) parts.push(a.city);
-    else if (a.town) parts.push(a.town);
-    else if (a.county) parts.push(a.county);
-    else if (a.state) parts.push(a.state);
+    let cityName = '';
+    if (a.city) {
+      cityName = a.city;
+      parts.push(a.city);
+    } else if (a.town) {
+      cityName = a.town;
+      parts.push(a.town);
+    } else if (a.county) {
+      cityName = a.county;
+      parts.push(a.county);
+    } else if (a.state) {
+      cityName = a.state;
+      parts.push(a.state);
+    }
     
     // إذا ما في أي تفاصيل، نستخدم display_name
     const label = parts.length > 0 ? parts.join('، ') : (data.display_name || '');
     
-    return label || '';
+    return { label: label || '', cityName: cityName || '' };
   } catch {
-    return '';
+    return { label: '', cityName: '' };
   }
 }
 
@@ -85,15 +96,17 @@ function ClickPicker({ value, onChange }) {
       }
 
       setLoadingName(true);
-      const name = await reverseName(lat, lng);
+      const result = await reverseName(lat, lng);
       setLoadingName(false);
 
       // لو ما قدر يجيب اسم، نرجع للإحداثيات
       const label =
-        name?.trim() ||
+        result?.label?.trim() ||
         `Lat: ${lat.toFixed(5)} , Lng: ${lng.toFixed(5)}`;
+      
+      const cityName = result?.cityName || '';
 
-      onChange([lat, lng], label);
+      onChange([lat, lng], label, cityName);
     },
   });
 
@@ -126,12 +139,14 @@ export default function LocationPicker({ value, onChange }) {
       }
 
       // جلب اسم المكان
-      const name = await reverseName(lat, lng);
+      const result = await reverseName(lat, lng);
       const label =
-        name?.trim() ||
+        result?.label?.trim() ||
         `Lat: ${lat.toFixed(5)} , Lng: ${lng.toFixed(5)}`;
+      
+      const cityName = result?.cityName || '';
 
-      onChange([lat, lng], label);
+      onChange([lat, lng], label, cityName);
       
       // تحريك الخريطة للموقع الجديد
       if (map) {
