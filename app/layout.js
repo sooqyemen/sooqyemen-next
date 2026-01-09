@@ -5,12 +5,6 @@ import Header from '@/components/Header';
 import ClientProviders from '@/components/ClientProviders';
 import { WebVitals } from './web-vitals';
 
-// Optimize system fonts by preloading
-const fontPreload = {
-  preload: true,
-  display: 'swap',
-};
-
 export const metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://sooqyemen.com'),
   title: {

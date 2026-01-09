@@ -42,10 +42,27 @@ export function WebVitals() {
         .then((registration) => {
           console.log('Service Worker registered successfully:', registration.scope);
           
-          // Check for updates periodically
-          setInterval(() => {
-            registration.update();
-          }, 60000); // Check every minute
+          // Check for updates when page becomes visible
+          const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+              registration.update();
+            }
+          };
+          
+          document.addEventListener('visibilitychange', handleVisibilityChange);
+          
+          // Also check for updates on the updatefound event
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            if (newWorker) {
+              console.log('Service Worker update found');
+            }
+          });
+          
+          // Clean up
+          return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+          };
         })
         .catch((error) => {
           console.error('Service Worker registration failed:', error);
