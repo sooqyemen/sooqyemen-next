@@ -398,6 +398,11 @@ img{ max-width:100%; display:block; }
 }
 .categoryBarIc{ font-size:16px; line-height:1; }
 
+/* Spin animation for loading indicators */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 @media (max-width: 768px){
   .btn{ padding:8px 10px; font-size:13px; }
   .categoryBarTop{ justify-content:stretch; }
