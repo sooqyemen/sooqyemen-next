@@ -7,7 +7,6 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import Price from '@/components/Price';
 
-import 'leaflet/dist/leaflet.css';
 
 // Fix marker icons
 delete L.Icon.Default.prototype._getIconUrl;

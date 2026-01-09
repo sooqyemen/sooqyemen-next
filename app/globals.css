@@ -25,8 +25,27 @@ body{
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-a{ color:inherit; text-decoration:none; }
+a{ color:inherit; text-decoration:none; transition: all 0.2s ease; }
+a:focus-visible{ outline: 2px solid #3b82f6; outline-offset: 2px; }
 img{ max-width:100%; display:block; }
+
+/* ===== Accessibility - Skip to content ===== */
+.skip-to-content {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: #3b82f6;
+  color: white;
+  padding: 0.5rem 1rem;
+  text-decoration: none;
+  border-radius: 0 0 8px 0;
+  z-index: 10000;
+  font-weight: 600;
+}
+
+.skip-to-content:focus {
+  top: 0;
+}
 
 .safe-area-bottom{ height: env(safe-area-inset-bottom); }
 
@@ -77,6 +96,11 @@ img{ max-width:100%; display:block; }
   cursor:pointer;
   font-weight:800;
   color:#0f172a;
+  transition: all 0.2s ease;
+}
+.btn:focus-visible{
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
 }
 .btnPrimary{
   background: linear-gradient(135deg, var(--brand) 0%, var(--brand2) 100%);
@@ -407,4 +431,72 @@ img{ max-width:100%; display:block; }
   .btn{ padding:8px 10px; font-size:13px; }
   .categoryBarTop{ justify-content:stretch; }
   .categoryBarTop .btn{ width:100%; }
+}
+
+/* ===== Accessibility & Performance Improvements ===== */
+
+/* Focus visible for better keyboard navigation */
+*:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Remove outline for mouse users */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  button,
+  .btn,
+  a {
+    border: 2px solid currentColor;
+  }
+  
+  .back-button,
+  .contact-button {
+    border: 2px solid currentColor;
+  }
+}
+
+/* Color scheme support */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --border: #334155;
+    --muted: #94a3b8;
+  }
+}
+
+/* Print styles */
+@media print {
+  .header,
+  .side-menu,
+  .back-button,
+  .contact-button,
+  .google-maps-button {
+    display: none !important;
+  }
+  
+  body {
+    background: white;
+  }
+  
+  .listing-details-page {
+    background: white;
+  }
 }
