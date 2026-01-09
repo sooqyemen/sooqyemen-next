@@ -177,7 +177,7 @@ export default function EditListingPage() {
     setCoords(c);
     setLocationLabel(lbl || '');
     
-    // تعبئة المدينة تلقائياً إذا كانت فارغة أو إذا كان هناك اسم مدينة جديد
+    // تعبئة المدينة تلقائياً إذا تم الحصول على اسم مدينة من الموقع
     if (cityName && cityName.trim()) {
       setCity(cityName.trim());
       // إزالة خطأ المدينة إذا كان موجود
