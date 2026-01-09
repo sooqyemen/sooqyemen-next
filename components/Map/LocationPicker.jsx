@@ -24,12 +24,14 @@ const DEFAULT_CENTER = [15.3694, 44.1910];
 // Cache للـ reverse geocoding لتحسين الأداء
 const geocodeCache = new Map();
 const MAX_CACHE_SIZE = 100;
+// دقة التقريب للكاش (4 منازل عشرية = دقة ~11 متر)
+const COORDINATE_PRECISION = 4;
 
 // يجيب اسم المكان من OSM مع تفاصيل أكثر (المنطقة، القرية، الشارع)
 // يرجع { label, cityName } حيث label هو التفاصيل الكاملة و cityName هو اسم المدينة فقط
 async function reverseName(lat, lng) {
-  // تقريب الإحداثيات لـ 4 منازل عشرية للكاش (دقة ~11 متر)
-  const cacheKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+  // تقريب الإحداثيات للكاش
+  const cacheKey = `${lat.toFixed(COORDINATE_PRECISION)},${lng.toFixed(COORDINATE_PRECISION)}`;
   
   // تحقق من الكاش أولاً
   if (geocodeCache.has(cacheKey)) {
@@ -85,7 +87,7 @@ async function reverseName(lat, lng) {
     const result = { label: label || '', cityName: cityName || '' };
     
     // حفظ النتيجة في الكاش
-    if (geocodeCache.size > MAX_CACHE_SIZE) {
+    if (geocodeCache.size >= MAX_CACHE_SIZE) {
       // إذا امتلأ الكاش، احذف أقدم عنصر
       const firstKey = geocodeCache.keys().next().value;
       if (firstKey) {
