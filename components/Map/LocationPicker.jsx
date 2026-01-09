@@ -21,7 +21,7 @@ const YEMEN_BOUNDS = [
 ];
 const DEFAULT_CENTER = [15.3694, 44.1910];
 
-// يجيب اسم المكان من OSM
+// يجيب اسم المكان من OSM مع تفاصيل أكثر (المنطقة، القرية، الشارع)
 async function reverseName(lat, lng) {
   try {
     const url =
@@ -36,18 +36,30 @@ async function reverseName(lat, lng) {
     const data = await res.json();
 
     const a = data.address || {};
-    const best =
-      a.city ||
-      a.town ||
-      a.village ||
-      a.suburb ||
-      a.county ||
-      a.state ||
-      a.region ||
-      a.country ||
-      data.display_name;
-
-    return best || '';
+    
+    // نجمع التفاصيل: الشارع، القرية/الحي، المنطقة/المدينة
+    const parts = [];
+    
+    // الشارع أو الطريق
+    if (a.road) parts.push(a.road);
+    else if (a.street) parts.push(a.street);
+    
+    // القرية أو الحي
+    if (a.village) parts.push(a.village);
+    else if (a.suburb) parts.push(a.suburb);
+    else if (a.neighbourhood) parts.push(a.neighbourhood);
+    else if (a.hamlet) parts.push(a.hamlet);
+    
+    // المنطقة أو المدينة
+    if (a.city) parts.push(a.city);
+    else if (a.town) parts.push(a.town);
+    else if (a.county) parts.push(a.county);
+    else if (a.state) parts.push(a.state);
+    
+    // إذا ما في أي تفاصيل، نستخدم display_name
+    const label = parts.length > 0 ? parts.join('، ') : (data.display_name || '');
+    
+    return label || '';
   } catch {
     return '';
   }
@@ -96,11 +108,77 @@ function ClickPicker({ value, onChange }) {
 export default function LocationPicker({ value, onChange }) {
   const wrapRef = useRef(null);
   const [map, setMap] = useState(null);
+  const [locatingMe, setLocatingMe] = useState(false);
 
   const center = useMemo(() => {
     if (Array.isArray(value) && value.length === 2) return value;
     return DEFAULT_CENTER;
   }, [value]);
+
+  // دالة تحديد موقعي
+  const handleLocateMe = async () => {
+    if (!navigator.geolocation) {
+      alert('المتصفح لا يدعم تحديد الموقع');
+      return;
+    }
+
+    setLocatingMe(true);
+    
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+
+        // تحقق من الموقع داخل اليمن
+        const inYemen =
+          lat >= YEMEN_BOUNDS[0][0] &&
+          lat <= YEMEN_BOUNDS[1][0] &&
+          lng >= YEMEN_BOUNDS[0][1] &&
+          lng <= YEMEN_BOUNDS[1][1];
+
+        if (!inYemen) {
+          alert('موقعك الحالي خارج اليمن 🇾🇪');
+          setLocatingMe(false);
+          return;
+        }
+
+        // جلب اسم المكان
+        const name = await reverseName(lat, lng);
+        const label =
+          name?.trim() ||
+          `Lat: ${lat.toFixed(5)} , Lng: ${lng.toFixed(5)}`;
+
+        onChange([lat, lng], label);
+        
+        // تحريك الخريطة للموقع الجديد
+        if (map) {
+          map.setView([lat, lng], 15);
+        }
+        
+        setLocatingMe(false);
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        let message = 'فشل تحديد موقعك';
+        
+        if (error.code === error.PERMISSION_DENIED) {
+          message = 'يرجى السماح للمتصفح بالوصول إلى موقعك';
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          message = 'موقعك غير متاح حالياً';
+        } else if (error.code === error.TIMEOUT) {
+          message = 'انتهت مهلة تحديد الموقع';
+        }
+        
+        alert(message);
+        setLocatingMe(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+  };
 
   // إصلاح المقاسات (منع التقطيع)
   useEffect(() => {
@@ -130,11 +208,40 @@ export default function LocationPicker({ value, onChange }) {
 
   return (
     <div className="card" style={{ minHeight: 520 }}>
-      <div style={{ fontWeight: 900, marginBottom: 8 }}>
-        📍 اختر موقع الإعلان
+      <div style={{ fontWeight: 900, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>📍 اختر موقع الإعلان</span>
+        <button
+          onClick={handleLocateMe}
+          disabled={locatingMe}
+          style={{
+            padding: '8px 16px',
+            background: locatingMe ? '#94a3b8' : '#4f46e5',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: locatingMe ? 'not-allowed' : 'pointer',
+            fontSize: '14px',
+            fontWeight: '600',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          {locatingMe ? (
+            <>
+              <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⌛</span>
+              جاري التحديد...
+            </>
+          ) : (
+            <>
+              📍 حدد موقعي
+            </>
+          )}
+        </button>
       </div>
       <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-        اضغط على الخريطة لتحديد الموقع (داخل اليمن)
+        اضغط على الخريطة لتحديد الموقع (داخل اليمن) أو استخدم زر &quot;حدد موقعي&quot;
       </div>
 
       <div
@@ -173,6 +280,12 @@ export default function LocationPicker({ value, onChange }) {
           لم يتم اختيار موقع بعد
         </div>
       )}
+      
+      <style jsx>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }
