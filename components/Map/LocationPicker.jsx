@@ -31,7 +31,9 @@ const COORDINATE_PRECISION = 4;
 // يرجع { label, cityName } حيث label هو التفاصيل الكاملة و cityName هو اسم المدينة فقط
 async function reverseName(lat, lng) {
   // تقريب الإحداثيات للكاش
-  const cacheKey = `${lat.toFixed(COORDINATE_PRECISION)},${lng.toFixed(COORDINATE_PRECISION)}`;
+  const roundedLat = Number(lat.toFixed(COORDINATE_PRECISION));
+  const roundedLng = Number(lng.toFixed(COORDINATE_PRECISION));
+  const cacheKey = `${roundedLat},${roundedLng}`;
   
   // تحقق من الكاش أولاً
   if (geocodeCache.has(cacheKey)) {
@@ -39,8 +41,9 @@ async function reverseName(lat, lng) {
   }
   
   try {
+    // استخدم الإحداثيات المقربة للاتساق مع الكاش
     const url =
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=ar`;
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${roundedLat}&lon=${roundedLng}&accept-language=ar`;
     const res = await fetch(url, {
       headers: {
         // مهم: بعض الأحيان Nominatim يحتاج User-Agent
@@ -90,9 +93,7 @@ async function reverseName(lat, lng) {
     if (geocodeCache.size >= MAX_CACHE_SIZE) {
       // إذا امتلأ الكاش، احذف أقدم عنصر
       const firstKey = geocodeCache.keys().next().value;
-      if (firstKey) {
-        geocodeCache.delete(firstKey);
-      }
+      geocodeCache.delete(firstKey); // آمن حتى لو firstKey كان undefined
     }
     geocodeCache.set(cacheKey, result);
     
