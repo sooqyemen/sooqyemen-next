@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 
-import 'leaflet/dist/leaflet.css';
+// Leaflet CSS is imported globally in app/layout.js
 
 // Fix marker icons
 delete L.Icon.Default.prototype._getIconUrl;
@@ -227,17 +227,26 @@ export default function LocationPicker({ value, onChange }) {
     );
   };
 
-  // إصلاح المقاسات (منع التقطيع)
+  // إصلاح المقاسات (منع التقطيع) - Enhanced with requestAnimationFrame
   useEffect(() => {
     if (!map) return;
 
     const fix = () => {
-      map.invalidateSize();
-      setTimeout(() => map.invalidateSize(), 150);
-      setTimeout(() => map.invalidateSize(), 500);
+      // Use requestAnimationFrame for smoother updates
+      requestAnimationFrame(() => {
+        map.invalidateSize();
+        // Additional delayed fixes for better reliability
+        setTimeout(() => map.invalidateSize(), 100);
+        setTimeout(() => map.invalidateSize(), 300);
+      });
     };
 
+    // Initial fix on mount
     fix();
+    
+    // Additional fix after a short delay to ensure container is visible
+    setTimeout(fix, 50);
+    setTimeout(fix, 200);
 
     let ro;
     if (wrapRef.current && 'ResizeObserver' in window) {

@@ -7,6 +7,7 @@ import Price from '@/components/Price';
 import AuctionBox from '@/components/AuctionBox';
 import CommentsBox from '@/components/CommentsBox';
 import ImageGallery from '@/components/ImageGallery';
+import WhatsAppIcon from '@/components/Icons/WhatsAppIcon';
 import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import { logListingView } from '@/lib/analytics';
@@ -446,7 +447,9 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                       aria-label={`مراسلة البائع عبر واتساب على ${listing.phone}`}
                     >
                       <div className="button-content">
-                        <div className="button-icon" aria-hidden="true">💬</div>
+                        <div className="button-icon whatsapp-icon-wrapper" aria-hidden="true">
+                          <WhatsAppIcon size={28} />
+                        </div>
                         <div className="button-text">
                           <div className="button-label">مراسلة على واتساب</div>
                           <div className="button-subtext">تواصل فوري</div>

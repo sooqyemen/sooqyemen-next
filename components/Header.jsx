@@ -4,6 +4,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { useUserProfile } from '@/lib/useUserProfile';
 
 // إيميلات المدراء
 const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
@@ -13,15 +14,11 @@ const AFFILIATE_CREATE_PATH = '/affiliate/create';
 
 export default function Header() {
   const pathname = usePathname();
+  const { user, profile, loading, error } = useUserProfile();
 
   // ملاحظة: نخلي mounted منفصلة عشان الأنيميشن
   const [menuMounted, setMenuMounted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  
-  // Auth state - not loaded by default
-  const [authLoaded, setAuthLoaded] = useState(false);
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(false);
 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
@@ -31,27 +28,22 @@ export default function Header() {
   // التحقق إذا كان المستخدم مديراً
   const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase());
   
-  // Load auth only when user clicks on something that needs it
-  useEffect(() => {
-    // Don't load auth on /listings to meet requirement
-    if (pathname === '/listings') {
-      return;
-    }
-    
-    // For other pages, load auth on mount
-    if (!authLoaded) {
-      setAuthLoaded(true);
-      setLoading(true);
-      
-      // This is where Firebase auth iframe gets loaded
-      import('@/lib/firebaseClient').then(({ auth }) => {
-        auth.onAuthStateChanged((firebaseUser) => {
-          setUser(firebaseUser);
-          setLoading(false);
-        });
-      });
-    }
-  }, [pathname, authLoaded]);
+  // Get display name with fallback
+  const getDisplayName = () => {
+    if (error === 'timeout') return 'مستخدم';
+    if (error) return 'مستخدم';
+    if (profile?.name) return profile.name;
+    if (user?.displayName) return user.displayName;
+    if (user?.email) return user.email.split('@')[0];
+    return 'مستخدم';
+  };
+  
+  // Get short UID for display (first 6 characters)
+  const getShortUid = () => {
+    if (profile?.uid) return profile.uid.substring(0, 6);
+    if (user?.uid) return user.uid.substring(0, 6);
+    return '';
+  };
 
   // (اختياري) إذا ما عندك نظام رسائل غير مقروءة حقيقي خله false
   useEffect(() => {
@@ -121,7 +113,6 @@ export default function Header() {
     try {
       const { auth } = await import('@/lib/firebaseClient');
       await auth.signOut();
-      setUser(null);
       closeMenu(true);
     } catch (e) {
       console.error('خطأ في تسجيل الخروج:', e);
@@ -186,7 +177,7 @@ export default function Header() {
                   </Link>
 
                   <div className="user-menu">
-                    <span className="user-greeting">أهلاً، {user.name || 'مستخدم'}</span>
+                    <span className="user-greeting">أهلاً، {getDisplayName()}</span>
 
                     <div className="dropdown">
                       <Link href="/my-listings" className="dropdown-item">
@@ -264,14 +255,16 @@ export default function Header() {
                   <div className="user-info">
                     <div className="user-avatar">👤</div>
                     <div className="user-details">
-                      <div className="user-name">{user.name || 'مستخدم'}</div>
-                      <div className="user-email">رقم المستخدم: (قيد التحميل...)</div>
+                      <div className="user-name">اسم المستخدم: {getDisplayName()}</div>
+                      <div className="user-email">
+                        {error ? 'معرف المستخدم: غير متاح' : getShortUid() ? `معرف المستخدم: ${getShortUid()}` : 'معرف المستخدم: غير متاح'}
+                      </div>
                     </div>
                   </div>
                 ) : (
                   <div className="guest-message">
                     <div className="guest-icon">👤</div>
-                    <div className="guest-text">زائر - لم تقم بتسجيل الدخول</div>
+                    <div className="guest-text">زائر</div>
                   </div>
                 )}
               </div>
