@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 
@@ -21,9 +21,21 @@ const YEMEN_BOUNDS = [
 ];
 const DEFAULT_CENTER = [15.3694, 44.1910];
 
+// Cache للـ reverse geocoding لتحسين الأداء
+const geocodeCache = new Map();
+const MAX_CACHE_SIZE = 100;
+
 // يجيب اسم المكان من OSM مع تفاصيل أكثر (المنطقة، القرية، الشارع)
 // يرجع { label, cityName } حيث label هو التفاصيل الكاملة و cityName هو اسم المدينة فقط
 async function reverseName(lat, lng) {
+  // تقريب الإحداثيات لـ 4 منازل عشرية للكاش (دقة ~11 متر)
+  const cacheKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+  
+  // تحقق من الكاش أولاً
+  if (geocodeCache.has(cacheKey)) {
+    return geocodeCache.get(cacheKey);
+  }
+  
   try {
     const url =
       `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=ar`;
@@ -70,9 +82,22 @@ async function reverseName(lat, lng) {
     // إذا ما في أي تفاصيل، نستخدم display_name
     const label = parts.length > 0 ? parts.join('، ') : (data.display_name || '');
     
-    return { label: label || '', cityName: cityName || '' };
+    const result = { label: label || '', cityName: cityName || '' };
+    
+    // حفظ النتيجة في الكاش
+    if (geocodeCache.size >= MAX_CACHE_SIZE) {
+      // إذا امتلأ الكاش، احذف أقدم عنصر
+      const firstKey = geocodeCache.keys().next().value;
+      geocodeCache.delete(firstKey);
+    }
+    geocodeCache.set(cacheKey, result);
+    
+    return result;
   } catch {
-    return { label: '', cityName: '' };
+    const fallback = { label: '', cityName: '' };
+    // حفظ حتى الأخطاء في الكاش لتجنب إعادة المحاولة
+    geocodeCache.set(cacheKey, fallback);
+    return fallback;
   }
 }
 
