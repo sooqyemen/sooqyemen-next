@@ -37,18 +37,19 @@ export function WebVitals() {
       'serviceWorker' in navigator &&
       process.env.NODE_ENV === 'production'
     ) {
+      // Event handler for visibility changes
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible' && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({ type: 'CHECK_FOR_UPDATES' });
+        }
+      };
+      
       navigator.serviceWorker
         .register('/sw.js')
         .then((registration) => {
           console.log('Service Worker registered successfully:', registration.scope);
           
           // Check for updates when page becomes visible
-          const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
-              registration.update();
-            }
-          };
-          
           document.addEventListener('visibilitychange', handleVisibilityChange);
           
           // Also check for updates on the updatefound event
@@ -58,15 +59,15 @@ export function WebVitals() {
               console.log('Service Worker update found');
             }
           });
-          
-          // Clean up
-          return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-          };
         })
         .catch((error) => {
           console.error('Service Worker registration failed:', error);
         });
+      
+      // Cleanup function
+      return () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
     }
   }, []);
   

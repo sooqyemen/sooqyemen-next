@@ -13,7 +13,8 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        return cache.addAll(urlsToCache.map(url => new Request(url, {cache: 'reload'})));
+        // Cache critical resources without forcing reload
+        return cache.addAll(urlsToCache);
       })
       .catch((err) => {
         console.error('Cache installation failed:', err);
