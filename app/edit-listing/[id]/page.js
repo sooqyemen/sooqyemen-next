@@ -173,9 +173,17 @@ export default function EditListingPage() {
   };
 
   // ====== Helpers ======
-  const onPick = (c, lbl) => {
+  const onPick = (c, lbl, cityName) => {
     setCoords(c);
     setLocationLabel(lbl || '');
+    
+    // تعبئة المدينة تلقائياً إذا تم الحصول على اسم مدينة من الموقع
+    if (cityName && cityName.trim()) {
+      setCity(cityName.trim());
+      // إزالة خطأ المدينة إذا كان موجود
+      if (errors.city) setErrors((p) => ({ ...p, city: undefined }));
+    }
+    
     if (errors.location) setErrors((p) => ({ ...p, location: undefined }));
   };
 

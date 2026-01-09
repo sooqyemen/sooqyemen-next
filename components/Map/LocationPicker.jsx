@@ -21,11 +21,29 @@ const YEMEN_BOUNDS = [
 ];
 const DEFAULT_CENTER = [15.3694, 44.1910];
 
+// Cache للـ reverse geocoding لتحسين الأداء
+const geocodeCache = new Map();
+const MAX_CACHE_SIZE = 100;
+// دقة التقريب للكاش (4 منازل عشرية = دقة ~11 متر)
+const COORDINATE_PRECISION = 4;
+
 // يجيب اسم المكان من OSM مع تفاصيل أكثر (المنطقة، القرية، الشارع)
+// يرجع { label, cityName } حيث label هو التفاصيل الكاملة و cityName هو اسم المدينة فقط
 async function reverseName(lat, lng) {
+  // تقريب الإحداثيات للكاش
+  const roundedLat = Number(lat.toFixed(COORDINATE_PRECISION));
+  const roundedLng = Number(lng.toFixed(COORDINATE_PRECISION));
+  const cacheKey = `${roundedLat},${roundedLng}`;
+  
+  // تحقق من الكاش أولاً
+  if (geocodeCache.has(cacheKey)) {
+    return geocodeCache.get(cacheKey);
+  }
+  
   try {
+    // استخدم الإحداثيات المقربة للاتساق مع الكاش
     const url =
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=ar`;
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${roundedLat}&lon=${roundedLng}&accept-language=ar`;
     const res = await fetch(url, {
       headers: {
         // مهم: بعض الأحيان Nominatim يحتاج User-Agent
@@ -51,17 +69,39 @@ async function reverseName(lat, lng) {
     else if (a.hamlet) parts.push(a.hamlet);
     
     // المنطقة أو المدينة
-    if (a.city) parts.push(a.city);
-    else if (a.town) parts.push(a.town);
-    else if (a.county) parts.push(a.county);
-    else if (a.state) parts.push(a.state);
+    let cityName = '';
+    if (a.city) {
+      cityName = a.city;
+      parts.push(a.city);
+    } else if (a.town) {
+      cityName = a.town;
+      parts.push(a.town);
+    } else if (a.county) {
+      cityName = a.county;
+      parts.push(a.county);
+    } else if (a.state) {
+      cityName = a.state;
+      parts.push(a.state);
+    }
     
     // إذا ما في أي تفاصيل، نستخدم display_name
     const label = parts.length > 0 ? parts.join('، ') : (data.display_name || '');
     
-    return label || '';
-  } catch {
-    return '';
+    const result = { label: label || '', cityName: cityName || '' };
+    
+    // حفظ النتيجة في الكاش
+    if (geocodeCache.size >= MAX_CACHE_SIZE) {
+      // إذا امتلأ الكاش، احذف أقدم عنصر
+      const firstKey = geocodeCache.keys().next().value;
+      geocodeCache.delete(firstKey); // آمن حتى لو firstKey كان undefined
+    }
+    geocodeCache.set(cacheKey, result);
+    
+    return result;
+  } catch (error) {
+    // لا نحفظ الأخطاء في الكاش لأن المشاكل الشبكية قد تكون مؤقتة
+    console.warn('Reverse geocoding failed:', error);
+    return { label: '', cityName: '' };
   }
 }
 
@@ -85,15 +125,17 @@ function ClickPicker({ value, onChange }) {
       }
 
       setLoadingName(true);
-      const name = await reverseName(lat, lng);
+      const result = await reverseName(lat, lng);
       setLoadingName(false);
 
       // لو ما قدر يجيب اسم، نرجع للإحداثيات
       const label =
-        name?.trim() ||
+        result?.label?.trim() ||
         `Lat: ${lat.toFixed(5)} , Lng: ${lng.toFixed(5)}`;
+      
+      const cityName = result?.cityName || '';
 
-      onChange([lat, lng], label);
+      onChange([lat, lng], label, cityName);
     },
   });
 
@@ -126,12 +168,14 @@ export default function LocationPicker({ value, onChange }) {
       }
 
       // جلب اسم المكان
-      const name = await reverseName(lat, lng);
+      const result = await reverseName(lat, lng);
       const label =
-        name?.trim() ||
+        result?.label?.trim() ||
         `Lat: ${lat.toFixed(5)} , Lng: ${lng.toFixed(5)}`;
+      
+      const cityName = result?.cityName || '';
 
-      onChange([lat, lng], label);
+      onChange([lat, lng], label, cityName);
       
       // تحريك الخريطة للموقع الجديد
       if (map) {

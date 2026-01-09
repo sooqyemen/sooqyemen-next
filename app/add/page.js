@@ -176,9 +176,17 @@ export default function AddPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const onPick = (c, lbl) => {
+  const onPick = (c, lbl, cityName) => {
     setCoords(c);
     setLocationLabel(lbl || '');
+    
+    // تعبئة المدينة تلقائياً إذا تم الحصول على اسم مدينة من الموقع
+    if (cityName && cityName.trim()) {
+      setCity(cityName.trim());
+      // إزالة خطأ المدينة إذا كان موجود
+      if (errors.city) setErrors((prev) => ({ ...prev, city: undefined }));
+    }
+    
     if (errors.location) setErrors((prev) => ({ ...prev, location: undefined }));
   };
 
