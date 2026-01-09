@@ -3,7 +3,6 @@ import './globals.css';
 import 'leaflet/dist/leaflet.css';
 import Header from '@/components/Header';
 import ClientProviders from '@/components/ClientProviders';
-import ServiceWorkerRegister from '@/components/ServiceWorkerRegister';
 import { WebVitals } from './web-vitals';
 
 // Optimize system fonts by preloading
@@ -107,7 +106,6 @@ export default function RootLayout({ children }) {
 
       <body>
         <WebVitals />
-        <ServiceWorkerRegister />
         <a href="#main-content" className="skip-to-content">
           الانتقال إلى المحتوى الرئيسي
         </a>

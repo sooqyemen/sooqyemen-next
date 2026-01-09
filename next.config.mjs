@@ -24,7 +24,7 @@ const nextConfig = {
   
   // Optimize chunking strategy
   experimental: {
-    optimizePackageImports: ['lucide-react', 'firebase'],
+    optimizePackageImports: ['lucide-react'],
   },
   
   // Optimize images
