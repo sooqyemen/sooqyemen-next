@@ -97,11 +97,6 @@ function ClickPicker({ value, onChange }) {
     },
   });
 
-  // تلميح صغير (اختياري)
-  useEffect(() => {
-    if (!loadingName) return;
-  }, [loadingName]);
-
   return value ? <Marker position={value} /> : null;
 }
 
@@ -116,7 +111,7 @@ export default function LocationPicker({ value, onChange }) {
   }, [value]);
 
   // دالة تحديد موقعي
-  const handleLocateMe = async () => {
+  const handleLocateMe = () => {
     if (!navigator.geolocation) {
       alert('المتصفح لا يدعم تحديد الموقع');
       return;
@@ -125,41 +120,43 @@ export default function LocationPicker({ value, onChange }) {
     setLocatingMe(true);
     
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const lat = position.coords.latitude;
-          const lng = position.coords.longitude;
+      (position) => {
+        (async () => {
+          try {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
 
-          // تحقق من الموقع داخل اليمن
-          const inYemen =
-            lat >= YEMEN_BOUNDS[0][0] &&
-            lat <= YEMEN_BOUNDS[1][0] &&
-            lng >= YEMEN_BOUNDS[0][1] &&
-            lng <= YEMEN_BOUNDS[1][1];
+            // تحقق من الموقع داخل اليمن
+            const inYemen =
+              lat >= YEMEN_BOUNDS[0][0] &&
+              lat <= YEMEN_BOUNDS[1][0] &&
+              lng >= YEMEN_BOUNDS[0][1] &&
+              lng <= YEMEN_BOUNDS[1][1];
 
-          if (!inYemen) {
-            alert('موقعك الحالي خارج اليمن 🇾🇪');
-            return;
+            if (!inYemen) {
+              alert('موقعك الحالي خارج اليمن 🇾🇪');
+              return;
+            }
+
+            // جلب اسم المكان
+            const name = await reverseName(lat, lng);
+            const label =
+              name?.trim() ||
+              `Lat: ${lat.toFixed(5)} , Lng: ${lng.toFixed(5)}`;
+
+            onChange([lat, lng], label);
+            
+            // تحريك الخريطة للموقع الجديد
+            if (map) {
+              map.setView([lat, lng], 15);
+            }
+          } catch (error) {
+            console.error('Error processing location:', error);
+            alert('حدث خطأ أثناء معالجة الموقع');
+          } finally {
+            setLocatingMe(false);
           }
-
-          // جلب اسم المكان
-          const name = await reverseName(lat, lng);
-          const label =
-            name?.trim() ||
-            `Lat: ${lat.toFixed(5)} , Lng: ${lng.toFixed(5)}`;
-
-          onChange([lat, lng], label);
-          
-          // تحريك الخريطة للموقع الجديد
-          if (map) {
-            map.setView([lat, lng], 15);
-          }
-        } catch (error) {
-          console.error('Error processing location:', error);
-          alert('حدث خطأ أثناء معالجة الموقع');
-        } finally {
-          setLocatingMe(false);
-        }
+        })();
       },
       (error) => {
         console.error('Geolocation error:', error);
