@@ -2,6 +2,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import Price from '@/components/Price';
 
 // ✅ تحويل slug إلى اسم عربي (fallback فقط إذا ما توفر categoryName)
@@ -69,12 +70,14 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           {/* صورة */}
           <div className="lc-thumb">
             {img ? (
-              <img
+              <Image
                 src={img}
                 alt={listing?.title || 'إعلان'}
                 className="lc-thumb-img"
+                width={120}
+                height={95}
+                style={{ objectFit: 'cover' }}
                 loading="lazy"
-                decoding="async"
               />
             ) : (
               <div className="lc-thumb-empty">بدون صورة</div>
@@ -175,12 +178,14 @@ export default function ListingCard({ listing, variant = 'grid' }) {
       {/* الصورة */}
       {img ? (
         <div className="lc-imgWrap">
-          <img
+          <Image
             src={img}
             alt={listing?.title || 'إعلان'}
             className="lc-img"
+            width={300}
+            height={180}
+            style={{ objectFit: 'cover' }}
             loading="lazy"
-            decoding="async"
           />
         </div>
       ) : (
