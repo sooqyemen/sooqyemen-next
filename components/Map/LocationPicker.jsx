@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 
@@ -85,19 +85,20 @@ async function reverseName(lat, lng) {
     const result = { label: label || '', cityName: cityName || '' };
     
     // حفظ النتيجة في الكاش
-    if (geocodeCache.size >= MAX_CACHE_SIZE) {
+    if (geocodeCache.size > MAX_CACHE_SIZE) {
       // إذا امتلأ الكاش، احذف أقدم عنصر
       const firstKey = geocodeCache.keys().next().value;
-      geocodeCache.delete(firstKey);
+      if (firstKey) {
+        geocodeCache.delete(firstKey);
+      }
     }
     geocodeCache.set(cacheKey, result);
     
     return result;
-  } catch {
-    const fallback = { label: '', cityName: '' };
-    // حفظ حتى الأخطاء في الكاش لتجنب إعادة المحاولة
-    geocodeCache.set(cacheKey, fallback);
-    return fallback;
+  } catch (error) {
+    // لا نحفظ الأخطاء في الكاش لأن المشاكل الشبكية قد تكون مؤقتة
+    console.warn('Reverse geocoding failed:', error);
+    return { label: '', cityName: '' };
   }
 }
 
