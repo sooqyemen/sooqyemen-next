@@ -1,6 +1,7 @@
 /* =============================================
    📁 /app/home.css - أنماط سوق اليمن الرئيسية (Scoped Fix)
    ✅ تم تعديل الملف ليؤثر على الصفحة الرئيسية فقط
+   ✅ Performance optimizations added
    ============================================= */
 
 /* ===== 1. متغيرات التصميم الأساسية (آمنة عالميًا) ===== */
@@ -73,6 +74,9 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
+  /* Performance optimizations */
+  contain: layout style paint;
+  content-visibility: auto;
 }
 
 .home-page img {
@@ -92,6 +96,8 @@
   font-family: inherit;
   border: none;
   background: none;
+  /* Performance optimization */
+  touch-action: manipulation;
 }
 
 .home-page input,
@@ -432,6 +438,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
+  will-change: transform;
 }
 
 .home-page .grid-card:hover {
@@ -453,6 +460,7 @@
   height: 160px;
   overflow: hidden;
   background: var(--bg-secondary);
+  contain: layout style paint;
 }
 
 .home-page .listing-img {
@@ -460,6 +468,7 @@
   height: 100%;
   object-fit: cover;
   transition: transform 0.3s ease;
+  will-change: transform;
 }
 
 .home-page .grid-card:hover .listing-img {
@@ -723,6 +732,7 @@
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 1rem;
+  will-change: transform;
 }
 
 @keyframes spin {
@@ -743,6 +753,7 @@
   display: inline-block;
   transition: all var(--transition-base);
   font-size: 0.9rem;
+  will-change: transform;
 }
 
 .home-page .retry-button:hover,

@@ -22,6 +22,11 @@ const nextConfig = {
   // Compress responses
   compress: true,
   
+  // Optimize chunking strategy
+  experimental: {
+    optimizePackageImports: ['lucide-react', 'firebase'],
+  },
+  
   // Optimize images
   images: {
     formats: ['image/webp', 'image/avif'],
@@ -49,6 +54,9 @@ const nextConfig = {
       },
     ],
     minimumCacheTTL: 60,
+    dangerouslyAllowSVG: true,
+    contentDispositionType: 'attachment',
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
   
   // Optimize headers for better caching

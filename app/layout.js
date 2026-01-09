@@ -3,6 +3,14 @@ import './globals.css';
 import 'leaflet/dist/leaflet.css';
 import Header from '@/components/Header';
 import ClientProviders from '@/components/ClientProviders';
+import ServiceWorkerRegister from '@/components/ServiceWorkerRegister';
+import { WebVitals } from './web-vitals';
+
+// Optimize system fonts by preloading
+const fontPreload = {
+  preload: true,
+  display: 'swap',
+};
 
 export const metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://sooqyemen.com'),
@@ -98,6 +106,8 @@ export default function RootLayout({ children }) {
       </head>
 
       <body>
+        <WebVitals />
+        <ServiceWorkerRegister />
         <a href="#main-content" className="skip-to-content">
           الانتقال إلى المحتوى الرئيسي
         </a>
