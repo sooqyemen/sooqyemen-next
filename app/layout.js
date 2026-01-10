@@ -91,11 +91,13 @@ export default function RootLayout({ children }) {
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="format-detection" content="telephone=no" />
         {/* Preconnect to critical domains */}
-        <link rel="preconnect" href="https://firebasestorage.googleapis.com" />
+        <link rel="preconnect" href="https://firebasestorage.googleapis.com" crossOrigin="" />
         <link rel="dns-prefetch" href="https://firebasestorage.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         {/* Performance hints */}
         <meta httpEquiv="x-dns-prefetch-control" content="on" />
+        {/* Preload critical CSS */}
+        <link rel="preload" href="/manifest.json" as="fetch" crossOrigin="anonymous" />
       </head>
 
       <body>

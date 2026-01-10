@@ -199,7 +199,7 @@
   align-items: center;
   box-shadow: var(--shadow-lg);
   border: 2px solid var(--border-light);
-  transition: all var(--transition-base);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
 }
 
 .home-page .search-container:focus-within {
@@ -244,7 +244,8 @@
   cursor: pointer;
   white-space: nowrap;
   font-size: 0.9rem;
-  transition: all var(--transition-base);
+  transition: background-color var(--transition-base), transform var(--transition-base);
+  touch-action: manipulation;
 }
 
 .home-page .search-button:hover {
@@ -338,9 +339,10 @@
   font-size: 0.875rem;
   cursor: pointer;
   white-space: nowrap;
-  transition: all var(--transition-base);
+  transition: border-color var(--transition-base), color var(--transition-base), transform var(--transition-base);
   flex-shrink: 0;
   color: var(--text-secondary);
+  touch-action: manipulation;
 }
 
 .home-page .category-button:hover {
@@ -397,7 +399,8 @@
   align-items: center;
   gap: 0.5rem;
   color: var(--text-muted);
-  transition: all var(--transition-base);
+  transition: color var(--transition-base), background-color var(--transition-base);
+  touch-action: manipulation;
 }
 
 .home-page .view-toggle-button:hover {
@@ -434,10 +437,12 @@
   border-radius: var(--radius-lg);
   overflow: hidden;
   border: 1px solid var(--border-light);
-  transition: all 0.25s ease;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
   height: 100%;
   display: flex;
   flex-direction: column;
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 .home-page .grid-card:hover {
@@ -469,6 +474,8 @@
   object-fit: cover;
   transition: transform 0.3s ease;
   will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .home-page .grid-card:hover .listing-img {
@@ -601,8 +608,10 @@
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  transition: all var(--transition-base);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
   display: flex;
+  will-change: border-color, box-shadow;
+  transform: translateZ(0);
 }
 
 .home-page .list-card:hover {
@@ -733,11 +742,13 @@
   animation: spin 1s linear infinite;
   margin-bottom: 1rem;
   will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% { transform: rotate(0deg) translateZ(0); }
+  100% { transform: rotate(360deg) translateZ(0); }
 }
 
 .home-page .retry-button,
@@ -751,9 +762,11 @@
   cursor: pointer;
   text-decoration: none;
   display: inline-block;
-  transition: all var(--transition-base);
+  transition: background-color var(--transition-base), transform var(--transition-base);
   font-size: 0.9rem;
   will-change: transform;
+  touch-action: manipulation;
+  transform: translateZ(0);
 }
 
 .home-page .retry-button:hover,
@@ -779,13 +792,15 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  transition: all 0.3s ease;
+  transition: transform 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease;
   text-decoration: none;
   font-size: 0.95rem;
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 .home-page .floating-add-button:hover {
-  transform: translateY(-3px);
+  transform: translateY(-3px) translateZ(0);
   background: #2563eb;
   box-shadow: 0 12px 30px rgba(59, 130, 246, 0.4);
 }

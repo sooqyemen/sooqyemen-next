@@ -24,7 +24,8 @@ const nextConfig = {
   
   // Optimize chunking strategy
   experimental: {
-    optimizePackageImports: ['lucide-react'],
+    optimizePackageImports: ['lucide-react', 'react-leaflet', 'leaflet'],
+    optimizeCss: true,
   },
   
   // Optimize images
@@ -57,6 +58,8 @@ const nextConfig = {
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+    unoptimized: false,
+    loader: 'default',
   },
   
   // Optimize headers for better caching
