@@ -1,7 +1,7 @@
 // app/listing/[id]/page-client.js
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -142,6 +142,10 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
 
   // تحميل الخريطة فقط عند الطلب (لتقليل حجم الباندل ورفع سرعة التحميل)
   const [showMap, setShowMap] = useState(false);
+  
+  // تحميل التعليقات والمزاد فقط عند الطلب (تحسين الأداء)
+  const [showComments, setShowComments] = useState(false);
+  const [showAuction, setShowAuction] = useState(false);
 
   const [listing, setListing] = useState(initialListing);
   const [loading, setLoading] = useState(!initialListing);
@@ -297,7 +301,7 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
 
   const chatId = user && sellerUid ? makeChatId(user.uid, sellerUid, listing.id) : null;
 
-  const handleStartChat = async () => {
+  const handleStartChat = useCallback(async () => {
     setChatErr('');
     if (!user) {
       router.push(`/login?next=${encodeURIComponent(`/listing/${listing.id}`)}`);
@@ -334,7 +338,7 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
     } finally {
       setStartingChat(false);
     }
-  };
+  }, [user, sellerUid, isOwner, listing.id, listing.title, listing.userEmail, router]);
 
   const breadcrumbItems = [
     { name: 'الرئيسية', url: '/' },
@@ -426,7 +430,20 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                 </div>
 
                 <div className="comments-section">
-                  <CommentsBox listingId={listing.id} />
+                  {!showComments ? (
+                    <div className="lazy-load-box">
+                      <button 
+                        type="button"
+                        className="btn btnPrimary"
+                        onClick={() => setShowComments(true)}
+                        style={{ width: '100%' }}
+                      >
+                        💬 عرض التعليقات
+                      </button>
+                    </div>
+                  ) : (
+                    <CommentsBox listingId={listing.id} />
+                  )}
                 </div>
               </div>
             </div>
@@ -444,7 +461,20 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
 
               <div className="sidebar-card">
                 <h3>المزاد</h3>
-                <AuctionBox listingId={listing.id} listing={listing} />
+                {!showAuction && listing?.auctionEnabled ? (
+                  <div className="lazy-load-box">
+                    <button 
+                      type="button"
+                      className="btn btnPrimary"
+                      onClick={() => setShowAuction(true)}
+                      style={{ width: '100%' }}
+                    >
+                      ⚡ عرض المزاد
+                    </button>
+                  </div>
+                ) : (
+                  <AuctionBox listingId={listing.id} listing={listing} />
+                )}
               </div>
 
               <div className="sidebar-card">
@@ -520,6 +550,13 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
       </div>
 
       <style jsx>{`
+        .lazy-load-box {
+          padding: 20px;
+          text-align: center;
+          background: #f8fafc;
+          border-radius: 8px;
+          margin: 10px 0;
+        }
         .google-maps-buttons {
           display: grid;
           grid-template-columns: 1fr 1fr;
