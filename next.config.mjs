@@ -58,8 +58,6 @@ const nextConfig = {
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
-    unoptimized: false,
-    loader: 'default',
   },
   
   // Optimize headers for better caching

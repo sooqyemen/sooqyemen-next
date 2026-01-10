@@ -96,8 +96,6 @@ export default function RootLayout({ children }) {
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         {/* Performance hints */}
         <meta httpEquiv="x-dns-prefetch-control" content="on" />
-        {/* Preload critical CSS */}
-        <link rel="preload" href="/manifest.json" as="fetch" crossOrigin="anonymous" />
       </head>
 
       <body>
