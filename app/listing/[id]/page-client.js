@@ -1,4 +1,4 @@
-// app/listing/[id]/page.js - النسخة المحسنة مع زر جوجل مابس + إصلاح المحادثات
+// app/listing/[id]/page-client.js - النسخة المحسنة مع زر جوجل مابس + إصلاح المحادثات
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
