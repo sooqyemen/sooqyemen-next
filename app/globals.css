@@ -28,6 +28,13 @@ html{
   overflow-x:hidden;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }
 
 body{ 
@@ -94,6 +101,7 @@ img{
   margin:0 auto;
   padding:0 16px;
   width:100%;
+  contain: layout style;
 }
 
 .card{
@@ -177,6 +185,9 @@ img{
   top:0; left:0; right:0;
   z-index:1000;
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 .header-inner{
   max-width:1200px;

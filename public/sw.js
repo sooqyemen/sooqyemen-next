@@ -1,5 +1,5 @@
 // Simple service worker for caching static assets
-const CACHE_NAME = 'sooqyemen-v1';
+const CACHE_NAME = 'sooqyemen-v2';
 const urlsToCache = [
   '/',
   '/manifest.json',
@@ -50,6 +50,11 @@ self.addEventListener('fetch', (event) => {
 
   // Skip chrome-extension and other non-http requests
   if (!event.request.url.startsWith('http')) {
+    return;
+  }
+
+  // Skip API calls - always fetch fresh
+  if (event.request.url.includes('/api/')) {
     return;
   }
 
