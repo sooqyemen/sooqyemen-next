@@ -5,6 +5,8 @@
   background: #f8f9fa;
   display: flex;
   flex-direction: column;
+  /* Performance optimizations */
+  contain: layout style;
 }
 
 /* الحاويات العامة */
@@ -55,6 +57,9 @@
   justify-content: center;
   width: 44px;
   height: 44px;
+  /* Mobile performance */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .back-btn:hover {

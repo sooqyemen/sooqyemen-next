@@ -94,6 +94,8 @@ export default function RootLayout({ children }) {
         <link rel="preconnect" href="https://firebasestorage.googleapis.com" />
         <link rel="dns-prefetch" href="https://firebasestorage.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* Preload critical resources */}
+        <link rel="preload" href="/icon-192.png" as="image" type="image/png" />
         {/* Performance hints */}
         <meta httpEquiv="x-dns-prefetch-control" content="on" />
       </head>

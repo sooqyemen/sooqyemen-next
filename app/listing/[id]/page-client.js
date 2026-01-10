@@ -11,15 +11,21 @@ import { logListingView } from '@/lib/analytics';
 
 // Components
 import Price from '@/components/Price';
-import AuctionBox from '@/components/AuctionBox';
-import CommentsBox from '@/components/CommentsBox';
 import ImageGallery from '@/components/ImageGallery';
 import WhatsAppIcon from '@/components/Icons/WhatsAppIcon';
 import ListingJsonLd from '@/components/StructuredData/ListingJsonLd';
 import BreadcrumbJsonLd from '@/components/StructuredData/BreadcrumbJsonLd';
 import './listing.css';
 
-// تحميل الخريطة بشكل ديناميكي (Client Side Only)
+// تحميل المكونات الثقيلة بشكل ديناميكي (Client Side Only)
+const AuctionBox = dynamic(() => import('@/components/AuctionBox'), {
+  loading: () => <div className="loading-box">جاري تحميل المزاد...</div>,
+});
+
+const CommentsBox = dynamic(() => import('@/components/CommentsBox'), {
+  loading: () => <div className="loading-box">جاري تحميل التعليقات...</div>,
+});
+
 const ListingMap = dynamic(() => import('@/components/Map/ListingMap'), {
   ssr: false,
   loading: () => (
