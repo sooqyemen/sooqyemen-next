@@ -24,7 +24,10 @@ const nextConfig = {
   
   // Optimize chunking strategy
   experimental: {
-    optimizePackageImports: ['lucide-react'],
+    optimizePackageImports: ['lucide-react', 'react-leaflet', 'leaflet'],
+    // Additional performance optimizations
+    optimizeCss: true,
+    scrollRestoration: true,
   },
   
   // Optimize images

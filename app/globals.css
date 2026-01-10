@@ -42,8 +42,10 @@ body{
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: auto;
+  text-rendering: optimizeSpeed;
   line-height: 1.5;
+  /* Performance optimizations */
+  font-display: swap;
 }
 
 a{ 
@@ -62,6 +64,9 @@ img{
   font-style: italic;
   background-repeat: no-repeat;
   background-size: cover;
+  /* Performance optimizations */
+  content-visibility: auto;
+  contain-intrinsic-size: 300px 200px;
 }
 
 /* ===== Accessibility - Skip to content ===== */
@@ -97,6 +102,9 @@ img{
   border:1px solid var(--border);
   border-radius:14px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+  /* Performance optimizations */
+  contain: layout style paint;
+  content-visibility: auto;
 }
 
 .row{
@@ -132,6 +140,9 @@ img{
   font-weight:800;
   color:#0f172a;
   transition: all 0.2s ease;
+  /* Mobile performance */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 .btn:focus-visible{
   outline: 2px solid #3b82f6;
