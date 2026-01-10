@@ -3,22 +3,29 @@ import { fetchListingById } from '@/lib/firestoreRest';
 import ListingDetailsClient from './page-client';
 
 // تحديث الصفحة من السيرفر كل 5 دقائق (ISR)
-export const revalidate = 300; 
+export const revalidate = 300;
 
 // رابط الموقع الأساسي (مهم جداً للـ SEO)
 const BASE_URL = 'https://sooqyemen.com';
 
+function toAbsoluteUrl(src) {
+  const s = String(src || '').trim();
+  if (!s) return `${BASE_URL}/icon-512.png`;
+  if (s.startsWith('http://') || s.startsWith('https://')) return s;
+  if (s.startsWith('//')) return `https:${s}`;
+  if (s.startsWith('/')) return `${BASE_URL}${s}`;
+  return `${BASE_URL}/${s}`;
+}
+
 // 1. توليد البيانات الوصفية (Metadata) لمحركات البحث
 export async function generateMetadata({ params }) {
-  // ⚠️ في نسخ Next.js الحديثة، يجب انتظار params
+  // في Next.js الحديثة: await params آمن حتى لو params كائن عادي
   const { id } = await params;
-  
+
   let listing = null;
-  
+
   try {
-    if (id) {
-        listing = await fetchListingById(id);
-    }
+    if (id) listing = await fetchListingById(id);
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
       console.error('[generateMetadata] Failed to fetch listing:', error);
@@ -30,78 +37,70 @@ export async function generateMetadata({ params }) {
     return {
       title: 'الإعلان غير موجود | سوق اليمن',
       description: 'الإعلان الذي تبحث عنه غير متوفر أو تم حذفه.',
-      robots: { index: false, follow: false }, // أمر بعدم الأرشفة لصفحات الخطأ
+      robots: { index: false, follow: false },
     };
   }
 
-  // تجهيز البيانات
-  const title = `${listing.title || 'إعلان'} | سوق اليمن`;
+  const titleText = listing.title || 'إعلان';
+  const title = `${titleText} | سوق اليمن`;
+
   const priceVal = listing.priceYER || listing.currentBidYER || 0;
   const priceString = priceVal > 0 ? `${priceVal.toLocaleString('ar-YE')} ريال` : 'على السوم';
   const city = listing.city || listing.locationLabel || 'اليمن';
-  
-  // تحسين الوصف للظهور في جوجل
-  const description = listing.description 
-    ? `${listing.description.slice(0, 150)}... | السعر: ${priceString} | الموقع: ${city}`
-    : `${listing.title} - ${priceString} في ${city} - سوق اليمن`;
 
-  const images = listing.images && listing.images.length > 0 
-    ? listing.images.slice(0, 4)
-    : ['/icon-512.png']; // صورة احتياطية في حال عدم وجود صور
+  const description = listing.description
+    ? `${String(listing.description).slice(0, 150)}... | السعر: ${priceString} | الموقع: ${city}`
+    : `${titleText} - ${priceString} في ${city} - سوق اليمن`;
 
-  // ✅ التعديل المهم: استخدام الرابط الكامل (Absolute URL)
+  const rawImages =
+    listing.images && listing.images.length > 0
+      ? listing.images.slice(0, 4)
+      : ['/icon-512.png'];
+
+  const imagesAbs = rawImages.map(toAbsoluteUrl);
+
+  // رابط الإعلان
   const url = `${BASE_URL}/listing/${id}`;
 
   return {
     title,
     description,
     alternates: {
-      canonical: url, // ✅ إصلاح Canonical
+      canonical: url,
     },
     openGraph: {
       title,
       description,
-      url, // ✅ إصلاح OG URL
+      url,
       type: 'website',
       locale: 'ar_YE',
       siteName: 'سوق اليمن',
-      images: images.map((img) => ({
+      images: imagesAbs.map((img) => ({
         url: img,
-        alt: listing.title || 'صورة الإعلان',
+        alt: titleText,
       })),
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
-      images: images.slice(0, 1),
+      images: [imagesAbs[0]],
     },
   };
 }
 
 // 2. صفحة التفاصيل (Server Component)
 export default async function ListingDetailsPage({ params }) {
-  // فك البارامترات (ضروري لـ Next.js 15)
   const resolvedParams = await params;
   const { id } = resolvedParams;
-  
-  // جلب البيانات الأولية على السيرفر (Server-Side Fetching)
+
   let initialListing = null;
-  
+
   try {
-    if (id) {
-        initialListing = await fetchListingById(id);
-    }
+    if (id) initialListing = await fetchListingById(id);
   } catch (error) {
     console.error('[ListingDetailsPage] Error fetching initial data:', error);
-    // نستمر حتى لو فشل الجلب، وسيقوم الـ Client بالمحاولة مرة أخرى
   }
 
-  // تمرير البيانات إلى مكون العميل (Client Component)
-  return (
-    <ListingDetailsClient 
-      params={resolvedParams} 
-      initialListing={initialListing} 
-    />
-  );
+  return <ListingDetailsClient params={resolvedParams} initialListing={initialListing} />;
 }
