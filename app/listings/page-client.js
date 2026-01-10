@@ -1,7 +1,7 @@
 // /app/listings/page.js
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
@@ -165,57 +165,8 @@ function ListingRow({ listing }) {
 
 export default function ListingsPageClient({ initialListings = [] }) {
   const [view, setView] = useState('grid'); // grid | list | map
-  const [listings, setListings] = useState(initialListings);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState('');
+  const [listings] = useState(initialListings);
   const [search, setSearch] = useState('');
-  const [clientFetchAttempted, setClientFetchAttempted] = useState(false);
-
-  useEffect(() => {
-    // If we have initial listings from SSR, use them
-    if (initialListings && initialListings.length > 0) {
-      setListings(initialListings);
-      setLoading(false);
-      return;
-    }
-
-    // Only attempt client-side fetch once
-    if (clientFetchAttempted) {
-      return;
-    }
-
-    // Fallback: fetch from client-side if SSR returned empty
-    const fetchClientSide = async () => {
-      setLoading(true);
-      setErr('');
-      setClientFetchAttempted(true);
-      
-      try {
-        // Dynamic import to avoid loading Firebase on initial render
-        const { db } = await import('@/lib/firebaseClient');
-        
-        const snapshot = await db
-          .collection('listings')
-          .orderBy('createdAt', 'desc')
-          .limit(24)
-          .get();
-
-        const items = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-
-        setListings(items);
-      } catch (error) {
-        console.error('[ListingsPageClient] Client-side fetch error:', error);
-        setErr('تعذر تحميل الإعلانات. يرجى المحاولة لاحقاً.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchClientSide();
-  }, [initialListings, clientFetchAttempted]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -275,15 +226,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
         </div>
 
         {/* المحتوى */}
-        {loading ? (
-          <div className="card" style={{ padding: 16 }}>
-            <div className="muted">جاري التحميل…</div>
-          </div>
-        ) : err ? (
-          <div className="card" style={{ padding: 16, border: '1px solid rgba(220,38,38,.25)' }}>
-            <div style={{ fontWeight: 900, color: '#991b1b' }}>⚠️ {err}</div>
-          </div>
-        ) : filtered.length === 0 ? (
+        {filtered.length === 0 ? (
           <div className="card" style={{ padding: 16, textAlign: 'center' }}>
             <div style={{ fontWeight: 900 }}>لا توجد نتائج مطابقة</div>
             <div className="muted" style={{ marginTop: 6 }}>
