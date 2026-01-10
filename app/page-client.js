@@ -167,7 +167,7 @@ function formatRelative(ts) {
 }
 
 // ✅ بطاقة شبكة
-function GridListingCard({ listing }) {
+function GridListingCard({ listing, priority = false }) {
   const img = (Array.isArray(listing.images) && listing.images[0]) || null;
   const catKey = normalizeCategoryKey(listing.category);
   const catObj = CATEGORY_CONFIG.find((c) => c.key === catKey);
@@ -186,7 +186,11 @@ function GridListingCard({ listing }) {
               width={300}
               height={200}
               style={{ objectFit: 'cover' }}
-              loading="lazy"
+              loading={priority ? 'eager' : 'lazy'}
+              priority={priority}
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+              placeholder="blur"
+              blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
               onError={(e) => {
                 e.target.style.display = 'none';
                 const container = e.currentTarget.closest('.image-container');
@@ -240,7 +244,7 @@ function GridListingCard({ listing }) {
 }
 
 // ✅ بطاقة قائمة
-function ListListingCard({ listing }) {
+function ListListingCard({ listing, priority = false }) {
   const img = (Array.isArray(listing.images) && listing.images[0]) || null;
   const catKey = normalizeCategoryKey(listing.category);
   const catObj = CATEGORY_CONFIG.find((c) => c.key === catKey);
@@ -259,7 +263,11 @@ function ListListingCard({ listing }) {
               width={150}
               height={150}
               style={{ objectFit: 'cover' }}
-              loading="lazy"
+              loading={priority ? 'eager' : 'lazy'}
+              priority={priority}
+              sizes="150px"
+              placeholder="blur"
+              blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
               onError={(e) => {
                 e.target.style.display = 'none';
                 const fb = e.target.parentElement?.querySelector('.list-img-fallback');
@@ -725,14 +733,14 @@ export default function HomePageClient({ initialListings = [] }) {
             </div>
           ) : viewMode === 'grid' ? (
             <div className="grid-view" role="list" aria-label="قائمة الإعلانات">
-              {filteredListings.map((listing) => (
-                <GridListingCard key={listing.id} listing={listing} />
+              {filteredListings.map((listing, index) => (
+                <GridListingCard key={listing.id} listing={listing} priority={index < 4} />
               ))}
             </div>
           ) : (
             <div className="list-view" role="list" aria-label="قائمة الإعلانات">
-              {filteredListings.map((listing) => (
-                <ListListingCard key={listing.id} listing={listing} />
+              {filteredListings.map((listing, index) => (
+                <ListListingCard key={listing.id} listing={listing} priority={index < 3} />
               ))}
             </div>
           )}

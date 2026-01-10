@@ -3,6 +3,7 @@ import './globals.css';
 import 'leaflet/dist/leaflet.css';
 import Header from '@/components/Header';
 import ClientProviders from '@/components/ClientProviders';
+import { WebVitals } from './web-vitals';
 
 export const metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://sooqyemen.com'),
@@ -98,6 +99,7 @@ export default function RootLayout({ children }) {
       </head>
 
       <body>
+        <WebVitals />
         <a href="#main-content" className="skip-to-content">
           الانتقال إلى المحتوى الرئيسي
         </a>
