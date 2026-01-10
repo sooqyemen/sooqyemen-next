@@ -34,9 +34,38 @@ const ADMIN_EMAIL = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'mansouralbarout@gma
 const VIEW_KEY = 'sooq_viewed_listing_v1';
 const VIEW_TTL_MS = 12 * 60 * 60 * 1000; // 12 ساعة
 
+// --- تصحيح الإحداثيات (يمن + عالمي) ---
+// بعض الإعلانات تُحفظ الإحداثيات بصيغة [lng, lat] بالغلط، فتطلع "في البحر".
+const inRange = (v, min, max) => typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;
+
+function normalizeLatLng(input) {
+  if (!Array.isArray(input) || input.length !== 2) return null;
+
+  const a = Number(input[0]);
+  const b = Number(input[1]);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+
+  // حدود اليمن تقريبية
+  const yLat = (v) => inRange(v, 12.0, 19.5);
+  const yLng = (v) => inRange(v, 41.0, 54.7);
+
+  // [lat,lng] صحيح داخل اليمن
+  if (yLat(a) && yLng(b)) return [a, b];
+
+  // [lng,lat] مقلوب داخل اليمن
+  if (yLat(b) && yLng(a)) return [b, a];
+
+  // fallback عالمي: [lat,lng]
+  if (inRange(a, -90, 90) && inRange(b, -180, 180)) return [a, b];
+
+  // fallback عالمي: مقلوب
+  if (inRange(b, -90, 90) && inRange(a, -180, 180)) return [b, a];
+
+  return null;
+}
+
 // --- دوال مساعدة ---
 
-// إنشاء معرف محادثة فريد بين طرفين لإعلان محدد
 function makeChatId(uid1, uid2, listingId) {
   const a = String(uid1 || '');
   const b = String(uid2 || '');
@@ -44,7 +73,6 @@ function makeChatId(uid1, uid2, listingId) {
   return `${sorted}__${listingId}`;
 }
 
-// إدارة ذاكرة التخزين المؤقت للمشاهدات
 function readViewCache() {
   try {
     const raw = localStorage.getItem(VIEW_KEY);
@@ -106,39 +134,29 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
   const router = useRouter();
   const { user } = useAuth();
 
-  // ✅ تحميل الخريطة فقط عند الطلب (لتقليل حجم الباندل ورفع سرعة التحميل)
+  // تحميل الخريطة فقط عند الطلب (لتقليل حجم الباندل ورفع سرعة التحميل)
   const [showMap, setShowMap] = useState(false);
 
-  // ✅ 1. استخدام البيانات الأولية فوراً (حل مشكلة SEO)
   const [listing, setListing] = useState(initialListing);
-
-  // ✅ 2. التحميل يكون false إذا كانت البيانات موجودة مسبقاً
   const [loading, setLoading] = useState(!initialListing);
   const [error, setError] = useState(null);
 
-  // حالات المحادثة
   const [startingChat, setStartingChat] = useState(false);
   const [chatErr, setChatErr] = useState('');
 
-  // جلب البيانات (أو التحديث المباشر)
   useEffect(() => {
     if (!id) return;
 
-    // اشتراك في التحديثات (Real-time)
-    // حتى لو عندنا initialListing، نشترك عشان لو السعر تغير (مزاد) يتحدث فوراً
     const unsub = db
       .collection('listings')
       .doc(id)
       .onSnapshot(
         (doc) => {
           if (doc.exists) {
-            // دمج البيانات الجديدة مع الـ ID
             setListing({ id: doc.id, ...doc.data() });
             setError(null);
           } else {
-            if (!initialListing) {
-              setListing(null);
-            }
+            if (!initialListing) setListing(null);
           }
           setLoading(false);
         },
@@ -154,25 +172,41 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
     return () => unsub();
   }, [id, initialListing]);
 
-  // زيادة المشاهدات
   useEffect(() => {
     if (id) bumpViewOnce(id).catch(() => {});
   }, [id]);
 
-  // تسجيل التحليلات
   useEffect(() => {
     if (id && user?.uid) logListingView(id, user).catch(() => {});
   }, [id, user?.uid]);
 
-  // استخراج الإحداثيات
+  // استخراج الإحداثيات + تصحيحها
   const coords = useMemo(() => {
     if (!listing) return null;
-    if (Array.isArray(listing.coords) && listing.coords.length === 2) return listing.coords;
-    if (listing?.coords?.lat && listing?.coords?.lng) return [listing.coords.lat, listing.coords.lng];
+
+    // 1) coords: [a,b]
+    if (Array.isArray(listing.coords) && listing.coords.length === 2) {
+      return normalizeLatLng(listing.coords);
+    }
+
+    // 2) coords: {lat,lng}
+    if (listing?.coords?.lat != null && listing?.coords?.lng != null) {
+      return normalizeLatLng([listing.coords.lat, listing.coords.lng]);
+    }
+
+    // 3) lat/lng مباشرة
+    if (listing?.lat != null && listing?.lng != null) {
+      return normalizeLatLng([listing.lat, listing.lng]);
+    }
+
+    // 4) location: {lat,lng}
+    if (listing?.location?.lat != null && listing?.location?.lng != null) {
+      return normalizeLatLng([listing.location.lat, listing.location.lng]);
+    }
+
     return null;
   }, [listing]);
 
-  // أيقونة التصنيف
   const categoryIcon = (category) => {
     const icons = {
       cars: '🚗',
@@ -234,7 +268,12 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
     );
   }
 
-  const images = Array.isArray(listing.images) && listing.images.length > 0 ? listing.images : listing.image ? [listing.image] : [];
+  const images =
+    Array.isArray(listing.images) && listing.images.length > 0
+      ? listing.images
+      : listing.image
+      ? [listing.image]
+      : [];
 
   const sellerUid = listing.userId;
   const isAdmin = !!user?.email && String(user.email).toLowerCase() === ADMIN_EMAIL;
@@ -404,9 +443,9 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
 
               <div className="sidebar-card">
                 <h3>الموقع</h3>
+
                 {coords ? (
                   <>
-                    {/* ✅ لا نحمل مكتبة الخريطة إلا عند الضغط */}
                     {!showMap ? (
                       <div className="map-placeholder" style={{ marginBottom: 10 }}>
                         <div className="map-icon">🗺️</div>
@@ -446,7 +485,27 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                     </div>
                   </>
                 ) : (
-                  <p>لا يوجد موقع محدد</p>
+                  // إذا ما فيه إحداثيات: خلّ الخريطة تفتح على اليمن/صنعاء عند الضغط (في ملف ListingMap)
+                  <>
+                    {!showMap ? (
+                      <div className="map-placeholder" style={{ marginBottom: 10 }}>
+                        <div className="map-icon">🗺️</div>
+                        <p style={{ margin: '6px 0 10px' }}>عرض خريطة اليمن</p>
+                        <button
+                          type="button"
+                          className="btn btnPrimary"
+                          onClick={() => setShowMap(true)}
+                          style={{ width: '100%' }}
+                        >
+                          عرض الخريطة
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="map-container">
+                        <ListingMap coords={null} label="اليمن" />
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
