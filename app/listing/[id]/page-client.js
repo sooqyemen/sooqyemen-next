@@ -1,7 +1,7 @@
 // app/listing/[id]/page-client.js
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -147,6 +147,10 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
   const [showComments, setShowComments] = useState(false);
   const [showAuction, setShowAuction] = useState(false);
 
+  // Refs for IntersectionObserver
+  const commentsRef = useRef(null);
+  const auctionRef = useRef(null);
+
   const [listing, setListing] = useState(initialListing);
   const [loading, setLoading] = useState(!initialListing);
   const [error, setError] = useState(null);
@@ -189,6 +193,37 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
   useEffect(() => {
     if (id && user?.uid) logListingView(id, user).catch(() => {});
   }, [id, user?.uid]);
+
+  // IntersectionObserver to auto-load comments and auction when scrolling
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            if (entry.target === commentsRef.current && !showComments) {
+              setShowComments(true);
+            }
+            if (entry.target === auctionRef.current && !showAuction && listing?.auctionEnabled) {
+              setShowAuction(true);
+            }
+          }
+        });
+      },
+      {
+        rootMargin: '100px', // Load when element is 100px away from viewport
+        threshold: 0.1,
+      }
+    );
+
+    if (commentsRef.current) observer.observe(commentsRef.current);
+    if (auctionRef.current) observer.observe(auctionRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [showComments, showAuction, listing?.auctionEnabled]);
 
   // استخراج الإحداثيات + تصحيحها
   const coords = useMemo(() => {
@@ -429,7 +464,7 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                   </div>
                 </div>
 
-                <div className="comments-section">
+                <div className="comments-section" ref={commentsRef}>
                   {!showComments ? (
                     <div className="lazy-load-box">
                       <button 
@@ -459,7 +494,7 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                 </div>
               </div>
 
-              <div className="sidebar-card">
+              <div className="sidebar-card" ref={auctionRef}>
                 <h3>المزاد</h3>
                 {!showAuction && listing?.auctionEnabled ? (
                   <div className="lazy-load-box">

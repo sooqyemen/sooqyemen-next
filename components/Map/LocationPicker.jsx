@@ -3,8 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-
-// Leaflet CSS is imported globally in app/layout.js
+import 'leaflet/dist/leaflet.css';
 
 // Fix marker icons
 delete L.Icon.Default.prototype._getIconUrl;
