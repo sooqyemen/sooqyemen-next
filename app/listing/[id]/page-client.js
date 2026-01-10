@@ -20,7 +20,6 @@ import BreadcrumbJsonLd from '@/components/StructuredData/BreadcrumbJsonLd';
 import './listing.css';
 
 // تحميل الخريطة بشكل ديناميكي (Client Side Only)
-// ✅ لن يتم تحميل ملف الخريطة إلا عندما نقوم "بعرضها" فعليًا
 const ListingMap = dynamic(() => import('@/components/Map/ListingMap'), {
   ssr: false,
   loading: () => (
@@ -37,6 +36,7 @@ const VIEW_TTL_MS = 12 * 60 * 60 * 1000; // 12 ساعة
 
 // --- دوال مساعدة ---
 
+// إنشاء معرف محادثة فريد بين طرفين لإعلان محدد
 function makeChatId(uid1, uid2, listingId) {
   const a = String(uid1 || '');
   const b = String(uid2 || '');
@@ -44,6 +44,7 @@ function makeChatId(uid1, uid2, listingId) {
   return `${sorted}__${listingId}`;
 }
 
+// إدارة ذاكرة التخزين المؤقت للمشاهدات
 function readViewCache() {
   try {
     const raw = localStorage.getItem(VIEW_KEY);
@@ -105,25 +106,33 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
   const router = useRouter();
   const { user } = useAuth();
 
+  // ✅ تحميل الخريطة فقط عند الطلب (لتقليل حجم الباندل ورفع سرعة التحميل)
+  const [showMap, setShowMap] = useState(false);
+
+  // ✅ 1. استخدام البيانات الأولية فوراً (حل مشكلة SEO)
   const [listing, setListing] = useState(initialListing);
+
+  // ✅ 2. التحميل يكون false إذا كانت البيانات موجودة مسبقاً
   const [loading, setLoading] = useState(!initialListing);
   const [error, setError] = useState(null);
 
+  // حالات المحادثة
   const [startingChat, setStartingChat] = useState(false);
   const [chatErr, setChatErr] = useState('');
 
-  // ✅ جديد: التحكم بتحميل الخريطة عند الطلب فقط
-  const [showMap, setShowMap] = useState(false);
-
+  // جلب البيانات (أو التحديث المباشر)
   useEffect(() => {
     if (!id) return;
 
+    // اشتراك في التحديثات (Real-time)
+    // حتى لو عندنا initialListing، نشترك عشان لو السعر تغير (مزاد) يتحدث فوراً
     const unsub = db
       .collection('listings')
       .doc(id)
       .onSnapshot(
         (doc) => {
           if (doc.exists) {
+            // دمج البيانات الجديدة مع الـ ID
             setListing({ id: doc.id, ...doc.data() });
             setError(null);
           } else {
@@ -145,14 +154,17 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
     return () => unsub();
   }, [id, initialListing]);
 
+  // زيادة المشاهدات
   useEffect(() => {
     if (id) bumpViewOnce(id).catch(() => {});
   }, [id]);
 
+  // تسجيل التحليلات
   useEffect(() => {
     if (id && user?.uid) logListingView(id, user).catch(() => {});
   }, [id, user?.uid]);
 
+  // استخراج الإحداثيات
   const coords = useMemo(() => {
     if (!listing) return null;
     if (Array.isArray(listing.coords) && listing.coords.length === 2) return listing.coords;
@@ -160,6 +172,7 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
     return null;
   }, [listing]);
 
+  // أيقونة التصنيف
   const categoryIcon = (category) => {
     const icons = {
       cars: '🚗',
@@ -221,8 +234,7 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
     );
   }
 
-  const images =
-    Array.isArray(listing.images) && listing.images.length > 0 ? listing.images : listing.image ? [listing.image] : [];
+  const images = Array.isArray(listing.images) && listing.images.length > 0 ? listing.images : listing.image ? [listing.image] : [];
 
   const sellerUid = listing.userId;
   const isAdmin = !!user?.email && String(user.email).toLowerCase() === ADMIN_EMAIL;
@@ -390,18 +402,21 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                 <AuctionBox listingId={listing.id} listing={listing} />
               </div>
 
-              {/* Map */}
               <div className="sidebar-card">
                 <h3>الموقع</h3>
-
                 {coords ? (
                   <>
-                    {/* ✅ زر "عرض الخريطة" (لا تحميل قبل الضغط) */}
+                    {/* ✅ لا نحمل مكتبة الخريطة إلا عند الضغط */}
                     {!showMap ? (
                       <div className="map-placeholder" style={{ marginBottom: 10 }}>
                         <div className="map-icon">🗺️</div>
                         <p style={{ margin: '6px 0 10px' }}>اضغط لعرض الخريطة</p>
-                        <button className="btn btnPrimary" type="button" onClick={() => setShowMap(true)}>
+                        <button
+                          type="button"
+                          className="btn btnPrimary"
+                          onClick={() => setShowMap(true)}
+                          style={{ width: '100%' }}
+                        >
                           عرض الخريطة
                         </button>
                       </div>
@@ -411,7 +426,6 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                       </div>
                     )}
 
-                    {/* روابط خرائط جوجل */}
                     <div className="google-maps-buttons">
                       <a
                         href={`https://www.google.com/maps/search/?api=1&query=${coords[0]},${coords[1]}`}
