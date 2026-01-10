@@ -168,6 +168,7 @@ export default function ImageGallery({ images = [], alt = 'صورة الإعلا
                   alt={`صورة مصغرة ${index + 1}`}
                   width={100}
                   height={100}
+                  loading="lazy"
                   className="thumbnail-image"
                 />
               </button>

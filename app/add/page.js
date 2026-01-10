@@ -59,6 +59,8 @@ export default function AddPage() {
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  
+  const [showMap, setShowMap] = useState(false); // تحميل الخريطة فقط عند الطلب
 
   const [cats, setCats] = useState(DEFAULT_CATEGORIES);
   const [catsLoading, setCatsLoading] = useState(true);
@@ -645,7 +647,22 @@ export default function AddPage() {
           </div>
 
           <div className="map-wrapper">
-            <LocationPicker value={coords} onChange={onPick} />
+            {!showMap ? (
+              <div className="map-placeholder" style={{ minHeight: '400px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', borderRadius: '12px' }}>
+                <div style={{ fontSize: '48px', marginBottom: '16px' }}>🗺️</div>
+                <p style={{ marginBottom: '16px', color: '#64748b' }}>اضغط لتحميل الخريطة وتحديد الموقع</p>
+                <button
+                  type="button"
+                  className="btn btnPrimary"
+                  onClick={() => setShowMap(true)}
+                  style={{ padding: '12px 24px' }}
+                >
+                  📍 تحميل الخريطة
+                </button>
+              </div>
+            ) : (
+              <LocationPicker value={coords} onChange={onPick} />
+            )}
           </div>
 
           {locationLabel && (

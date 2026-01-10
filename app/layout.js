@@ -1,6 +1,5 @@
 // app/layout.js
 import './globals.css';
-import 'leaflet/dist/leaflet.css';
 import Header from '@/components/Header';
 import ClientProviders from '@/components/ClientProviders';
 import { WebVitals } from './web-vitals';

@@ -1,7 +1,7 @@
 // app/listing/[id]/page-client.js
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -142,6 +142,14 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
 
   // تحميل الخريطة فقط عند الطلب (لتقليل حجم الباندل ورفع سرعة التحميل)
   const [showMap, setShowMap] = useState(false);
+  
+  // تحميل التعليقات والمزاد فقط عند الطلب (تحسين الأداء)
+  const [showComments, setShowComments] = useState(false);
+  const [showAuction, setShowAuction] = useState(false);
+
+  // Refs for IntersectionObserver
+  const commentsRef = useRef(null);
+  const auctionRef = useRef(null);
 
   const [listing, setListing] = useState(initialListing);
   const [loading, setLoading] = useState(!initialListing);
@@ -185,6 +193,37 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
   useEffect(() => {
     if (id && user?.uid) logListingView(id, user).catch(() => {});
   }, [id, user?.uid]);
+
+  // IntersectionObserver to auto-load comments and auction when scrolling
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            if (entry.target === commentsRef.current && !showComments) {
+              setShowComments(true);
+            }
+            if (entry.target === auctionRef.current && !showAuction && listing?.auctionEnabled) {
+              setShowAuction(true);
+            }
+          }
+        });
+      },
+      {
+        rootMargin: '100px', // Load when element is 100px away from viewport
+        threshold: 0.1,
+      }
+    );
+
+    if (commentsRef.current) observer.observe(commentsRef.current);
+    if (auctionRef.current) observer.observe(auctionRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [showComments, showAuction, listing?.auctionEnabled]);
 
   // استخراج الإحداثيات + تصحيحها
   const coords = useMemo(() => {
@@ -297,7 +336,7 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
 
   const chatId = user && sellerUid ? makeChatId(user.uid, sellerUid, listing.id) : null;
 
-  const handleStartChat = async () => {
+  const handleStartChat = useCallback(async () => {
     setChatErr('');
     if (!user) {
       router.push(`/login?next=${encodeURIComponent(`/listing/${listing.id}`)}`);
@@ -334,7 +373,7 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
     } finally {
       setStartingChat(false);
     }
-  };
+  }, [user, sellerUid, isOwner, listing.id, listing.title, listing.userEmail, router]);
 
   const breadcrumbItems = [
     { name: 'الرئيسية', url: '/' },
@@ -425,8 +464,21 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                   </div>
                 </div>
 
-                <div className="comments-section">
-                  <CommentsBox listingId={listing.id} />
+                <div className="comments-section" ref={commentsRef}>
+                  {!showComments ? (
+                    <div className="lazy-load-box">
+                      <button 
+                        type="button"
+                        className="btn btnPrimary"
+                        onClick={() => setShowComments(true)}
+                        style={{ width: '100%' }}
+                      >
+                        💬 عرض التعليقات
+                      </button>
+                    </div>
+                  ) : (
+                    <CommentsBox listingId={listing.id} />
+                  )}
                 </div>
               </div>
             </div>
@@ -442,9 +494,22 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                 </div>
               </div>
 
-              <div className="sidebar-card">
+              <div className="sidebar-card" ref={auctionRef}>
                 <h3>المزاد</h3>
-                <AuctionBox listingId={listing.id} listing={listing} />
+                {!showAuction && listing?.auctionEnabled ? (
+                  <div className="lazy-load-box">
+                    <button 
+                      type="button"
+                      className="btn btnPrimary"
+                      onClick={() => setShowAuction(true)}
+                      style={{ width: '100%' }}
+                    >
+                      ⚡ عرض المزاد
+                    </button>
+                  </div>
+                ) : (
+                  <AuctionBox listingId={listing.id} listing={listing} />
+                )}
               </div>
 
               <div className="sidebar-card">
@@ -520,6 +585,13 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
       </div>
 
       <style jsx>{`
+        .lazy-load-box {
+          padding: 20px;
+          text-align: center;
+          background: #f8fafc;
+          border-radius: 8px;
+          margin: 10px 0;
+        }
         .google-maps-buttons {
           display: grid;
           grid-template-columns: 1fr 1fr;
