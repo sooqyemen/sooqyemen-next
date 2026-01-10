@@ -2,7 +2,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { db, firebase } from '@/lib/firebaseClient';
@@ -17,18 +16,8 @@ import ImageGallery from '@/components/ImageGallery';
 import WhatsAppIcon from '@/components/Icons/WhatsAppIcon';
 import ListingJsonLd from '@/components/StructuredData/ListingJsonLd';
 import BreadcrumbJsonLd from '@/components/StructuredData/BreadcrumbJsonLd';
+import LazyListingMap from '@/components/Map/LazyListingMap';
 import './listing.css';
-
-// تحميل الخريطة بشكل ديناميكي (Client Side Only)
-const ListingMap = dynamic(() => import('@/components/Map/ListingMap'), {
-  ssr: false,
-  loading: () => (
-    <div className="map-placeholder">
-      <div className="map-icon">🗺️</div>
-      <p>جاري تحميل الخريطة...</p>
-    </div>
-  ),
-});
 
 const ADMIN_EMAIL = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'mansouralbarout@gmail.com').toLowerCase();
 const VIEW_KEY = 'sooq_viewed_listing_v1';
@@ -406,7 +395,7 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                 {coords ? (
                   <>
                     <div className="map-container">
-                       <ListingMap coords={coords} label={listing.locationLabel} />
+                       <LazyListingMap coords={coords} label={listing.locationLabel} />
                     </div>
                     {/* ✅ روابط خرائط جوجل المصححة */}
                     <div className="google-maps-buttons">

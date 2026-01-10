@@ -1,5 +1,4 @@
 // app/listings/page.js - Server Component with SSR
-// ⚠️ تصحيح الاستيراد: استخدام الاسم الصحيح للملف مع حرف 's'
 import { getLatestListings } from '@/lib/getListings.server'; 
 import ListingsPageClient from './page-client';
 
@@ -14,7 +13,7 @@ export const metadata = {
 };
 
 export default async function ListingsPage() {
-  // جلب أول 24 إعلان من السيرفر (SSR/ISR with cached query)
+  // جلب أول 24 إعلان من السيرفر (SSR/ISR with firebaseAdmin)
   let initialListings = [];
   
   try {
@@ -25,7 +24,7 @@ export default async function ListingsPage() {
     
   } catch (error) {
     console.error('[ListingsPage SSR] Failed to fetch initial listings:', error);
-    // في حالة الفشل، المصفوفة ستبقى فارغة وسيتم التعامل معها في الكلاينت
+    // في حالة الفشل، المصفوفة ستبقى فارغة
   }
 
   return <ListingsPageClient initialListings={initialListings} />;

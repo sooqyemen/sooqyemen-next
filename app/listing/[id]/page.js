@@ -1,5 +1,5 @@
 // app/listing/[id]/page.js
-import { fetchListingById } from '@/lib/firestoreRest';
+import { getListingById } from '@/lib/getListings.server';
 import ListingDetailsClient from './page-client';
 
 // تحديث الصفحة من السيرفر كل 5 دقائق (ISR)
@@ -17,7 +17,7 @@ export async function generateMetadata({ params }) {
   
   try {
     if (id) {
-        listing = await fetchListingById(id);
+        listing = await getListingById(id);
     }
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
@@ -85,12 +85,12 @@ export default async function ListingDetailsPage({ params }) {
   const resolvedParams = await params;
   const { id } = resolvedParams;
   
-  // جلب البيانات الأولية على السيرفر (Server-Side Fetching)
+  // جلب البيانات الأولية على السيرفر (Server-Side Fetching with firebaseAdmin)
   let initialListing = null;
   
   try {
     if (id) {
-        initialListing = await fetchListingById(id);
+        initialListing = await getListingById(id);
     }
   } catch (error) {
     console.error('[ListingDetailsPage] Error fetching initial data:', error);
