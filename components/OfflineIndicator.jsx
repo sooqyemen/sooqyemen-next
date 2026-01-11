@@ -9,6 +9,11 @@ export default function OfflineIndicator() {
   const [showIndicator, setShowIndicator] = useState(false);
 
   useEffect(() => {
+    // Check if we're in the browser
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+      return;
+    }
+
     // Check initial online status
     setIsOnline(navigator.onLine);
 

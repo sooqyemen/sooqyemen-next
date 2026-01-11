@@ -701,7 +701,7 @@ export default function HomePageClient({ initialListings = [] }) {
           {loading ? (
             <SkeletonLoader count={viewMode === 'list' ? 4 : 6} type={viewMode === 'grid' ? 'grid' : 'list'} />
           ) : error ? (
-            <div style={{ textAlign: 'center', padding: '2rem' }}>
+            <div className="error-retry-wrapper">
               <EmptyState
                 type="error"
                 icon="⚠️"
@@ -710,21 +710,8 @@ export default function HomePageClient({ initialListings = [] }) {
                 showAction={false}
               />
               <button 
-                className="retry-button focus-ring" 
+                className="error-retry-button focus-ring" 
                 onClick={handleRetry} 
-                style={{
-                  marginTop: '1rem',
-                  padding: '0.75rem 2rem',
-                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: '1rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
-                  transition: 'all 0.3s ease'
-                }}
                 aria-label="إعادة المحاولة"
               >
                 🔄 إعادة المحاولة

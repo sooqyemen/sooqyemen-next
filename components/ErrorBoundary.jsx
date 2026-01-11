@@ -35,7 +35,7 @@ export default class ErrorBoundary extends Component {
             >
               إعادة تحميل الصفحة
             </button>
-            {process.env.NODE_ENV === 'development' && this.state.error && (
+            {process.env.NODE_ENV !== 'production' && this.state.error && (
               <details className="error-details">
                 <summary>تفاصيل الخطأ (وضع التطوير)</summary>
                 <pre>{this.state.error.toString()}</pre>

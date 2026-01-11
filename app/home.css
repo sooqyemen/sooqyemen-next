@@ -860,3 +860,43 @@
     filter: grayscale(100%);
   }
 }
+
+/* ===== Error State Retry Button ===== */
+.error-retry-wrapper {
+  text-align: center;
+  padding: 2rem;
+}
+
+.error-retry-button {
+  margin-top: 1rem;
+  padding: 0.75rem 2rem;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+  transition: all 0.3s ease;
+}
+
+.error-retry-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
+}
+
+.error-retry-button:active {
+  transform: translateY(0);
+}
+
+.error-retry-button:focus-visible {
+  outline: 2px solid #ef4444;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .error-retry-button:hover {
+    transform: none;
+  }
+}
