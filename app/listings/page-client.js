@@ -31,6 +31,9 @@ const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
   ),
 });
 
+// ✅ Blur placeholder لتحسين تجربة تحميل الصور
+const BLUR_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+
 function safeText(v) {
   return typeof v === 'string' ? v : '';
 }
@@ -87,6 +90,8 @@ function ListingRow({ listing }) {
             alt={listing.title || 'صورة الإعلان'}
             width={150}
             height={150}
+            placeholder="blur"
+            blurDataURL={BLUR_DATA_URL}
             sizes="150px"
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
           />

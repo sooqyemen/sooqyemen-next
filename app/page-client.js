@@ -58,6 +58,9 @@ const CATEGORY_CONFIG = [
   { key: 'other', label: 'أخرى', icon: '📦', href: '/other' },
 ];
 
+// ✅ Blur placeholder لتحسين تجربة تحميل الصور
+const BLUR_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+
 function safeText(v) {
   return typeof v === 'string' ? v : '';
 }
@@ -129,6 +132,8 @@ function GridListingCard({ listing, priority = false }) {
               height={200}
               priority={priority}
               fetchPriority={priority ? 'high' : 'auto'}
+              placeholder="blur"
+              blurDataURL={BLUR_DATA_URL}
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
               style={{ objectFit: 'cover', width: '100%', height: '100%' }}
               onError={(e) => {
@@ -203,6 +208,8 @@ function ListListingCard({ listing, priority = false }) {
               height={150}
               priority={priority}
               fetchPriority={priority ? 'high' : 'auto'}
+              placeholder="blur"
+              blurDataURL={BLUR_DATA_URL}
               sizes="150px"
               style={{ objectFit: 'cover', width: '100%', height: '100%' }}
               onError={(e) => {
