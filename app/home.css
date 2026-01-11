@@ -1,7 +1,7 @@
 /* =============================================
    📁 /app/home.css - أنماط سوق اليمن الرئيسية (Scoped Fix)
    ✅ تم تعديل الملف ليؤثر على الصفحة الرئيسية فقط
-   ✅ Performance optimizations added
+   ✅ Performance optimizations added + Mobile Turbo Mode 🚀
    ============================================= */
 
 /* ===== 1. متغيرات التصميم الأساسية (آمنة عالميًا) ===== */
@@ -135,13 +135,6 @@
     scroll-behavior: auto !important;
   }
 }
-
-/* =============================================
-   ✅ ملاحظة مهمة:
-   تم حذف/تعطيل ستايلات الهيدر والقائمة الجانبية من هذا الملف
-   لأنها لازم تكون في globals.css أو ملف Header الخاص بك
-   حتى ما تتكرر وتخرب على الديسكتوب
-   ============================================= */
 
 
 /* ===== 5. أنماط الصفحة الرئيسية (كلها Scoped) ===== */
@@ -898,5 +891,54 @@
 @media (prefers-reduced-motion: reduce) {
   .error-retry-button:hover {
     transform: none;
+  }
+}
+
+/* =========================================
+   🚀 MOBILE PERFORMANCE BOOST (Target 100%)
+   ========================================= */
+@media (max-width: 768px) {
+  /* 1. Global Animation Kill-switch for Mobile */
+  .home-page *,
+  .home-page *::before,
+  .home-page *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* 2. Flatten UI (Remove Shadows & Gradients) */
+  .home-page .listing-card,
+  .home-page .list-card,
+  .home-page .grid-card,
+  .home-page .category-button,
+  .home-page .search-container,
+  .home-page .floating-add-button,
+  .home-page .view-toggle {
+    box-shadow: none !important;
+    border: 1px solid #e0e0e0 !important;
+    background-image: none !important;
+  }
+
+  /* 3. Simplify Image Rendering */
+  .home-page img {
+    will-change: opacity;
+  }
+
+  /* 4. Optimize Scrolling Areas */
+  .home-page .categories-scroll,
+  .home-page .grid-view,
+  .home-page .list-view {
+    will-change: scroll-position;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 5. Skeleton/Loading specific overrides (Flatten them) */
+  .home-page .skeleton,
+  .home-page .skeleton-shimmer,
+  .home-page .loading-card {
+    animation: none !important;
+    background: #f0f0f0 !important;
+    background-image: none !important;
   }
 }
