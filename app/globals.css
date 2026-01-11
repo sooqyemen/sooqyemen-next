@@ -30,7 +30,7 @@ html{
   text-size-adjust: 100%;
 }
 
-body{ 
+  body{ 
   height:100%; 
   overflow-x:hidden;
   margin:0;
@@ -42,7 +42,7 @@ body{
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+  text-rendering: optimizeSpeed;
   line-height: 1.5;
   /* Performance optimizations */
   font-display: optional;

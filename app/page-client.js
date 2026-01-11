@@ -134,7 +134,7 @@ function GridListingCard({ listing, priority = false }) {
               fetchPriority={priority ? 'high' : 'auto'}
               placeholder="blur"
               blurDataURL={BLUR_DATA_URL}
-              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+              sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
               style={{ objectFit: 'cover', width: '100%', height: '100%' }}
               onError={(e) => {
                 e.target.style.display = 'none';
