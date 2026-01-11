@@ -8,40 +8,99 @@ const withBundleAnalyzer = bundleAnalyzer({
 const nextConfig = {
   reactStrictMode: true,
   
-  // Performance optimizations
+  // ✅ تحسينات مهمة للموبايل
+  swcMinify: true,
+  poweredByHeader: false,
+  
   compiler: {
     // Remove console.log in production
     removeConsole: process.env.NODE_ENV === 'production' ? {
       exclude: ['error', 'warn'],
     } : false,
+    
+    // ✅ تحسينات إضافية لـ React 19
+    reactRemoveProperties: process.env.NODE_ENV === 'production',
   },
   
-  // Optimize production builds
+  // ✅ إيقاف source maps في الإنتاج للموبايل
   productionBrowserSourceMaps: false,
   
   // Compress responses
   compress: true,
   
-  // Optimize chunking strategy
-  experimental: {
-    optimizePackageImports: ['lucide-react', 'react-leaflet', 'leaflet'],
-    // Additional performance optimizations
-    optimizeCss: true,
-    scrollRestoration: true,
-    // Modern optimizations
-    webpackBuildWorker: true,
+  // ✅ إعدادات Webpack للموبايل
+  webpack: (config, { isServer, dev }) => {
+    // تحسين chunking للموبايل
+    if (!isServer) {
+      config.optimization.splitChunks = {
+        chunks: 'all',
+        minSize: 20000,
+        maxSize: 70000, // ✅ أصغر للموبايل
+        cacheGroups: {
+          default: false,
+          vendors: false,
+          framework: {
+            name: 'framework',
+            test: /[\\/]node_modules[\\/](react|react-dom|react-server-dom-webpack|scheduler)[\\/]/,
+            priority: 40,
+            minChunks: 1,
+            reuseExistingChunk: true,
+          },
+          lib: {
+            test: /[\\/]node_modules[\\/]/,
+            name(module) {
+              const match = module.context.match(/[\\/]node_modules[\\/](.*?)([\\/]|$)/);
+              return match ? `npm.${match[1].replace('@', '')}` : null;
+            },
+            priority: 30,
+            minChunks: 1,
+            reuseExistingChunk: true,
+          },
+          commons: {
+            name: 'commons',
+            minChunks: 2,
+            priority: 20,
+          },
+        },
+      };
+    }
+    
+    return config;
   },
   
-  // Optimize images
+  // Optimize chunking strategy
+  experimental: {
+    optimizePackageImports: ['lucide-react', 'react-leaflet', 'leaflet', 'firebase'],
+    
+    // ✅ إضافة مكتبات Firebase للتحديثات الديناميكية
+    serverComponentsExternalPackages: ['firebase-admin', '@firebase/firestore'],
+    
+    // ✅ تحسينات إضافية
+    optimizeCss: true,
+    scrollRestoration: true,
+    
+    // ✅ Modern optimizations for mobile
+    webpackBuildWorker: true,
+    optimizeServerReact: true, // لـ React 19
+    
+    // ✅ Partial Prerendering (تجريبي لـ Next.js 16)
+    ppr: true,
+  },
+  
+  // ✅ تحسين الصور للموبايل
   images: {
     formats: ['image/webp', 'image/avif'],
-    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    
+    // ✅ أحجام مخصصة للموبايل (أصغر)
+    deviceSizes: [360, 480, 640, 750, 828, 1080, 1200, 1920],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256],
+    
     remotePatterns: [
       // Firebase Storage
       {
         protocol: 'https',
         hostname: 'firebasestorage.googleapis.com',
+        pathname: '/v0/b/**',
       },
       // Google user photos
       {
@@ -58,21 +117,41 @@ const nextConfig = {
         hostname: 'www.sooqyemen.com',
       },
     ],
-    minimumCacheTTL: 60,
+    
+    // ✅ تحسينات التخزين المؤقت للموبايل
+    minimumCacheTTL: 3600, // زيادة من 60 إلى 3600
+    maximumCacheTTL: 86400, // إضافة أقصى مدة
+    
+    // ✅ تحسينات الأمان
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+    
+    // ✅ إعدادات الأداء
+    disableStaticImages: false,
+    unoptimized: false,
   },
   
-  // Optimize headers for better caching
+  // ✅ تحسينات ISR للموبايل
+  env: {
+    // إعدادات إعادة التحقق من ISR
+    ISR_REVALIDATE: process.env.NODE_ENV === 'production' ? '3600' : '60',
+    ISR_STALE_WHILE_REVALIDATE: '600',
+  },
+  
+  // ✅ تحسينات Headers للتخزين المؤقت للموبايل
   async headers() {
-    return [
+    const cacheHeaders = [
       {
-        source: '/:path*(svg|jpg|jpeg|png|gif|ico|webp|avif)',
+        source: '/:path*.(svg|jpg|jpeg|png|gif|ico|webp|avif)',
         headers: [
           {
             key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
+            value: 'public, max-age=31536000, immutable, stale-while-revalidate=86400',
+          },
+          {
+            key: 'Vary',
+            value: 'Accept-Encoding',
           },
         ],
       },
@@ -81,7 +160,11 @@ const nextConfig = {
         headers: [
           {
             key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
+            value: 'public, max-age=31536000, immutable, stale-while-revalidate=86400',
+          },
+          {
+            key: 'Content-Encoding',
+            value: 'gzip',
           },
         ],
       },
@@ -91,6 +174,25 @@ const nextConfig = {
           {
             key: 'Cache-Control',
             value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      // ✅ تحسينات HTML للتخزين المؤقت
+      {
+        source: '/',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: `public, max-age=${process.env.NODE_ENV === 'production' ? '3600' : '0'}, s-maxage=3600, stale-while-revalidate=600`,
+          },
+        ],
+      },
+      {
+        source: '/(products|categories|about|contact)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=1800, s-maxage=3600, stale-while-revalidate=300',
           },
         ],
       },
@@ -120,12 +222,42 @@ const nextConfig = {
           },
           {
             key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=(self)',
+            value: 'camera=(), microphone=(), geolocation=(self), interest-cohort=()',
+          },
+          // ✅ تحسينات أداء للموبايل
+          {
+            key: 'Accept-CH',
+            value: 'Device-Memory, Downlink, ECT, RTT, Viewport-Width, Width',
+          },
+          {
+            key: 'Critical-CH',
+            value: 'Device-Memory, Downlink, ECT, RTT, Viewport-Width, Width',
           },
         ],
       },
     ];
+
+    return cacheHeaders;
   },
+  
+  // ✅ تحسينات إضافية لأداء الموبايل
+  modularizeImports: {
+    'react-icons/?(((\\w*)?/?)*)': {
+      transform: 'react-icons/{{matches.[1]}}/{{member}}',
+      skipDefaultConversion: true,
+    },
+    'lucide-react': {
+      transform: 'lucide-react/dist/esm/icons/{{member}}',
+    },
+  },
+  
+  // ✅ إعدادات PWA (إذا كنت تستخدم)
+  // pwa: {
+  //   dest: 'public',
+  //   disable: process.env.NODE_ENV === 'development',
+  //   register: true,
+  //   skipWaiting: true,
+  // },
 };
 
 export default withBundleAnalyzer(nextConfig);
