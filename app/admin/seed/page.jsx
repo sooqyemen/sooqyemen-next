@@ -279,6 +279,11 @@ export default function SeedPage() {
     const [minPrice, maxPrice] = categoryData.priceRange;
     const priceYER = Math.floor(Math.random() * (maxPrice - minPrice) + minPrice);
 
+    // Generate random phone number (50% chance to include)
+    const hasPhone = Math.random() > 0.5;
+    const phone = hasPhone ? `77${Math.floor(Math.random() * 10000000).toString().padStart(7, '0')}` : null;
+    const isWhatsapp = hasPhone ? Math.random() > 0.3 : false; // 70% chance of WhatsApp if phone exists
+
     return {
       title,
       description,
@@ -288,8 +293,8 @@ export default function SeedPage() {
       originalPrice: priceYER,
       originalCurrency: 'YER',
       currencyBase: 'YER',
-      phone: null,
-      isWhatsapp: false,
+      phone,
+      isWhatsapp,
       images: [PLACEHOLDER_IMAGE],
       userId: user.uid,
       userEmail: user.email || null,
@@ -321,7 +326,7 @@ export default function SeedPage() {
     setError('');
 
     try {
-      const BATCH_SIZE = 10; // Firestore batch limit is 500, we use 10 for better progress updates
+      const BATCH_SIZE = 10; // Process 10 items per batch for progress updates
       
       for (let batchStart = 0; batchStart < 100; batchStart += BATCH_SIZE) {
         const batch = db.batch();
