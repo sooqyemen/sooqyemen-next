@@ -11,6 +11,7 @@ import WebsiteJsonLd from '@/components/StructuredData/WebsiteJsonLd';
 import SkeletonLoader from '@/components/SkeletonLoader';
 import EmptyState from '@/components/EmptyState';
 import './home.css';
+import { loadFirebaseClient, scheduleIdleCallback } from '@/lib/firebaseLoader';
 
 // تحميل ديناميكي للخريطة (تجنب SSR لمشاكل Leaflet)
 const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
@@ -396,7 +397,7 @@ export default function HomePageClient({ initialListings = [] }) {
       let triedFallback = false;
 
       try {
-        const { db } = await import('@/lib/firebaseClient');
+        const { db } = await loadFirebaseClient();
         if (cancelled) return;
 
         const subscribe = (withOrder) => {
@@ -432,10 +433,11 @@ export default function HomePageClient({ initialListings = [] }) {
       }
     };
 
-    subscribeWithDb();
+    const cancelIdle = scheduleIdleCallback(subscribeWithDb);
 
     return () => {
       cancelled = true;
+      cancelIdle?.();
       try { if (unsub) unsub(); } catch {}
     };
   }, [initialListings.length]);
