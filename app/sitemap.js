@@ -47,11 +47,16 @@ export default async function sitemap() {
   // 2. الإعلانات الديناميكية (من قاعدة البيانات)
   // ==========================================
   // نجلب عددًا كبيرًا لضمان تغطية أحدث الإعلانات
-  const listings = await fetchListingIdsForSitemap(5000); 
+  let listings = [];
+  try {
+    listings = await fetchListingIdsForSitemap(5000);
+  } catch (error) {
+    console.error('Failed to fetch listings:', error);
+  }
 
   const listingUrls = listings.map((item) => ({
     url: `${BASE_URL}/listing/${item.id}`,
-    lastModified: new Date(item.updatedAt || new Date()),
+    lastModified: new Date(item.updatedAt || Date.now()),
     changeFrequency: 'daily',
     priority: 0.7,
   }));
