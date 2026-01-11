@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
+import Image from 'next/image';
 
 import Price from '@/components/Price';
 import ListingCard from '@/components/ListingCard';
@@ -81,10 +82,12 @@ function ListingRow({ listing }) {
         }}
       >
         {img ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={img}
             alt={listing.title || 'صورة الإعلان'}
+            width={150}
+            height={150}
+            sizes="150px"
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
           />
         ) : (
