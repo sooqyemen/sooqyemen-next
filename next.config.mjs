@@ -27,7 +27,7 @@ const nextConfig = {
   // Compress responses
   compress: true,
   
-  // ✅ Empty turbopack config to acknowledge webpack config
+  // ✅ Acknowledge webpack config for Next.js 16 (Turbopack is default, but webpack config is intentional)
   turbopack: {},
   
   // ✅ Webpack optimizations for mobile
@@ -96,6 +96,7 @@ const nextConfig = {
       {
         protocol: 'https',
         hostname: 'firebasestorage.googleapis.com',
+        pathname: '/v0/b/**',
       },
       // Google user photos
       {
