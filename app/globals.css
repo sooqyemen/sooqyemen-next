@@ -30,7 +30,7 @@ html{
   text-size-adjust: 100%;
 }
 
-body{ 
+  body{ 
   height:100%; 
   overflow-x:hidden;
   margin:0;
@@ -45,7 +45,7 @@ body{
   text-rendering: optimizeSpeed;
   line-height: 1.5;
   /* Performance optimizations */
-  font-display: swap;
+  font-display: optional;
 }
 
 a{ 

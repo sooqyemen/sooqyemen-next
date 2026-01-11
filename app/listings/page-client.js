@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
+import Image from 'next/image';
 
 import Price from '@/components/Price';
 import ListingCard from '@/components/ListingCard';
@@ -29,6 +30,9 @@ const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
     </div>
   ),
 });
+
+// ✅ Blur placeholder لتحسين تجربة تحميل الصور
+const BLUR_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
 
 function safeText(v) {
   return typeof v === 'string' ? v : '';
@@ -81,10 +85,14 @@ function ListingRow({ listing }) {
         }}
       >
         {img ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={img}
             alt={listing.title || 'صورة الإعلان'}
+            width={150}
+            height={150}
+            placeholder="blur"
+            blurDataURL={BLUR_DATA_URL}
+            sizes="150px"
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
           />
         ) : (

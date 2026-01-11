@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-// ❌ تم حذف next/image لتحسين الأداء
+import Image from 'next/image';
 import Price from '@/components/Price';
 import { db } from '@/lib/firebaseClient';
 import WebsiteJsonLd from '@/components/StructuredData/WebsiteJsonLd';
@@ -57,6 +57,9 @@ const CATEGORY_CONFIG = [
   { key: 'services', label: 'خدمات', icon: '🧰', href: '/services' },
   { key: 'other', label: 'أخرى', icon: '📦', href: '/other' },
 ];
+
+// ✅ Blur placeholder لتحسين تجربة تحميل الصور
+const BLUR_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
 
 function safeText(v) {
   return typeof v === 'string' ? v : '';
@@ -121,14 +124,17 @@ function GridListingCard({ listing, priority = false }) {
       <div className="listing-card grid-card">
         <div className="image-container">
           {img ? (
-            // ✅ استخدام img العادي بدلاً من next/image للسرعة القصوى
-            <img
+            <Image
               src={img}
               alt={listing.title || 'صورة الإعلان'}
               className="listing-img"
-              loading={priority ? 'eager' : 'lazy'}
-              width="300"
-              height="200"
+              width={300}
+              height={200}
+              priority={priority}
+              fetchPriority={priority ? 'high' : 'auto'}
+              placeholder="blur"
+              blurDataURL={BLUR_DATA_URL}
+              sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
               style={{ objectFit: 'cover', width: '100%', height: '100%' }}
               onError={(e) => {
                 e.target.style.display = 'none';
@@ -194,14 +200,17 @@ function ListListingCard({ listing, priority = false }) {
       <div className="listing-card list-card">
         <div className="list-image-container">
           {img ? (
-            // ✅ استخدام img العادي بدلاً من next/image
-            <img
+            <Image
               src={img}
               alt={listing.title || 'صورة الإعلان'}
               className="list-img"
-              loading={priority ? 'eager' : 'lazy'}
-              width="150"
-              height="150"
+              width={150}
+              height={150}
+              priority={priority}
+              fetchPriority={priority ? 'high' : 'auto'}
+              placeholder="blur"
+              blurDataURL={BLUR_DATA_URL}
+              sizes="150px"
               style={{ objectFit: 'cover', width: '100%', height: '100%' }}
               onError={(e) => {
                 e.target.style.display = 'none';
