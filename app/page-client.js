@@ -9,6 +9,8 @@ import Image from 'next/image';
 import Price from '@/components/Price';
 import { db } from '@/lib/firebaseClient';
 import WebsiteJsonLd from '@/components/StructuredData/WebsiteJsonLd';
+import SkeletonLoader from '@/components/SkeletonLoader';
+import EmptyState from '@/components/EmptyState';
 import './home.css';
 
 // تحميل ديناميكي للخريطة (تجنب SSR لمشاكل Leaflet)
@@ -697,36 +699,36 @@ export default function HomePageClient({ initialListings = [] }) {
           </div>
 
           {loading ? (
-            <div className="loading-container" aria-live="polite" aria-busy="true">
-              <div className="spinner" aria-hidden="true"></div>
-              <p>جاري تحميل الإعلانات...</p>
-            </div>
+            <SkeletonLoader count={viewMode === 'list' ? 4 : 6} type={viewMode === 'grid' ? 'grid' : 'list'} />
           ) : error ? (
-            <div className="error-container">
-              <div className="error-icon" aria-hidden="true">
-                ⚠️
-              </div>
-              <h3>حدث خطأ</h3>
-              <p>{error}</p>
-              <button className="retry-button focus-ring" onClick={handleRetry} aria-label="إعادة المحاولة">
-                إعادة المحاولة
+            <div className="error-retry-wrapper">
+              <EmptyState
+                type="error"
+                icon="⚠️"
+                title="حدث خطأ"
+                message={error}
+                showAction={false}
+              />
+              <button 
+                className="error-retry-button focus-ring" 
+                onClick={handleRetry} 
+                aria-label="إعادة المحاولة"
+              >
+                🔄 إعادة المحاولة
               </button>
             </div>
           ) : filteredListings.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon" aria-hidden="true">
-                📭
-              </div>
-              <h3>لا توجد إعلانات</h3>
-              <p>
-                {search || selectedCategory !== 'all'
+            <EmptyState
+              icon="📭"
+              title="لا توجد إعلانات"
+              message={
+                search || selectedCategory !== 'all'
                   ? 'لا توجد إعلانات مطابقة لبحثك حالياً.'
-                  : 'لا توجد إعلانات منشورة حالياً.'}
-              </p>
-              <Link href="/add" className="add-listing-link focus-ring" aria-label="إضافة إعلان جديد">
-                ➕ أضف أول إعلان
-              </Link>
-            </div>
+                  : 'لا توجد إعلانات منشورة حالياً.'
+              }
+              actionText="➕ أضف أول إعلان"
+              actionUrl="/add"
+            />
           ) : viewMode === 'map' ? (
             <div className="map-view">
               <HomeMapView listings={filteredListings} />
