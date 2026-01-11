@@ -128,6 +128,7 @@ function GridListingCard({ listing, priority = false }) {
               width={300}
               height={200}
               priority={priority}
+              fetchPriority={priority ? 'high' : 'auto'}
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
               style={{ objectFit: 'cover', width: '100%', height: '100%' }}
               onError={(e) => {
@@ -201,6 +202,7 @@ function ListListingCard({ listing, priority = false }) {
               width={150}
               height={150}
               priority={priority}
+              fetchPriority={priority ? 'high' : 'auto'}
               sizes="150px"
               style={{ objectFit: 'cover', width: '100%', height: '100%' }}
               onError={(e) => {
