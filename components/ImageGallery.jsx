@@ -536,7 +536,7 @@ export default function ImageGallery({ images = [], alt = 'صورة الإعلا
         /* Mobile optimizations */
         @media (max-width: 768px) {
           .main-image-container {
-            height: 350px;
+            height: 300px;
           }
 
           .nav-btn {
