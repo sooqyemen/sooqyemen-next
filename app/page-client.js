@@ -7,7 +7,6 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import Image from 'next/image';
 import Price from '@/components/Price';
-import { db } from '@/lib/firebaseClient';
 import WebsiteJsonLd from '@/components/StructuredData/WebsiteJsonLd';
 import SkeletonLoader from '@/components/SkeletonLoader';
 import EmptyState from '@/components/EmptyState';
@@ -388,42 +387,57 @@ export default function HomePageClient({ initialListings = [] }) {
       setLoading(false);
       return;
     }
-    setLoading(true);
-    setError('');
     let unsub = null;
-    let triedFallback = false;
+    let cancelled = false;
 
-    const subscribe = (withOrder) => {
-      const base = db.collection('listings');
-      const q = withOrder ? base.orderBy('createdAt', 'desc').limit(100) : base.limit(100);
+    const subscribeWithDb = async () => {
+      setLoading(true);
+      setError('');
+      let triedFallback = false;
 
-      unsub = q.onSnapshot(
-        (snapshot) => {
-          const data = snapshot.docs
-            .map((doc) => ({ id: doc.id, ...doc.data() }))
-            .filter((listing) => listing.isActive !== false && listing.hidden !== true);
-          setListings(data);
-          setLoading(false);
-        },
-        (err) => {
-          if (withOrder && !triedFallback) {
-            triedFallback = true;
-            try { if (unsub) unsub(); } catch {}
-            subscribe(false);
-            return;
-          }
-          setError(err?.message || 'حدث خطأ في جلب الإعلانات');
-          setLoading(false);
-        }
-      );
+      try {
+        const { db } = await import('@/lib/firebaseClient');
+        if (cancelled) return;
+
+        const subscribe = (withOrder) => {
+          const base = db.collection('listings');
+          const q = withOrder ? base.orderBy('createdAt', 'desc').limit(100) : base.limit(100);
+
+          unsub = q.onSnapshot(
+            (snapshot) => {
+              const data = snapshot.docs
+                .map((doc) => ({ id: doc.id, ...doc.data() }))
+                .filter((listing) => listing.isActive !== false && listing.hidden !== true);
+              setListings(data);
+              setLoading(false);
+            },
+            (err) => {
+              if (withOrder && !triedFallback) {
+                triedFallback = true;
+                try { if (unsub) unsub(); } catch {}
+                subscribe(false);
+                return;
+              }
+              setError(err?.message || 'حدث خطأ في جلب الإعلانات');
+              setLoading(false);
+            }
+          );
+        };
+
+        subscribe(true);
+      } catch (e) {
+        if (cancelled) return;
+        setError('تعذّر الاتصال بقاعدة البيانات');
+        setLoading(false);
+      }
     };
 
-    try { subscribe(true); } catch (e) {
-      setError('تعذّر الاتصال بقاعدة البيانات');
-      setLoading(false);
-    }
+    subscribeWithDb();
 
-    return () => { try { if (unsub) unsub(); } catch {} };
+    return () => {
+      cancelled = true;
+      try { if (unsub) unsub(); } catch {}
+    };
   }, [initialListings.length]);
 
   const handleCategoryClick = (category) => {
