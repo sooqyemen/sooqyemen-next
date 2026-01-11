@@ -321,24 +321,27 @@ export default function SeedPage() {
     setError('');
 
     try {
-      const BATCH_SIZE = 10; // Process 10 at a time for better progress updates
-      let addedCount = 0;
-
-      for (let i = 0; i < 100; i++) {
-        const category = getRandomItem(CATEGORIES);
-        const listingData = generateListing(category);
+      const BATCH_SIZE = 10; // Firestore batch limit is 500, we use 10 for better progress updates
+      
+      for (let batchStart = 0; batchStart < 100; batchStart += BATCH_SIZE) {
+        const batch = db.batch();
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, 100);
         
-        await db.collection('listings').add(listingData);
-        addedCount++;
-
-        const newProgress = Math.round(((i + 1) / 100) * 100);
-        setProgress(newProgress);
-        setStatus(`تم إضافة ${i + 1} من 100 إعلان...`);
-
-        // Small delay to avoid rate limiting
-        if ((i + 1) % BATCH_SIZE === 0) {
-          await new Promise(resolve => setTimeout(resolve, 100));
+        // Create batch of listings
+        for (let i = batchStart; i < batchEnd; i++) {
+          const category = getRandomItem(CATEGORIES);
+          const listingData = generateListing(category);
+          const docRef = db.collection('listings').doc();
+          batch.set(docRef, listingData);
         }
+        
+        // Commit the batch
+        await batch.commit();
+        
+        // Update progress
+        const newProgress = Math.round((batchEnd / 100) * 100);
+        setProgress(newProgress);
+        setStatus(`تم إضافة ${batchEnd} من 100 إعلان...`);
       }
 
       setProgress(100);
@@ -387,7 +390,7 @@ export default function SeedPage() {
           <ul>
             <li>✅ 100 إعلان موزعة على 16 قسم</li>
             <li>✅ مدن يمنية: صنعاء، عدن، إب، تعز، الحديدة، حضرموت</li>
-            <li>✅ عناوان وأوصاف عربية واقعية</li>
+            <li>✅ عناوين وأوصاف عربية واقعية</li>
             <li>✅ أسعار مناسبة لكل قسم</li>
             <li>✅ صور بديلة (placeholder)</li>
             <li>✅ حالة نشطة (isActive: true)</li>
