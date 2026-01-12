@@ -54,7 +54,8 @@ export default function AddPage() {
   const [imagePreviews, setImagePreviews] = useState([]);
 
   const [auctionEnabled, setAuctionEnabled] = useState(false);
-  const [auctionMinutes, setAuctionMinutes] = useState('60');
+  const [auctionStartAt, setAuctionStartAt] = useState('');
+  const [auctionDurationHours, setAuctionDurationHours] = useState('12');
 
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState({});
@@ -168,8 +169,19 @@ export default function AddPage() {
       newErrors.phone = 'رقم الهاتف غير صحيح';
     }
 
-    if (auctionEnabled && (!auctionMinutes || Number(auctionMinutes) < 1)) {
-      newErrors.auctionMinutes = 'مدة المزاد يجب أن تكون دقيقة واحدة على الأقل';
+    if (auctionEnabled) {
+      if (!auctionStartAt) {
+        newErrors.auctionStartAt = 'الرجاء تحديد وقت بداية المزاد';
+      } else {
+        const startMs = new Date(auctionStartAt).getTime();
+        if (startMs < Date.now()) {
+          newErrors.auctionStartAt = 'وقت بداية المزاد يجب أن يكون في المستقبل';
+        }
+      }
+      
+      if (!auctionDurationHours || Number(auctionDurationHours) < 1) {
+        newErrors.auctionDurationHours = 'مدة المزاد يجب أن تكون ساعة واحدة على الأقل';
+      }
     }
 
     setErrors(newErrors);
@@ -225,11 +237,25 @@ export default function AddPage() {
       const priceYER = toYER(price, currency, rates);
       const imageUrls = await uploadImages();
 
-      const endAt = auctionEnabled
-        ? firebase.firestore.Timestamp.fromMillis(
-            Date.now() + Math.max(1, Number(auctionMinutes || 60)) * 60 * 1000
-          )
-        : null;
+      let startAt = null;
+      let endAt = null;
+      
+      if (auctionEnabled) {
+        if (!auctionStartAt) {
+          throw new Error('يجب تحديد وقت بداية المزاد');
+        }
+        
+        const startMs = new Date(auctionStartAt).getTime();
+        if (startMs < Date.now()) {
+          throw new Error('وقت بداية المزاد يجب أن يكون في المستقبل');
+        }
+        
+        const durationMs = Number(auctionDurationHours || 12) * 60 * 60 * 1000;
+        const endMs = startMs + durationMs;
+        
+        startAt = firebase.firestore.Timestamp.fromMillis(startMs);
+        endAt = firebase.firestore.Timestamp.fromMillis(endMs);
+      }
 
       const lat = Array.isArray(coords) ? Number(coords[0]) : null;
       const lng = Array.isArray(coords) ? Number(coords[1]) : null;
@@ -268,6 +294,7 @@ export default function AddPage() {
         isActive: true,
 
         auctionEnabled: !!auctionEnabled,
+        auctionStartAt: startAt,
         auctionEndAt: endAt,
         currentBidYER: auctionEnabled ? Number(priceYER) : null,
 
@@ -603,23 +630,44 @@ export default function AddPage() {
             {auctionEnabled && (
               <div className="auction-details">
                 <div className="form-group">
-                  <label className="form-label">مدة المزاد</label>
+                  <label className="form-label required">تاريخ ووقت بداية المزاد</label>
+                  <input
+                    type="datetime-local"
+                    className={`form-input ${errors.auctionStartAt ? 'error' : ''}`}
+                    value={auctionStartAt}
+                    onChange={(e) => {
+                      setAuctionStartAt(e.target.value);
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, auctionStartAt: undefined }));
+                    }}
+                    min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                  />
+                  {errors.auctionStartAt && <div className="form-error">{errors.auctionStartAt}</div>}
+                  <div className="auction-note">📅 حدد متى سيبدأ المزاد</div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label required">مدة المزاد</label>
                   <div className="auction-time-input">
                     <input
-                      className={`form-input ${errors.auctionMinutes ? 'error' : ''}`}
-                      value={auctionMinutes}
+                      className={`form-input ${errors.auctionDurationHours ? 'error' : ''}`}
+                      value={auctionDurationHours}
                       onChange={(e) => {
                         const value = e.target.value.replace(/\D/g, '');
-                        setAuctionMinutes(value);
-                        if (submitAttempted) setErrors((prev) => ({ ...prev, auctionMinutes: undefined }));
+                        setAuctionDurationHours(value);
+                        if (submitAttempted) setErrors((prev) => ({ ...prev, auctionDurationHours: undefined }));
                       }}
                       inputMode="numeric"
-                      maxLength={4}
+                      maxLength={3}
                     />
-                    <span className="auction-unit">دقيقة</span>
+                    <span className="auction-unit">ساعة</span>
                   </div>
-                  {errors.auctionMinutes && <div className="form-error">{errors.auctionMinutes}</div>}
-                  <div className="auction-note">⏱️ سينتهي المزاد بعد {auctionMinutes} دقيقة من النشر</div>
+                  {errors.auctionDurationHours && <div className="form-error">{errors.auctionDurationHours}</div>}
+                  {auctionStartAt && auctionDurationHours && Number(auctionDurationHours) > 0 && (
+                    <div className="auction-note">
+                      ⏱️ سيبدأ المزاد في {new Date(auctionStartAt).toLocaleString('ar-YE', { dateStyle: 'short', timeStyle: 'short' })} 
+                      {' '}وينتهي بعد {auctionDurationHours} ساعة
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1063,6 +1111,50 @@ export default function AddPage() {
           justify-content: space-between;
           align-items: center;
           margin-bottom: 15px;
+        }
+
+        .auction-title {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-weight: 600;
+          color: #1e293b;
+        }
+
+        .auction-icon {
+          font-size: 20px;
+        }
+
+        .auction-details {
+          margin-top: 15px;
+          display: grid;
+          gap: 15px;
+        }
+
+        .auction-time-input {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .auction-time-input .form-input {
+          flex: 1;
+        }
+
+        .auction-unit {
+          font-weight: 600;
+          color: #475569;
+          white-space: nowrap;
+        }
+
+        .auction-note {
+          margin-top: 8px;
+          padding: 10px 12px;
+          background: #fef3c7;
+          border-radius: 8px;
+          font-size: 13px;
+          color: #92400e;
+          line-height: 1.5;
         }
 
         .switch {

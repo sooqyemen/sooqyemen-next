@@ -19,6 +19,16 @@ export default function AuctionBox({ listingId, listing }) {
   const [now, setNow] = useState(Date.now());
   const [bidYER, setBidYER] = useState('');
   const [bids, setBids] = useState([]);
+  
+  const startAtMs = useMemo(() => {
+    const t = listing?.auctionStartAt;
+    if (!t) return null;
+    // firestore Timestamp
+    if (typeof t?.toMillis === 'function') return t.toMillis();
+    // number fallback
+    return Number(t) || null;
+  }, [listing?.auctionStartAt]);
+  
   const endAtMs = useMemo(() => {
     const t = listing?.auctionEndAt;
     if (!t) return null;
@@ -44,7 +54,10 @@ export default function AuctionBox({ listingId, listing }) {
   }, []);
 
   const timeLeftMs = endAtMs ? (endAtMs - now) : null;
+  const timeUntilStartMs = startAtMs ? (startAtMs - now) : null;
+  const notStarted = startAtMs ? timeUntilStartMs > 0 : false;
   const ended = endAtMs ? timeLeftMs <= 0 : false;
+  const isActive = !notStarted && !ended;
 
   const currentYER = Number(listing?.currentBidYER || listing?.priceYER || 0);
 
@@ -54,6 +67,12 @@ export default function AuctionBox({ listingId, listing }) {
       return;
     }
     if (!listingId) return;
+    
+    if (notStarted) {
+      alert('المزاد لم يبدأ بعد');
+      return;
+    }
+    
     const v = Number(bidYER || 0);
     if (!v || v <= currentYER) {
       alert('يجب أن تكون المزايدة أعلى من السعر الحالي');
@@ -93,10 +112,21 @@ export default function AuctionBox({ listingId, listing }) {
         <div>
           <div style={{ fontWeight:900 }}>🔨 المزاد</div>
           <div className="muted" style={{ fontSize:12 }}>
-            {endAtMs ? (ended ? 'انتهى المزاد' : `الوقت المتبقي: ${msToClock(timeLeftMs)}`) : '—'}
+            {notStarted && startAtMs ? (
+              <>يبدأ بعد: {msToClock(timeUntilStartMs)}</>
+            ) : endAtMs ? (
+              ended ? 'انتهى المزاد' : `الوقت المتبقي: ${msToClock(timeLeftMs)}`
+            ) : '—'}
           </div>
+          {startAtMs && (
+            <div className="muted" style={{ fontSize:11, marginTop:4 }}>
+              {notStarted ? '🕐 ' : ended ? '✅ ' : '🔥 '}
+              {notStarted ? 'بداية: ' : ended ? 'انتهى: ' : 'بدأ: '}
+              {new Date(startAtMs).toLocaleString('ar-YE', { dateStyle: 'short', timeStyle: 'short' })}
+            </div>
+          )}
         </div>
-        <span className="badge">{ended ? 'مغلق' : 'مفتوح'}</span>
+        <span className="badge">{notStarted ? 'قريباً' : ended ? 'مغلق' : 'مفتوح'}</span>
       </div>
 
       <div style={{ marginTop:10 }}>
@@ -111,8 +141,11 @@ export default function AuctionBox({ listingId, listing }) {
           onChange={(e) => setBidYER(e.target.value)}
           placeholder="اكتب مبلغ المزايدة (YER)"
           inputMode="numeric"
+          disabled={!isActive}
         />
-        <button className="btn btnPrimary" onClick={placeBid} disabled={ended}>تأكيد المزايدة</button>
+        <button className="btn btnPrimary" onClick={placeBid} disabled={!isActive}>
+          {notStarted ? 'لم يبدأ' : ended ? 'انتهى' : 'تأكيد المزايدة'}
+        </button>
       </div>
 
       <hr />
