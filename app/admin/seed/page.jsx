@@ -9,21 +9,23 @@ export default function SeedPage() {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState([]);
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
 
-  // بيانات المدن اليمنية
+  // 1. تعريف المدن اليمنية
   const CITIES = [
     'صنعاء', 'عدن', 'تعز', 'إب', 'الحديدة', 'حضرموت', 'ذمار', 'مأرب', 'عمران', 'البيضاء'
   ];
 
-  // الأقسام الموجودة في النظام
+  // 2. تعريف الأقسام الـ 16
   const CATEGORIES = [
     'cars', 'realestate', 'phones', 'electronics', 'motorcycles', 
-    'heavy-equipment', 'solar', 'internet-networks', 'maintenance', 
+    'heavy_equipment', 'solar', 'internet-networks', 'maintenance', 
     'furniture', 'home-appliances', 'clothes', 'animals-birds', 
     'jobs', 'services', 'other'
   ];
 
-  // بيانات واقعية لكل قسم (عناوين وأوصاف وأسعار)
+  // 3. بيانات واقعية لكل قسم
   const CATEGORY_DATA = {
     cars: {
       titles: ['تويوتا كورولا 2022 نظيف', 'هايلوكس غمارتين للبيع', 'باص تويوتا دباب', 'هيونداي سنتافي 2020', 'كيا سبورتاج مستخدم نظيف', 'برادو 2018 فل كامل'],
@@ -50,6 +52,12 @@ export default function SeedPage() {
       descriptions: ['نظام كامل، جودة عالية، تركيب مجاني', 'ألواح أصلية، كفاءة عالية، ضمان طويل'],
       priceRange: [1000000, 10000000]
     },
+    furniture: {
+        titles: ['طقم كنب مجلس عربي', 'غرفة نوم ملكي', 'دولاب ملابس كبير', 'طاولة طعام 6 كراسي', 'مكتب فخم للبيع'],
+        descriptions: ['أثاث بحالة ممتازة، خشب أصلي، تصميم عصري', 'استخدام خفيف، نظيف جدا، بدون عيوب'],
+        priceRange: [300000, 5000000]
+    },
+    // البيانات الافتراضية لباقي الأقسام
     default: {
       titles: ['عرض مميز لقطة', 'فرصة لا تعوض للبيع', 'بضاعة نظيفة وسعر مغري', 'للبيع بسعر عرطة', 'مطلوب للشراء', 'خدمة مميزة وسريعة'],
       descriptions: ['منتج بحالة ممتازة، سعر مناسب، للجادين فقط', 'عرض مميز، جودة عالية، سعر تنافسي'],
@@ -57,9 +65,53 @@ export default function SeedPage() {
     }
   };
 
+  // دالة مساعدة لاختيار عنصر عشوائي
+  const getRandomItem = (array) => array[Math.floor(Math.random() * array.length)];
+
+  // دالة توليد إعلان واحد
+  const generateListing = (category) => {
+    const data = CATEGORY_DATA[category] || CATEGORY_DATA.default;
+    const title = getRandomItem(data.titles);
+    const description = getRandomItem(data.descriptions);
+    const city = getRandomItem(CITIES);
+    
+    const [minP, maxP] = data.priceRange || CATEGORY_DATA.default.priceRange;
+    const priceYER = Math.floor(Math.random() * (maxP - minP + 1)) + minP;
+
+    // صور ملونة وهمية
+    const images = [
+        `https://placehold.co/600x400/2563eb/ffffff?text=${encodeURIComponent(category)}`,
+        `https://placehold.co/600x400/16a34a/ffffff?text=Sooq+Yemen`
+    ];
+
+    return {
+      title,
+      description,
+      priceYER,
+      currency: 'YER',
+      originalPrice: priceYER,
+      originalCurrency: 'YER',
+      currencyBase: 'YER',
+      category,
+      city,
+      locationLabel: city,
+      images,
+      userId: user.uid,
+      userEmail: user.email,
+      userName: user.displayName || 'Admin',
+      phone: '770000000',
+      isWhatsapp: true,
+      isActive: true,
+      hidden: false,
+      views: Math.floor(Math.random() * 500),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    };
+  };
+
   const generateListings = async () => {
     if (!user) {
-      alert('يجب تسجيل الدخول أولاً');
+      setError('يجب تسجيل الدخول أولاً');
       return;
     }
 
@@ -67,71 +119,49 @@ export default function SeedPage() {
 
     setLoading(true);
     setProgress(0);
-    setLogs([]);
+    setStatus('جاري البدء...');
+    setError('');
     const logsTemp = [];
 
     try {
-      const TOTAL_LISTINGS = 200;
-
-      // استخدام batch للكتابة السريعة (مقسمة لمجموعات لأن الحد الأقصى للباتش 500)
-      const BATCH_SIZE = 50;
+      const TOTAL_LISTINGS = 200; // العدد المطلوب
+      const BATCH_SIZE = 10; // عدد الإعلانات في كل دفعة (لتجنب الضغط)
       let totalAdded = 0;
-
-      for (let i = 0; i < TOTAL_LISTINGS; i += BATCH_SIZE) {
+      
+      // حلقة الدفعات
+      for (let batchStart = 0; batchStart < TOTAL_LISTINGS; batchStart += BATCH_SIZE) {
         const batch = db.batch();
-        const currentBatchSize = Math.min(BATCH_SIZE, TOTAL_LISTINGS - i);
-
-        for (let j = 0; j < currentBatchSize; j++) {
-          const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
-          const data = CATEGORY_DATA[category] || CATEGORY_DATA.default;
-          
-          const title = data.titles[Math.floor(Math.random() * data.titles.length)];
-          const description = data.descriptions[Math.floor(Math.random() * data.descriptions.length)];
-          const city = CITIES[Math.floor(Math.random() * CITIES.length)];
-          
-          // توليد سعر عشوائي ضمن النطاق
-          const [minP, maxP] = data.priceRange || CATEGORY_DATA.default.priceRange;
-          const price = Math.floor(Math.random() * (maxP - minP + 1)) + minP;
-
-          const docRef = db.collection('listings').doc();
-          
-          batch.set(docRef, {
-            title: title,
-            description: description,
-            priceYER: price,
-            currency: 'YER',
-            category: category,
-            city: city,
-            locationLabel: city,
-            images: [
-              `https://placehold.co/600x400/2563eb/ffffff?text=${encodeURIComponent(category)}`,
-              `https://placehold.co/600x400/16a34a/ffffff?text=Sooq+Yemen`
-            ],
-            userId: user.uid,
-            userEmail: user.email,
-            phone: '770000000',
-            isWhatsapp: true,
-            isActive: true,
-            hidden: false,
-            views: Math.floor(Math.random() * 500),
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          });
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, TOTAL_LISTINGS);
+        
+        // تجهيز الدفعة الحالية
+        for (let i = batchStart; i < batchEnd; i++) {
+          const category = getRandomItem(CATEGORIES);
+          const listingData = generateListing(category);
+          const docRef = db.collection('listings').doc(); // إنشاء ID تلقائي
+          batch.set(docRef, listingData);
         }
-
+        
+        // تنفيذ الدفعة
         await batch.commit();
-        totalAdded += currentBatchSize;
-        setProgress((totalAdded / TOTAL_LISTINGS) * 100);
+        
+        // تحديث الواجهة
+        totalAdded = batchEnd;
+        const newProgress = Math.round((totalAdded / TOTAL_LISTINGS) * 100);
+        setProgress(newProgress);
+        setStatus(`تم إضافة ${totalAdded} من ${TOTAL_LISTINGS} إعلان...`);
+        
         logsTemp.push(`✅ تم إضافة دفعة: ${totalAdded} إعلان`);
         setLogs([...logsTemp]);
       }
 
-      setLogs(prev => [...prev, '🎉 تمت العملية بنجاح!']);
-      alert('تم إضافة 200 إعلان بنجاح!');
+      setProgress(100);
+      setStatus('✅ تم إضافة 200 إعلان بنجاح!');
+      alert('تمت العملية بنجاح!');
 
-    } catch (error) {
-      console.error(error);
-      setLogs(prev => [...prev, `❌ خطأ: ${error.message}`]);
+    } catch (err) {
+      console.error('Error seeding data:', err);
+      setError(`حدث خطأ: ${err.message}`);
+      setStatus('');
     } finally {
       setLoading(false);
     }
@@ -148,59 +178,77 @@ export default function SeedPage() {
   }
 
   return (
-    <div className="container" style={{ maxWidth: '600px', padding: '40px 20px' }}>
-      <div className="card" style={{ padding: '20px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
-        <h1 style={{ marginBottom: '20px', fontSize: '24px' }}>🌱 مولد البيانات (Seeder)</h1>
+    <div className="container" style={{ maxWidth: '800px', padding: '40px 20px', margin: '0 auto' }}>
+      <div className="card" style={{ padding: '30px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', background: 'white' }}>
+        <h1 style={{ marginBottom: '20px', fontSize: '24px', color: '#1e293b' }}>🌱 مولد البيانات (Seeder)</h1>
         
-        <p style={{ color: '#666', marginBottom: '20px' }}>
-          هذه الأداة ستقوم بإنشاء <strong>200 إعلان</strong> موزعة عشوائياً.
+        <p style={{ color: '#64748b', marginBottom: '20px', lineHeight: '1.6' }}>
+          هذه الأداة ستقوم بإضافة <strong>200 إعلان تجريبي</strong> إلى قاعدة البيانات لأغراض SEO واختبار الأداء.
           <br />
-          <small>⚠️ الإعلانات ستكون مرتبطة بحسابك الحالي.</small>
+          <small>⚠️ الإعلانات ستكون مرتبطة بحسابك الحالي: {user.email}</small>
         </p>
-
-        <div style={{ marginBottom: '20px' }}>
-          <strong>الحساب الحالي:</strong> {user.email}
-        </div>
-
-        {loading && (
-          <div style={{ marginBottom: '20px' }}>
-            <div style={{ height: '10px', background: '#eee', borderRadius: '5px', overflow: 'hidden' }}>
-              <div 
-                style={{ 
-                  height: '100%', 
-                  background: '#10b981', 
-                  width: `${progress}%`,
-                  transition: 'width 0.3s ease'
-                }} 
-              />
-            </div>
-            <div style={{ textAlign: 'center', marginTop: '5px', fontSize: '14px' }}>
-              جاري المعالجة... {Math.round(progress)}%
-            </div>
-          </div>
-        )}
 
         <button 
           onClick={generateListings} 
           disabled={loading}
           style={{
             width: '100%',
-            padding: '12px',
-            backgroundColor: loading ? '#ccc' : '#2563eb',
+            padding: '16px',
+            backgroundColor: loading ? '#94a3b8' : '#4f46e5',
             color: 'white',
             border: 'none',
             borderRadius: '8px',
-            fontSize: '16px',
+            fontSize: '18px',
+            fontWeight: 'bold',
             cursor: loading ? 'not-allowed' : 'pointer',
-            fontWeight: 'bold'
+            marginBottom: '20px',
+            transition: 'all 0.2s'
           }}
         >
-          {loading ? 'جاري التوليد...' : '🚀 توليد 200 إعلان الآن'}
+          {loading ? '⏳ جاري التوليد...' : '🚀 توليد 200 إعلان الآن'}
         </button>
 
-        <div style={{ marginTop: '20px', maxHeight: '200px', overflowY: 'auto', background: '#f9fafb', padding: '10px', borderRadius: '8px', fontSize: '13px' }}>
-          {logs.map((log, index) => (
-            <div key={index} style={{ marginBottom: '4px' }}>{log}</div>
+        {loading && (
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ height: '20px', background: '#e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+              <div 
+                style={{ 
+                  height: '100%', 
+                  background: 'linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%)', 
+                  width: `${progress}%`,
+                  transition: 'width 0.3s ease'
+                }} 
+              />
+            </div>
+            <div style={{ textAlign: 'center', marginTop: '8px', fontWeight: 'bold', color: '#4f46e5' }}>
+              {progress}%
+            </div>
+          </div>
+        )}
+
+        {status && (
+          <div style={{ 
+            padding: '15px', 
+            borderRadius: '8px', 
+            marginBottom: '20px', 
+            background: status.includes('✅') ? '#dcfce7' : '#e0f2fe',
+            color: status.includes('✅') ? '#166534' : '#0369a1',
+            fontWeight: '600',
+            textAlign: 'center'
+          }}>
+            {status}
+          </div>
+        )}
+
+        {error && (
+          <div style={{ padding: '15px', borderRadius: '8px', marginBottom: '20px', background: '#fee2e2', color: '#991b1b', textAlign: 'center' }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ marginTop: '20px', maxHeight: '200px', overflowY: 'auto', background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }}>
+          {logs.length === 0 ? <p style={{color: '#94a3b8', textAlign: 'center'}}>سجل العمليات سيظهر هنا...</p> : logs.map((log, index) => (
+            <div key={index} style={{ marginBottom: '6px', borderBottom: '1px solid #f1f5f9', paddingBottom: '4px' }}>{log}</div>
           ))}
         </div>
       </div>
