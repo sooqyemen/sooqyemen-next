@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { db, firebase, storage } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import { toYER, useRates } from '@/lib/rates';
-import { formatArabicDateTime } from '@/lib/dateUtils';
+import { formatArabicDateTime, getMinDateTimeLocal } from '@/lib/dateUtils';
 import Link from 'next/link';
 
 const LocationPicker = dynamic(
@@ -644,7 +644,7 @@ export default function AddPage() {
                       setAuctionStartAt(e.target.value);
                       if (submitAttempted) setErrors((prev) => ({ ...prev, auctionStartAt: undefined }));
                     }}
-                    min={new Date(Date.now() + MIN_START_DELAY_MS).toISOString().slice(0, 16)}
+                    min={getMinDateTimeLocal(MIN_START_DELAY_MS)}
                   />
                   {errors.auctionStartAt && <div className="form-error">{errors.auctionStartAt}</div>}
                   <div className="auction-note">📅 حدد متى سيبدأ المزاد</div>
