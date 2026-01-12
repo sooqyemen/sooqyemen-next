@@ -20,8 +20,8 @@ export default function SeedPage() {
   // 2. تعريف الأقسام الـ 16
   const CATEGORIES = [
     'cars', 'realestate', 'phones', 'electronics', 'motorcycles', 
-    'heavy_equipment', 'solar', 'internet-networks', 'maintenance', 
-    'furniture', 'home-appliances', 'clothes', 'animals-birds', 
+    'heavy_equipment', 'solar', 'networks', 'maintenance', 
+    'furniture', 'home_tools', 'clothes', 'animals', 
     'jobs', 'services', 'other'
   ];
 
@@ -52,10 +52,45 @@ export default function SeedPage() {
       descriptions: ['نظام كامل، جودة عالية، تركيب مجاني', 'ألواح أصلية، كفاءة عالية، ضمان طويل'],
       priceRange: [1000000, 10000000]
     },
+    networks: {
+        titles: ['راوتر واي فاي عالي السرعة', 'كاميرات مراقبة 8 قنوات', 'نظام شبكات للشركات', 'سويتش جيجابت 24 منفذ'],
+        descriptions: ['جهاز بحالة ممتازة، سرعة عالية، تغطية واسعة', 'نظام كامل، جودة صورة عالية، رؤية ليلية', 'حالة ممتازة، مناسب للاستخدام التجاري'],
+        priceRange: [100000, 2000000]
+    },
+    maintenance: {
+        titles: ['خدمات صيانة عامة للمنازل', 'صيانة كهرباء وسباكة', 'خدمات تكييف وتبريد', 'صيانة أجهزة كهربائية'],
+        descriptions: ['فريق محترف، خدمة سريعة، أسعار مناسبة', 'خبرة طويلة، جودة عالية، ضمان على العمل'],
+        priceRange: [50000, 500000]
+    },
     furniture: {
-        titles: ['طقم كنب مجلس عربي', 'غرفة نوم ملكي', 'دولاب ملابس كبير', 'طاولة طعام 6 كراسي', 'مكتب فخم للبيع'],
+        titles: ['طقم كنب مجلس عربي', 'غرفة نوم ملكي', 'دولاب ملابس كبير', 'طاولة طعام 6 كراسي', 'مكتب فخم للبيع', 'سجاد تركي نظيف'],
         descriptions: ['أثاث بحالة ممتازة، خشب أصلي، تصميم عصري', 'استخدام خفيف، نظيف جدا، بدون عيوب'],
         priceRange: [300000, 5000000]
+    },
+    home_tools: {
+        titles: ['أدوات مطبخ كاملة للبيع', 'مكنسة كهربائية قوية', 'عدة نجارة احترافية', 'مجموعة أواني طبخ'],
+        descriptions: ['أدوات بحالة ممتازة، نظيفة، استخدام خفيف', 'جودة عالية، عملية جدا، سهلة الاستخدام'],
+        priceRange: [50000, 800000]
+    },
+    clothes: {
+        titles: ['ملابس رجالية ماركات عالمية', 'فساتين نسائية فخمة', 'أحذية رياضية أصلية', 'ملابس أطفال جديدة'],
+        descriptions: ['ملابس بحالة ممتازة، ماركات أصلية، قياسات متنوعة', 'استخدام خفيف، نظيفة جدا، موديلات حديثة'],
+        priceRange: [30000, 500000]
+    },
+    animals: {
+        titles: ['قطط شيرازي للبيع', 'عصافير زينة ملونة', 'أغنام حري أصيلة', 'دجاج بياض إنتاجي'],
+        descriptions: ['حيوانات بصحة ممتازة، تطعيمات كاملة', 'أليفة، نظيفة، مع الأوراق الصحية'],
+        priceRange: [50000, 2000000]
+    },
+    jobs: {
+        titles: ['مطلوب موظف مبيعات', 'فرصة عمل سائق خاص', 'مطلوب محاسب خبرة', 'وظيفة مهندس برمجيات'],
+        descriptions: ['نبحث عن موظف متميز، راتب مجزي، بيئة عمل ممتازة', 'شروط بسيطة، رواتب جيدة، تأمينات اجتماعية'],
+        priceRange: [150000, 1000000]
+    },
+    services: {
+        titles: ['خدمات تنظيف شاملة', 'نقل أثاث وعفش', 'تصميم جرافيك احترافي', 'خدمات ترجمة فورية'],
+        descriptions: ['خدمة احترافية، أسعار تنافسية، سرعة في التنفيذ', 'فريق محترف، جودة عالية، ضمان على العمل'],
+        priceRange: [50000, 800000]
     },
     // البيانات الافتراضية لباقي الأقسام
     default: {
@@ -115,47 +150,57 @@ export default function SeedPage() {
       return;
     }
 
-    if (!confirm('هل أنت متأكد من إضافة 200 إعلان؟')) return;
+    const PER_CATEGORY = 20; // ✅ عدد الإعلانات لكل قسم
+    const TOTAL_ESTIMATED = CATEGORIES.length * PER_CATEGORY; // 16 * 20 = 320
+
+    if (!confirm(`سيتم إضافة ${PER_CATEGORY} إعلان في كل قسم من الأقسام الـ ${CATEGORIES.length}.\nالإجمالي: ${TOTAL_ESTIMATED} إعلان.\nهل أنت متأكد؟`)) return;
 
     setLoading(true);
     setProgress(0);
-    setStatus('جاري البدء...');
+    setStatus('جاري التجهيز...');
     setError('');
     const logsTemp = [];
 
     try {
-      const TOTAL_LISTINGS = 200; // العدد المطلوب
-      const BATCH_SIZE = 10; // عدد الإعلانات في كل دفعة (لتجنب الضغط)
+      // 1. تجهيز كافة البيانات أولاً
+      let allListingsData = [];
+      
+      CATEGORIES.forEach(category => {
+        for(let i=0; i < PER_CATEGORY; i++) {
+            allListingsData.push(generateListing(category));
+        }
+      });
+
+      const TOTAL_LISTINGS = allListingsData.length;
+      const BATCH_SIZE = 50;
       let totalAdded = 0;
       
-      // حلقة الدفعات
-      for (let batchStart = 0; batchStart < TOTAL_LISTINGS; batchStart += BATCH_SIZE) {
+      // 2. إرسال البيانات على دفعات
+      for (let i = 0; i < TOTAL_LISTINGS; i += BATCH_SIZE) {
         const batch = db.batch();
-        const batchEnd = Math.min(batchStart + BATCH_SIZE, TOTAL_LISTINGS);
+        const chunk = allListingsData.slice(i, i + BATCH_SIZE);
         
-        // تجهيز الدفعة الحالية
-        for (let i = batchStart; i < batchEnd; i++) {
-          const category = getRandomItem(CATEGORIES);
-          const listingData = generateListing(category);
-          const docRef = db.collection('listings').doc(); // إنشاء ID تلقائي
-          batch.set(docRef, listingData);
-        }
+        chunk.forEach(data => {
+            const docRef = db.collection('listings').doc();
+            batch.set(docRef, data);
+        });
         
-        // تنفيذ الدفعة
         await batch.commit();
         
-        // تحديث الواجهة
-        totalAdded = batchEnd;
+        totalAdded += chunk.length;
         const newProgress = Math.round((totalAdded / TOTAL_LISTINGS) * 100);
         setProgress(newProgress);
         setStatus(`تم إضافة ${totalAdded} من ${TOTAL_LISTINGS} إعلان...`);
         
-        logsTemp.push(`✅ تم إضافة دفعة: ${totalAdded} إعلان`);
-        setLogs([...logsTemp]);
+        // سجل مختصر لعدم ملء الشاشة
+        if (totalAdded % 50 === 0 || totalAdded === TOTAL_LISTINGS) {
+            logsTemp.push(`✅ تم الانتهاء من دفعة (${totalAdded}/${TOTAL_LISTINGS})`);
+            setLogs([...logsTemp]);
+        }
       }
 
       setProgress(100);
-      setStatus('✅ تم إضافة 200 إعلان بنجاح!');
+      setStatus(`✅ تم بنجاح! تمت إضافة ${TOTAL_LISTINGS} إعلان موزعة بالتساوي.`);
       alert('تمت العملية بنجاح!');
 
     } catch (err) {
@@ -180,10 +225,12 @@ export default function SeedPage() {
   return (
     <div className="container" style={{ maxWidth: '800px', padding: '40px 20px', margin: '0 auto' }}>
       <div className="card" style={{ padding: '30px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', background: 'white' }}>
-        <h1 style={{ marginBottom: '20px', fontSize: '24px', color: '#1e293b' }}>🌱 مولد البيانات (Seeder)</h1>
+        <h1 style={{ marginBottom: '20px', fontSize: '24px', color: '#1e293b' }}>🌱 مولد البيانات المتوازن</h1>
         
         <p style={{ color: '#64748b', marginBottom: '20px', lineHeight: '1.6' }}>
-          هذه الأداة ستقوم بإضافة <strong>200 إعلان تجريبي</strong> إلى قاعدة البيانات لأغراض SEO واختبار الأداء.
+          هذه الأداة ستقوم بإضافة <strong>20 إعلان</strong> في كل قسم من أقسام الموقع.
+          <br />
+          <strong>الإجمالي:</strong> {CATEGORIES.length * 20} إعلان.
           <br />
           <small>⚠️ الإعلانات ستكون مرتبطة بحسابك الحالي: {user.email}</small>
         </p>
@@ -205,7 +252,7 @@ export default function SeedPage() {
             transition: 'all 0.2s'
           }}
         >
-          {loading ? '⏳ جاري التوليد...' : '🚀 توليد 200 إعلان الآن'}
+          {loading ? '⏳ جاري التوليد...' : '🚀 توليد 20 إعلان لكل قسم (320 إعلان)'}
         </button>
 
         {loading && (
