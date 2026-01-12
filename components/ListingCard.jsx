@@ -126,13 +126,13 @@ export default function ListingCard({ listing, variant = 'grid' }) {
             border-radius: 12px;
             overflow: hidden;
             border: 1px solid #e2e8f0;
-            background: #f8fafc;
+            background: #ffffff;
             flex: 0 0 auto;
           }
           .lc-thumb-img {
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain;
             display: block;
           }
           .lc-thumb-empty{
@@ -234,12 +234,12 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           overflow: hidden;
           border-radius: 12px;
           border: 1px solid #e2e8f0;
-          background: #f8fafc;
+          background: #ffffff;
         }
         .lc-img{
           width: 100%;
           height: 170px;
-          object-fit: cover;
+          object-fit: contain;
           display: block;
         }
         .lc-imgEmpty{
