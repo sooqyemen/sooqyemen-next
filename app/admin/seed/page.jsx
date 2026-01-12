@@ -53,7 +53,7 @@ export default function SeedPage() {
     const logsTemp = [];
 
     try {
-      const TOTAL_LISTINGS = 200; // ✅ تم التحديث إلى 200 إعلان
+      const TOTAL_LISTINGS = 200; // ✅ توليد 200 إعلان
 
       for (let i = 0; i < TOTAL_LISTINGS; i++) {
         const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
@@ -71,29 +71,28 @@ export default function SeedPage() {
           category: category,
           city: city,
           locationLabel: city,
-          // صور وهمية (Placeholders) ملونة لتبدو حقيقية
+          // صور وهمية ملونة
           images: [
             `https://placehold.co/600x400/2563eb/ffffff?text=${encodeURIComponent(category + ' 1')}`,
             `https://placehold.co/600x400/16a34a/ffffff?text=${encodeURIComponent('سوق اليمن')}`
           ],
-          userId: user.uid,        // يتم ربط الإعلان بحسابك الحالي (الأدمن)
+          userId: user.uid,        // ربط الإعلان بحساب الأدمن الحالي
           userEmail: user.email,
-          phone: '770000000',      // رقم وهمي
+          phone: '770000000',
           isWhatsapp: true,
           isActive: true,
           hidden: false,
-          views: Math.floor(Math.random() * 500), // مشاهدات وهمية لتبدو نشطة
+          views: Math.floor(Math.random() * 500),
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
           updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
         };
 
-        // إضافة الإعلان لقاعدة البيانات
+        // إضافة للقاعدة
         await db.collection('listings').add(listingData);
 
-        // تحديث العداد
+        // تحديث الواجهة
         setProgress(((i + 1) / TOTAL_LISTINGS) * 100);
         
-        // إضافة سجل بسيط كل 10 إعلانات
         if ((i + 1) % 10 === 0) {
           logsTemp.push(`✅ تم إضافة ${i + 1} إعلان`);
           setLogs([...logsTemp]);
