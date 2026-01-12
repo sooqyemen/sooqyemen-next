@@ -42,6 +42,7 @@ export default function AdminLayout({ children }) {
               <Link className="btn" href="#preview">📦 الإعلانات</Link>
               <Link className="btn" href="#preview">👥 المستخدمون</Link>
               <Link className="btn" href="#preview">💸 طلبات السحب</Link>
+              <Link className="btn" href="#preview">🌱 مولد البيانات</Link>
             </div>
           </aside>
         </div>
@@ -108,6 +109,7 @@ export default function AdminLayout({ children }) {
             <Link className="btn" href="/admin/listings">📦 الإعلانات</Link>
             <Link className="btn" href="/admin/users">👥 المستخدمون</Link>
             <Link className="btn" href="/admin/payouts">💸 طلبات السحب</Link>
+            <Link className="btn" href="/admin/seed">🌱 مولد البيانات</Link>
           </div>
         </aside>
       </div>
