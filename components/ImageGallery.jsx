@@ -284,12 +284,14 @@ export default function ImageGallery({ images = [], alt = 'صورة الإعلا
           align-items: center;
           justify-content: center;
           background: #000;
+          overflow: hidden;
         }
 
         .main-image {
           width: 100%;
           height: 100%;
           object-fit: contain;
+          display: block;
         }
 
         .image-counter {
@@ -469,9 +471,9 @@ export default function ImageGallery({ images = [], alt = 'صورة الإعلا
           position: fixed;
           top: 1rem;
           right: 1rem;
-          background: rgba(255, 255, 255, 0.2);
+          background: rgba(0, 0, 0, 0.7);
           color: white;
-          border: none;
+          border: 2px solid rgba(255, 255, 255, 0.5);
           width: 50px;
           height: 50px;
           border-radius: 50%;
@@ -486,7 +488,8 @@ export default function ImageGallery({ images = [], alt = 'صورة الإعلا
         }
 
         .close-fullscreen:hover {
-          background: rgba(255, 255, 255, 0.3);
+          background: rgba(0, 0, 0, 0.9);
+          border-color: rgba(255, 255, 255, 0.8);
           transform: scale(1.1);
         }
 
@@ -505,8 +508,8 @@ export default function ImageGallery({ images = [], alt = 'صورة الإعلا
         }
 
         .fullscreen-image {
-          max-width: 100%;
-          max-height: 100%;
+          width: 100%;
+          height: 100%;
           object-fit: contain;
         }
 
