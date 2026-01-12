@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { db, firebase, storage } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import { toYER, useRates } from '@/lib/rates';
+import { formatArabicDateTime } from '@/lib/dateUtils';
 import Link from 'next/link';
 
 const LocationPicker = dynamic(
@@ -64,6 +65,9 @@ export default function AddPage() {
   const [cats, setCats] = useState(DEFAULT_CATEGORIES);
   const [catsLoading, setCatsLoading] = useState(true);
   const [catsSource, setCatsSource] = useState('loading'); // loading | firestore | fallback
+
+  // Constants
+  const MIN_START_DELAY_MS = 60000; // 1 minute minimum delay for auction start
 
   // ✅ تحميل الأقسام من Firestore
   useEffect(() => {
@@ -639,7 +643,7 @@ export default function AddPage() {
                       setAuctionStartAt(e.target.value);
                       if (submitAttempted) setErrors((prev) => ({ ...prev, auctionStartAt: undefined }));
                     }}
-                    min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                    min={new Date(Date.now() + MIN_START_DELAY_MS).toISOString().slice(0, 16)}
                   />
                   {errors.auctionStartAt && <div className="form-error">{errors.auctionStartAt}</div>}
                   <div className="auction-note">📅 حدد متى سيبدأ المزاد</div>
@@ -664,7 +668,7 @@ export default function AddPage() {
                   {errors.auctionDurationHours && <div className="form-error">{errors.auctionDurationHours}</div>}
                   {auctionStartAt && auctionDurationHours && Number(auctionDurationHours) > 0 && (
                     <div className="auction-note">
-                      ⏱️ سيبدأ المزاد في {new Date(auctionStartAt).toLocaleString('ar-YE', { dateStyle: 'short', timeStyle: 'short' })} 
+                      ⏱️ سيبدأ المزاد في {formatArabicDateTime(auctionStartAt)} 
                       {' '}وينتهي بعد {auctionDurationHours} ساعة
                     </div>
                   )}

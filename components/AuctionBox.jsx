@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
+import { formatArabicDateTime } from '@/lib/dateUtils';
 import Price from '@/components/Price';
 
 function msToClock(ms) {
@@ -55,7 +56,8 @@ export default function AuctionBox({ listingId, listing }) {
 
   const timeLeftMs = endAtMs ? (endAtMs - now) : null;
   const timeUntilStartMs = startAtMs ? (startAtMs - now) : null;
-  const notStarted = startAtMs ? timeUntilStartMs > 0 : false;
+  // Ensure notStarted is only true when auction genuinely hasn't started
+  const notStarted = startAtMs && timeUntilStartMs != null && timeUntilStartMs > 0;
   const ended = endAtMs ? timeLeftMs <= 0 : false;
   const isActive = !notStarted && !ended;
 
@@ -122,7 +124,7 @@ export default function AuctionBox({ listingId, listing }) {
             <div className="muted" style={{ fontSize:11, marginTop:4 }}>
               {notStarted ? '🕐 ' : ended ? '✅ ' : '🔥 '}
               {notStarted ? 'بداية: ' : ended ? 'انتهى: ' : 'بدأ: '}
-              {new Date(startAtMs).toLocaleString('ar-YE', { dateStyle: 'short', timeStyle: 'short' })}
+              {formatArabicDateTime(startAtMs)}
             </div>
           )}
         </div>
