@@ -33,6 +33,10 @@ const DEFAULT_CATEGORIES = [
   { slug: 'other', name: 'أخرى / غير مصنف' },
 ];
 
+// Constants for auction configuration
+const MIN_START_DELAY_MS = 60000; // 1 minute minimum delay for auction start
+const DEFAULT_AUCTION_DURATION_HOURS = 12; // Default auction duration
+
 export default function AddPage() {
   const { user, loading } = useAuth();
   const rates = useRates();
@@ -56,7 +60,7 @@ export default function AddPage() {
 
   const [auctionEnabled, setAuctionEnabled] = useState(false);
   const [auctionStartAt, setAuctionStartAt] = useState('');
-  const [auctionDurationHours, setAuctionDurationHours] = useState('12');
+  const [auctionDurationHours, setAuctionDurationHours] = useState(String(DEFAULT_AUCTION_DURATION_HOURS));
 
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState({});
@@ -65,9 +69,6 @@ export default function AddPage() {
   const [cats, setCats] = useState(DEFAULT_CATEGORIES);
   const [catsLoading, setCatsLoading] = useState(true);
   const [catsSource, setCatsSource] = useState('loading'); // loading | firestore | fallback
-
-  // Constants
-  const MIN_START_DELAY_MS = 60000; // 1 minute minimum delay for auction start
 
   // ✅ تحميل الأقسام من Firestore
   useEffect(() => {
@@ -254,7 +255,7 @@ export default function AddPage() {
           throw new Error('وقت بداية المزاد يجب أن يكون في المستقبل');
         }
         
-        const durationMs = Number(auctionDurationHours || 12) * 60 * 60 * 1000;
+        const durationMs = Number(auctionDurationHours || DEFAULT_AUCTION_DURATION_HOURS) * 60 * 60 * 1000;
         const endMs = startMs + durationMs;
         
         startAt = firebase.firestore.Timestamp.fromMillis(startMs);
