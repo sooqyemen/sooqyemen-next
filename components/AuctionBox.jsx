@@ -57,7 +57,7 @@ export default function AuctionBox({ listingId, listing }) {
   const timeLeftMs = endAtMs ? (endAtMs - now) : null;
   const timeUntilStartMs = startAtMs ? (startAtMs - now) : null;
   // Ensure notStarted is only true when auction genuinely hasn't started
-  const notStarted = startAtMs && timeUntilStartMs != null && timeUntilStartMs > 0;
+  const notStarted = startAtMs && timeUntilStartMs !== null && timeUntilStartMs > 0;
   const ended = endAtMs ? timeLeftMs <= 0 : false;
   const isActive = !notStarted && !ended;
 

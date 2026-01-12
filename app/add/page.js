@@ -178,7 +178,7 @@ export default function AddPage() {
         newErrors.auctionStartAt = 'الرجاء تحديد وقت بداية المزاد';
       } else {
         const startMs = new Date(auctionStartAt).getTime();
-        if (startMs < Date.now()) {
+        if (startMs < Date.now() + MIN_START_DELAY_MS) {
           newErrors.auctionStartAt = 'وقت بداية المزاد يجب أن يكون في المستقبل';
         }
       }
@@ -250,7 +250,7 @@ export default function AddPage() {
         }
         
         const startMs = new Date(auctionStartAt).getTime();
-        if (startMs < Date.now()) {
+        if (startMs < Date.now() + MIN_START_DELAY_MS) {
           throw new Error('وقت بداية المزاد يجب أن يكون في المستقبل');
         }
         
