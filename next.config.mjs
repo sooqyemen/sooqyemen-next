@@ -8,53 +8,49 @@ const withBundleAnalyzer = bundleAnalyzer({
 const nextConfig = {
   reactStrictMode: true,
   
-  // Performance optimizations
+  // تحسينات الأداء: إزالة الكونسول في الإنتاج
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? {
       exclude: ['error', 'warn'],
     } : false,
   },
   
-  // تحسينات البناء
-  swcMinify: true,
+  // تحسينات البناء (تم حذف swcMinify لأنه مفعل تلقائياً)
   productionBrowserSourceMaps: false,
   compress: true,
   
-  // تحسين تجزئة الحزم (Chunking) - محسنة
+  // تحسين استيراد المكتبات وتجزئة الحزم
   experimental: {
     optimizePackageImports: [
       'lucide-react', 
       'react-leaflet', 
       'leaflet',
-      // يمكن إضافة المزيد من الحزم الثقيلة هنا
-      '@mui/icons-material',
-      'date-fns'
+      'date-fns',
+      '@mui/icons-material'
     ],
-    optimizeCss: true,
+    // webpackBuildWorker: true, // فعل هذا الخيار فقط إذا كان لديك ذاكرة كافية في السيرفر
     scrollRestoration: true,
-    webpackBuildWorker: true,
-    // إضافة إعدادات أداء مستقرة
-    esmExternals: true, // تحسين التعامل مع الحزم الخارجية
   },
   
-  // تحسينات الصور - محسنة
+  // إعدادات الصور المحسنة
   images: {
     formats: ['image/webp', 'image/avif'],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     remotePatterns: [
-      // Firebase Storage
       {
         protocol: 'https',
         hostname: 'firebasestorage.googleapis.com',
-        pathname: '/v0/b/**', // أكثر تحديداً للأداء
+        pathname: '/v0/b/**',
       },
-      // Google user photos
       {
         protocol: 'https',
         hostname: 'lh3.googleusercontent.com',
       },
-      // Domain images
+      {
+        protocol: 'https',
+        hostname: 'placehold.co',
+      },
       {
         protocol: 'https',
         hostname: 'sooqyemen.com',
@@ -68,40 +64,21 @@ const nextConfig = {
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
-    // إضافة تحسينات جديدة
-    unoptimized: process.env.NODE_ENV === 'development', // تعطيل التحسين في التطوير للأداء
+    // تعطيل التحسين في وضع التطوير لتسريع العمل
+    unoptimized: process.env.NODE_ENV === 'development',
   },
   
-  // تحسينات التخزين المؤقت والأمان - محسنة
+  // تخزين مؤقت للملفات الثابتة (Caching Headers)
   async headers() {
     const securityHeaders = [
-      {
-        key: 'X-DNS-Prefetch-Control',
-        value: 'on',
-      },
-      {
-        key: 'X-Frame-Options',
-        value: 'SAMEORIGIN',
-      },
-      {
-        key: 'X-Content-Type-Options',
-        value: 'nosniff',
-      },
-      {
-        key: 'X-XSS-Protection',
-        value: '1; mode=block',
-      },
-      {
-        key: 'Referrer-Policy',
-        value: 'strict-origin-when-cross-origin',
-      },
-      {
-        key: 'Permissions-Policy',
-        value: 'camera=(), microphone=(), geolocation=(self), interest-cohort=()',
-      },
+      { key: 'X-DNS-Prefetch-Control', value: 'on' },
+      { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
+      { key: 'X-XSS-Protection', value: '1; mode=block' },
+      { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+      { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self)' },
     ];
 
-    // في بيئة الإنتاج، أضف HSTS
     if (process.env.NODE_ENV === 'production') {
       securityHeaders.push({
         key: 'Strict-Transport-Security',
@@ -111,84 +88,27 @@ const nextConfig = {
 
     return [
       {
-        // تحسين التخزين المؤقت للصور
-        source: '/:path*.(jpg|jpeg|png|gif|ico|webp|avif|svg)',
+        source: '/:path*(svg|jpg|jpeg|png|gif|ico|webp|avif)',
         headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
         ],
       },
       {
-        // تحسين التخزين المؤقت للأصول الثابتة
         source: '/_next/static/:path*',
         headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
         ],
       },
       {
-        // تحسين التخزين المؤقت لصور Next.js
-        source: '/_next/image',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
-        ],
-      },
-      {
-        // تحسين التخزين المؤقت للخطوط
-        source: '/:path*.(woff|woff2|ttf|eot)',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
-        ],
-      },
-      {
-        // تحسين التخزين المؤقت لملفات CSS وJS
-        source: '/:path*.(css|js)',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: process.env.NODE_ENV === 'production' 
-              ? 'public, max-age=31536000, immutable' 
-              : 'public, max-age=0, must-revalidate',
-          },
-        ],
-      },
-      {
-        // أمان لجميع الصفحات
         source: '/:path*',
         headers: securityHeaders,
       },
     ];
   },
-  
-  // إضافة تحسينات الترحيل (مشروطة)
-  ...(process.env.NEXT_PUBLIC_ENABLE_I18N === 'true' && {
-    i18n: {
-      locales: ['ar', 'en'],
-      defaultLocale: 'ar',
-      localeDetection: false,
-    },
-  }),
-  
-  // تحسينات إضافية للأداء
+
+  // إعدادات إضافية
   poweredByHeader: false,
   generateEtags: true,
-  
-  // تحسينات لبيئة التطوير
-  onDemandEntries: {
-    // حافظ على الصفحات في الذاكرة لمدة أطول في التطوير
-    maxInactiveAge: 60 * 60 * 1000, // ساعة واحدة
-    pagesBufferLength: 10,
-  },
 };
 
 export default withBundleAnalyzer(nextConfig);
