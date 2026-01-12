@@ -384,15 +384,16 @@ export default function HomePageClient({ initialListings = [] }) {
   }, []);
 
   useEffect(() => {
-    if (initialListings.length > 0) {
+    const hadSSR = initialListings.length > 0;
+    if (hadSSR) {
+      // عند وجود بيانات SSR، نعرضها مباشرة… لكن نستمر بالاشتراك لتحديث القائمة فوراً بعد أي حقن/تعديل.
       setLoading(false);
-      return;
     }
     let unsub = null;
     let cancelled = false;
 
     const subscribeWithDb = async () => {
-      setLoading(true);
+      if (!hadSSR) setLoading(true);
       setError('');
       let triedFallback = false;
 
