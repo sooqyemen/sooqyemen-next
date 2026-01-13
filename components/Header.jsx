@@ -12,6 +12,82 @@ const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
 // رابط برنامج العمولة
 const AFFILIATE_CREATE_PATH = '/affiliate/create';
 
+// ✅ شعار الهيدر (مع fallback لو الصورة ما ظهرت)
+function HeaderLogo({ variant = 'desktop' }) {
+  const isMobile = variant === 'mobile';
+
+  // صور الشعار (لازم تكون داخل public/)
+  const srcPrimary = isMobile ? '/logo-horizontal-800.png' : '/logo-horizontal-1200.png';
+  const srcSecondary = '/logo-horizontal-800.png';
+  const srcFallback = '/icon-192.png';
+
+  const [src, setSrc] = useState(srcPrimary);
+
+  // لو تغيرت variant (تنقل/إعادة رندر) نرجع للصورة الأساسية
+  useEffect(() => {
+    setSrc(srcPrimary);
+  }, [srcPrimary]);
+
+  const height = isMobile ? 32 : 40;
+
+  // حد أقصى للعرض عشان ما يتمدد ويكسر الهيدر
+  const maxWidth = isMobile ? 170 : 210;
+
+  const handleError = () => {
+    // 1) جرّب صورة ثانية
+    if (src !== srcSecondary) {
+      setSrc(srcSecondary);
+      return;
+    }
+    // 2) جرّب أيقونة fallback
+    if (src !== srcFallback) {
+      setSrc(srcFallback);
+    }
+  };
+
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 10,
+        minHeight: height,
+        lineHeight: 1,
+      }}
+    >
+      {/* (اختياري) أيقونة صغيرة في الجوال */}
+      {isMobile && (
+        <img
+          src="/icon-192.png"
+          alt="سوق اليمن"
+          width={26}
+          height={26}
+          style={{ display: 'block', borderRadius: 8 }}
+          loading="eager"
+          decoding="async"
+        />
+      )}
+
+      <img
+        src={src}
+        alt="سوق اليمن"
+        height={height}
+        // width غير ثابت لأن الصورة أفقية، نتحكم بالعرض بالـ maxWidth
+        style={{
+          height,
+          width: 'auto',
+          maxWidth,
+          display: 'block',
+          objectFit: 'contain',
+        }}
+        loading="eager"
+        decoding="async"
+        onError={handleError}
+      />
+    </span>
+  );
+}
+
 export default function Header() {
   const pathname = usePathname();
   const { user, profile, loading, error } = useUserProfile();
@@ -106,34 +182,6 @@ export default function Header() {
     }
   };
 
-  const Logo = ({ variant = 'desktop' }) => {
-    // الشعار الأساسي في الهيدر
-    // لازم يكون موجود داخل public/: /logo-horizontal-800.png
-    const height = variant === 'mobile' ? 34 : 40;
-
-    return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-        {/* لو تحب أيقونة صغيرة بجانب الشعار في الجوال */}
-        {variant === 'mobile' && (
-          <img
-            src="/icon-192.png"
-            alt="سوق اليمن"
-            width={28}
-            height={28}
-            style={{ display: 'block', borderRadius: 8 }}
-          />
-        )}
-
-        <img
-          src="/logo-horizontal-800.png"
-          alt="سوق اليمن"
-          style={{ height, width: 'auto', display: 'block' }}
-          loading="eager"
-        />
-      </span>
-    );
-  };
-
   return (
     <>
       <header className="header">
@@ -144,8 +192,13 @@ export default function Header() {
               <span className="menu-icon">☰</span>
             </button>
 
-            <Link href="/" className="site-title" aria-label="الذهاب للرئيسية">
-              <Logo variant="mobile" />
+            <Link
+              href="/"
+              className="site-title"
+              aria-label="الذهاب للرئيسية"
+              style={{ display: 'inline-flex', alignItems: 'center' }}
+            >
+              <HeaderLogo variant="mobile" />
             </Link>
 
             <Link href="/add" className="add-btn-mobile" aria-label="أضف إعلان جديد">
@@ -155,8 +208,13 @@ export default function Header() {
 
           {/* Desktop */}
           <div className="desktop-nav">
-            <Link href="/" className="logo" aria-label="الذهاب للرئيسية">
-              <Logo variant="desktop" />
+            <Link
+              href="/"
+              className="logo"
+              aria-label="الذهاب للرئيسية"
+              style={{ display: 'inline-flex', alignItems: 'center' }}
+            >
+              <HeaderLogo variant="desktop" />
             </Link>
 
             <nav className="nav-links">
