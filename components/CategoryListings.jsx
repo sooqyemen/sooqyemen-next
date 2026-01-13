@@ -1,288 +1,265 @@
-// components/ListingCard.jsx
+// components/CategoryListings.jsx
 'use client';
 
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import Image from 'next/image';
-import Price from '@/components/Price';
+import { useEffect, useMemo, useState } from 'react';
+import { db } from '@/lib/firebaseClient';
+import ListingCard from '@/components/ListingCard';
 
-// ✅ تحويل slug إلى اسم عربي (fallback فقط إذا ما توفر categoryName)
-const CATEGORY_LABELS = {
-  cars: 'سيارات',
-  realestate: 'عقارات',
-  real_estate: 'عقارات',
-  electronics: 'إلكترونيات',
-  motorcycles: 'دراجات نارية',
-  heavy_equipment: 'معدات ثقيلة',
-  solar: 'طاقة شمسية',
-  networks: 'نت وشبكات',
-  maintenance: 'صيانة',
-  furniture: 'أثاث',
-  clothes: 'ملابس',
-  animals: 'حيوانات وطيور',
-  jobs: 'وظائف',
-  services: 'خدمات',
-  other: 'أخرى / غير مصنف',
+const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
+  ssr: false,
+});
+
+// ✅ خرائط توافق (عربي/إنجليزي/اختلافات شائعة)
+const ALIASES = {
+  real_estate: 'realestate',
+  'heavy-equipment': 'heavy_equipment',
+  heavyEquipment: 'heavy_equipment',
+  net: 'networks',
+  network: 'networks',
+
+  // عربي -> سلاج
+  'عقارات': 'realestate',
+  'العقارات': 'realestate',
+  'سيارات': 'cars',
+  'السيارات': 'cars',
+  'جوالات': 'phones',
+  'الجوالات': 'phones',
+  'الكترونيات': 'electronics',
+  'إلكترونيات': 'electronics',
+  'الإلكترونيات': 'electronics',
+  'شبكات': 'networks',
+  'صيانة': 'maintenance',
+  'خدمات': 'services',
+  'وظائف': 'jobs',
+  'طاقة شمسية': 'solar',
 };
 
-function getCategoryLabel(listing) {
-  const raw = String(listing?.categoryName || listing?.category || '').trim();
-  if (!raw) return 'قسم';
-  // لو كان أصلاً عربي نخليه
-  if (/[\u0600-\u06FF]/.test(raw)) return raw;
-  return CATEGORY_LABELS[raw] || raw;
+function normalizeSlug(v) {
+  const raw = String(v || '').trim();
+  if (!raw) return '';
+
+  const mapped = ALIASES[raw] || raw;
+
+  return String(mapped)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/-+/g, '_');
 }
 
-export default function ListingCard({ listing, variant = 'grid' }) {
-  const img = (Array.isArray(listing?.images) && listing.images[0]) || listing?.image || null;
+function listingCategorySlug(listing) {
+  const raw =
+    listing?.category ??
+    listing?.categorySlug ??
+    listing?.categoryId ??
+    listing?.cat ??
+    '';
 
-  // المدينة (إن وجدت)
-  const city = listing?.city || listing?.region || '';
+  return normalizeSlug(raw);
+}
 
-  // وصف مختصر
-  const rawDesc = String(listing?.description || '');
-  const shortDesc = rawDesc.length > 90 ? rawDesc.slice(0, 90) + '…' : rawDesc;
+export default function CategoryListings({ category, initialListings = [] }) {
+  const [view, setView] = useState('grid'); // grid | list | map
+  const [q, setQ] = useState('');
+  const [items, setItems] = useState(initialListings);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
 
-  /**
-   * ✅ السعر المعتمد عندنا: YER فقط
-   */
-  let priceYER = listing?.priceYER ?? listing?.currentBidYER ?? 0;
+  useEffect(() => {
+    // إذا كان عندنا بيانات SSR نعرضها فوراً… لكن نستمر بالاشتراك عشان تظهر الإعلانات الجديدة مباشرة.
+    const hadSSR = initialListings.length > 0;
+    if (hadSSR) {
+      setLoading(false);
+    }
 
-  // Fallback للإعلانات القديمة (إن وجدت)
-  if (!priceYER && listing?.originalPrice) {
-    const p = Number(listing.originalPrice) || 0;
-    const cur = String(listing.originalCurrency || 'YER').toUpperCase();
+    // fallback: إذا ما كان في بيانات SSR، نجلب من Firebase
+    // ✅ category قد يكون string أو array
+    const catsRaw = Array.isArray(category) ? category : [category];
+    const cats = catsRaw.map(normalizeSlug).filter(Boolean);
+    const catsSet = new Set(cats);
 
-    const SAR_TO_YER = 425;
-    const USD_TO_YER = 1632;
+    setLoading(true);
+    setErr('');
 
-    if (cur === 'SAR') priceYER = p * SAR_TO_YER;
-    else if (cur === 'USD') priceYER = p * USD_TO_YER;
-    else priceYER = p;
-  }
+    let unsub = null;
 
-  const href = `/listing/${listing?.id}`;
+    if (!cats.length) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
 
-  // ✅ وضع القائمة: كرت أفقي (مناسب للجوال)
-  if (variant === 'list') {
+    // ✅ إذا قسم واحد فقط، نحاول Query مباشر (أسرع)
+    const single = cats.length === 1 ? cats[0] : '';
+
+    const fallbackFetchAndFilter = () => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[CategoryListings] Using fallback fetch for category: ${single || cats.join(', ')}`);
+      }
+      const ref2 = db.collection('listings').orderBy('createdAt', 'desc').limit(400);
+      unsub = ref2.onSnapshot(
+        (snap2) => {
+          const all = snap2.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter((l) => l.isActive !== false && l.hidden !== true);
+
+          const filtered = all.filter((l) => catsSet.has(listingCategorySlug(l)));
+
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`[CategoryListings] Fallback fetch: ${all.length} total listings, ${filtered.length} match category`);
+            if (filtered.length === 0 && all.length > 0 && all.length <= 10) {
+              // Only show sample when we have a small dataset to avoid performance issues
+              const categories = all.map(l => `${l.id}: ${l.category}`);
+              console.log('[CategoryListings] Sample categories from listings:', categories);
+              console.log('[CategoryListings] Looking for categories:', Array.from(catsSet));
+            } else if (filtered.length === 0 && all.length > 10) {
+              console.log('[CategoryListings] No matches found. Try checking category field names in Firebase.');
+            }
+          }
+
+          setItems(filtered);
+          setLoading(false);
+        },
+        (e2) => {
+          console.error(e2);
+          setErr(e2?.message || 'فشل تحميل إعلانات القسم');
+          setLoading(false);
+        }
+      );
+    };
+
+    try {
+      if (!single) {
+        // عدة أسماء للقسم -> استخدم fallback مباشرة
+        fallbackFetchAndFilter();
+      } else {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[CategoryListings] Attempting direct query for category: "${single}"`);
+        }
+        const ref = db
+          .collection('listings')
+          .where('category', '==', single)
+          .orderBy('createdAt', 'desc')
+          .limit(200);
+
+        unsub = ref.onSnapshot(
+          (snap) => {
+            const data = snap.docs
+              .map((d) => ({ id: d.id, ...d.data() }))
+              .filter((l) => l.isActive !== false && l.hidden !== true);
+
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`[CategoryListings] Direct query success: ${data.length} listings found for "${single}"`);
+            }
+
+            setItems(data);
+            setLoading(false);
+          },
+          (e) => {
+            if (process.env.NODE_ENV === 'development') {
+              console.warn(`[CategoryListings] Direct query failed for "${single}", falling back to filter:`, e.code || e.message);
+            } else {
+              console.error('Category query failed (maybe needs index):', e);
+            }
+            fallbackFetchAndFilter();
+          }
+        );
+      }
+    } catch (e) {
+      console.error(e);
+      setErr('فشل الاتصال بقاعدة البيانات');
+      setLoading(false);
+    }
+
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
+  }, [category, initialListings.length]);
+
+  const filtered = useMemo(() => {
+    const s = String(q || '').trim().toLowerCase();
+    if (!s) return items;
+
+    return items.filter((l) => {
+      const title = String(l.title || '').toLowerCase();
+      const city = String(l.city || l.region || '').toLowerCase();
+      const desc = String(l.description || '').toLowerCase();
+      return title.includes(s) || city.includes(s) || desc.includes(s);
+    });
+  }, [items, q]);
+
+  if (loading) {
     return (
-      <Link href={href} className="card lc-list" style={{ display: 'block', textDecoration: 'none' }}>
-        <div className="row lc-list-row" style={{ gap: 12, alignItems: 'center' }}>
-          {/* صورة */}
-          <div className="lc-thumb">
-            {img ? (
-              <Image
-                src={img}
-                alt={listing?.title || 'إعلان'}
-                className="lc-thumb-img"
-                width={120}
-                height={95}
-                style={{ objectFit: 'cover' }}
-                loading="lazy"
-              />
-            ) : (
-              <div className="lc-thumb-empty">بدون صورة</div>
-            )}
-          </div>
-
-          {/* محتوى */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="lc-title">
-              {listing?.title || 'بدون عنوان'}
-            </div>
-
-            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-              <span className="muted" style={{ fontSize: 12 }}>
-                {city ? `📍 ${city}` : '📍 —'}
-              </span>
-              <span className="muted" style={{ fontSize: 12 }}>
-                👁️ {Number(listing?.views || 0)}
-              </span>
-            </div>
-
-            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-              <span className="badge">{getCategoryLabel(listing)}</span>
-              <div style={{ fontWeight: 800 }}>
-                <Price
-                  priceYER={Number(priceYER) || 0}
-                  originalPrice={listing?.originalPrice}
-                  originalCurrency={listing?.originalCurrency || 'YER'}
-                />
-              </div>
-            </div>
-
-            {shortDesc ? (
-              <div className="muted lc-desc" style={{ marginTop: 8 }}>
-                {shortDesc}
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <style jsx>{`
-          .lc-list-row { flex-wrap: nowrap; }
-          .lc-thumb {
-            width: 120px;
-            height: 95px;
-            border-radius: 12px;
-            overflow: hidden;
-            border: 1px solid #e2e8f0;
-            background: #ffffff;
-            flex: 0 0 auto;
-          }
-          .lc-thumb-img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            display: block;
-          }
-          .lc-thumb-empty{
-            width: 100%;
-            height: 100%;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            color:#94a3b8;
-            font-weight:800;
-            font-size:12px;
-          }
-          .lc-title{
-            font-weight: 900;
-            font-size: 15px;
-            line-height: 1.4;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-          }
-          .lc-desc{
-            font-size: 13px;
-            line-height: 1.5;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-          }
-
-          @media (max-width: 480px) {
-            .lc-thumb { width: 105px; height: 88px; }
-            .lc-title { font-size: 14px; }
-          }
-        `}</style>
-      </Link>
+      <div className="card" style={{ padding: 16 }}>
+        <div className="muted">جاري تحميل إعلانات القسم...</div>
+      </div>
     );
   }
 
-  // ✅ وضع الشبكة: كرت عمودي (مثل الرئيسية)
+  if (err) {
+    return (
+      <div className="card" style={{ padding: 16, border: '1px solid #fecaca' }}>
+        <div style={{ fontWeight: 900, color: '#b91c1c' }}>⚠️ حدث خطأ</div>
+        <div className="muted" style={{ marginTop: 6 }}>{err}</div>
+      </div>
+    );
+  }
+
   return (
-    <Link href={href} className="card lc-grid" style={{ display: 'block', textDecoration: 'none' }}>
-      {/* الصورة */}
-      {img ? (
-        <div className="lc-imgWrap">
-          <Image
-            src={img}
-            alt={listing?.title || 'إعلان'}
-            className="lc-img"
-            width={300}
-            height={180}
-            style={{ objectFit: 'cover' }}
-            loading="lazy"
+    <div>
+      <div className="card" style={{ padding: 12, marginBottom: 12 }}>
+        <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="row" style={{ gap: 8 }}>
+            <button className={`btn ${view === 'grid' ? 'btnPrimary' : ''}`} onClick={() => setView('grid')}>
+              ◼️ شبكة
+            </button>
+            <button className={`btn ${view === 'list' ? 'btnPrimary' : ''}`} onClick={() => setView('list')}>
+              ☰ قائمة
+            </button>
+            <button className={`btn ${view === 'map' ? 'btnPrimary' : ''}`} onClick={() => setView('map')}>
+              🗺️ خريطة
+            </button>
+          </div>
+
+          <input
+            className="input"
+            style={{ flex: 1, minWidth: 180 }}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="ابحث داخل القسم..."
           />
-        </div>
-      ) : (
-        <div className="lc-imgEmpty">بدون صورة</div>
-      )}
 
-      <div style={{ marginTop: 10 }}>
-        {/* العنوان */}
-        <div className="lc-title">
-          {listing?.title || 'بدون عنوان'}
-        </div>
-
-        {/* المدينة + عدد المشاهدات */}
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-          <span className="muted" style={{ fontSize: 12 }}>
-            {city ? `📍 ${city}` : '📍 —'}
-          </span>
-          <span className="muted" style={{ fontSize: 12 }}>
-            👁️ {Number(listing?.views || 0)}
-          </span>
-        </div>
-
-        {/* القسم + السعر */}
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-          <span className="badge">{getCategoryLabel(listing)}</span>
-
-          <div style={{ fontWeight: 800 }}>
-            <Price
-              priceYER={Number(priceYER) || 0}
-              originalPrice={listing?.originalPrice}
-              originalCurrency={listing?.originalCurrency || 'YER'}
-            />
+          <div className="muted" style={{ fontWeight: 800 }}>
+            {filtered.length} إعلان
           </div>
         </div>
-
-        {/* وصف مختصر */}
-        {shortDesc ? (
-          <p className="muted lc-desc" style={{ marginTop: 8, marginBottom: 0 }}>
-            {shortDesc}
-          </p>
-        ) : null}
       </div>
 
-      <style jsx>{`
-        .lc-imgWrap{
-          overflow: hidden;
-          border-radius: 12px;
-          border: 1px solid #e2e8f0;
-          background: #ffffff;
-        }
-        .lc-img{
-          width: 100%;
-          height: 170px;
-          object-fit: contain;
-          display: block;
-        }
-        .lc-imgEmpty{
-          height: 170px;
-          border-radius: 12px;
-          border: 1px solid #e2e8f0;
-          background: #f8fafc;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          color:#94a3b8;
-          font-weight:900;
-          font-size:13px;
-        }
-        .lc-title{
-          font-weight: 900;
-          margin-bottom: 4px;
-          line-height: 1.4;
-          font-size: 15px;
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
-        .lc-desc{
-          font-size: 13px;
-          line-height: 1.5;
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
-
-        @media (max-width: 768px) {
-          .lc-img { height: 155px; }
-          .lc-imgEmpty { height: 155px; }
-        }
-        @media (max-width: 480px) {
-          .lc-img { height: 145px; }
-          .lc-imgEmpty { height: 145px; }
-          .lc-title { font-size: 14px; }
-        }
-      `}</style>
-    </Link>
+      {filtered.length === 0 ? (
+        <div className="card" style={{ padding: 16, textAlign: 'center' }}>
+          <div style={{ fontWeight: 900 }}>لا توجد إعلانات في هذا القسم</div>
+          <div className="muted" style={{ marginTop: 6 }}>جرّب البحث أو أضف إعلان جديد.</div>
+          <div style={{ marginTop: 12 }}>
+            <Link className="btn btnPrimary" href="/add">➕ أضف إعلان</Link>
+          </div>
+        </div>
+      ) : view === 'map' ? (
+        <HomeMapView listings={filtered} />
+      ) : (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: view === 'grid' ? 'repeat(auto-fill, minmax(240px, 1fr))' : '1fr',
+            gap: 12,
+          }}
+        >
+          {filtered.map((l) => (
+            <ListingCard key={l.id} listing={l} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
