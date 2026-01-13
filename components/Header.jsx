@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useUserProfile } from '@/lib/useUserProfile';
+import YemenMarketLogo from '@/components/YemenMarketLogo';
 
 // إيميلات المدراء
 const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
@@ -16,7 +17,6 @@ export default function Header() {
   const pathname = usePathname();
   const { user, profile, loading, error } = useUserProfile();
 
-  // ملاحظة: نخلي mounted منفصلة عشان الأنيميشن
   const [menuMounted, setMenuMounted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -27,8 +27,7 @@ export default function Header() {
 
   // التحقق إذا كان المستخدم مديراً
   const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase());
-  
-  // Get display name with fallback
+
   const getDisplayName = () => {
     if (error === 'timeout') return 'مستخدم';
     if (error) return 'مستخدم';
@@ -37,26 +36,22 @@ export default function Header() {
     if (user?.email) return user.email.split('@')[0];
     return 'مستخدم';
   };
-  
-  // Get short UID for display (first 6 characters)
+
   const getShortUid = () => {
     if (profile?.uid) return profile.uid.substring(0, 6);
     if (user?.uid) return user.uid.substring(0, 6);
     return '';
   };
 
-  // (اختياري) إذا ما عندك نظام رسائل غير مقروءة حقيقي خله false
   useEffect(() => {
     if (user) setHasUnreadMessages(false);
   }, [user]);
 
-  // إغلاق القائمة عند تغيير المسار (تنقل بين الصفحات)
   useEffect(() => {
     if (menuMounted) closeMenu(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
-  // قفل سكرول الصفحة عندما تكون القائمة مفتوحة
   useEffect(() => {
     document.body.style.overflow = menuOpen ? 'hidden' : '';
     return () => {
@@ -64,14 +59,12 @@ export default function Header() {
     };
   }, [menuOpen]);
 
-  // تنظيف التايمر
   useEffect(() => {
     return () => {
       if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     };
   }, []);
 
-  // إغلاق بالـ ESC
   useEffect(() => {
     if (!menuOpen) return;
     const onKeyDown = (e) => {
@@ -83,15 +76,10 @@ export default function Header() {
 
   const openMenu = () => {
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-
     setMenuMounted(true);
-    // نخليها تفتح بعد mount عشان الـ CSS transition يشتغل
     requestAnimationFrame(() => setMenuOpen(true));
   };
 
-  /**
-   * @param {boolean} immediate إذا true يقفل مباشرة بدون انتظار أنيميشن
-   */
   const closeMenu = (immediate = false) => {
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
 
@@ -102,7 +90,6 @@ export default function Header() {
     }
 
     setMenuOpen(false);
-    // نفس مدة transition في CSS (0.3s)
     closeTimerRef.current = setTimeout(() => {
       setMenuMounted(false);
     }, 320);
@@ -131,8 +118,9 @@ export default function Header() {
               <span className="menu-icon">☰</span>
             </button>
 
-            <Link href="/" className="site-title">
-              سوق اليمن
+            {/* ✅ شعار الموبايل */}
+            <Link href="/" className="site-title" aria-label="الانتقال للرئيسية">
+              <YemenMarketLogo compact />
             </Link>
 
             <Link href="/add" className="add-btn-mobile" aria-label="أضف إعلان جديد">
@@ -142,8 +130,9 @@ export default function Header() {
 
           {/* Desktop */}
           <div className="desktop-nav">
-            <Link href="/" className="logo">
-              سوق اليمن
+            {/* ✅ شعار الديسكتوب */}
+            <Link href="/" className="logo" aria-label="الانتقال للرئيسية">
+              <YemenMarketLogo />
             </Link>
 
             <nav className="nav-links">
@@ -155,7 +144,6 @@ export default function Header() {
                 الإعلانات
               </Link>
 
-              {/* ✅ برنامج العمولة */}
               <Link href={AFFILIATE_CREATE_PATH} className="nav-link">
                 💸 برنامج العمولة
               </Link>
@@ -193,7 +181,6 @@ export default function Header() {
                         👤 الملف الشخصي
                       </Link>
 
-                      {/* ✅ برنامج العمولة داخل القائمة */}
                       <Link href={AFFILIATE_CREATE_PATH} className="dropdown-item">
                         💸 برنامج العمولة
                       </Link>
@@ -231,10 +218,8 @@ export default function Header() {
         </div>
       </header>
 
-      {/* Spacer لأن الهيدر fixed */}
       <div className="header-spacer" />
 
-      {/* ✅ أهم تغيير: ما نرندر القائمة/الخلفية إلا إذا كانت Mounted */}
       {menuMounted && (
         <>
           <div
@@ -257,7 +242,11 @@ export default function Header() {
                     <div className="user-details">
                       <div className="user-name">اسم المستخدم: {getDisplayName()}</div>
                       <div className="user-email">
-                        {error ? 'معرف المستخدم: غير متاح' : getShortUid() ? `معرف المستخدم: ${getShortUid()}` : 'معرف المستخدم: غير متاح'}
+                        {error
+                          ? 'معرف المستخدم: غير متاح'
+                          : getShortUid()
+                          ? `معرف المستخدم: ${getShortUid()}`
+                          : 'معرف المستخدم: غير متاح'}
                       </div>
                     </div>
                   </div>
@@ -356,7 +345,6 @@ export default function Header() {
               <div className="menu-section">
                 <h3 className="section-title">المزيد</h3>
 
-                {/* ✅ برنامج العمولة (جوال) */}
                 <Link href={AFFILIATE_CREATE_PATH} className="menu-item" onClick={() => closeMenu(true)}>
                   <span className="item-icon">💸</span>
                   <span className="item-text">برنامج العمولة</span>
