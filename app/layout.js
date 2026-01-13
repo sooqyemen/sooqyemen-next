@@ -66,46 +66,58 @@ export const metadata = {
       { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
       { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
     ],
-    apple: [
-      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
-    ],
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
   },
   verification: {
     google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION,
   },
 };
 
+// ✅ الطريقة الصحيحة للـ viewport في Next.js App Router
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
+};
+
 export default function RootLayout({ children }) {
   return (
-    <html lang="ar" dir="rtl">
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
-        <meta
-          name="viewport"
-          content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover"
-        />
+
+        {/* Theme color */}
         <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
         <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
+
+        {/* PWA / iOS */}
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-capable" content="standalone" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+        {/* Helpers */}
         <meta name="format-detection" content="telephone=no" />
+        <meta httpEquiv="x-dns-prefetch-control" content="on" />
+
         {/* Preconnect to critical domains */}
         <link rel="preconnect" href="https://firebasestorage.googleapis.com" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://firebasestorage.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        {/* Performance hints */}
-        <meta httpEquiv="x-dns-prefetch-control" content="on" />
       </head>
 
       <body>
         <WebVitals />
+
         <a href="#main-content" className="skip-to-content">
           الانتقال إلى المحتوى الرئيسي
         </a>
+
         <ClientProviders>
           <Header />
-          <main id="main-content" role="main">{children}</main>
+          <main id="main-content" role="main">
+            {children}
+          </main>
           <div className="safe-area-bottom" />
         </ClientProviders>
       </body>
