@@ -177,53 +177,69 @@ export default function ListingsPageClient({ initialListings = [] }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [search, setSearch] = useState('');
-  const [clientFetchAttempted, setClientFetchAttempted] = useState(false);
-
   useEffect(() => {
-    // If we have initial listings from SSR, use them
+    // ✅ نعرض بيانات SSR فوراً (للـ SEO + سرعة أول فتح)
     if (initialListings && initialListings.length > 0) {
       setListings(initialListings);
-      setLoading(false);
-      return;
     }
 
-    // Only attempt client-side fetch once
-    if (clientFetchAttempted) {
-      return;
-    }
+    let unsub = null;
+    let cancelled = false;
 
-    // Fallback: fetch from client-side if SSR returned empty
-    const fetchClientSide = async () => {
+    const subscribe = async () => {
       setLoading(true);
       setErr('');
-      setClientFetchAttempted(true);
-      
+
       try {
         // Dynamic import to avoid loading Firebase on initial render
         const { db } = await import('@/lib/firebaseClient');
-        
-        const snapshot = await db
-          .collection('listings')
-          .orderBy('createdAt', 'desc')
-          .limit(24)
-          .get();
+        if (cancelled) return;
 
-        const items = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+        const base = db.collection('listings');
 
-        setListings(items);
+        const subscribeWithQuery = (withOrder) => {
+          const q = withOrder
+            ? base.orderBy('createdAt', 'desc').limit(500)
+            : base.limit(500);
+
+          unsub = q.onSnapshot(
+            (snap) => {
+              const items = snap.docs
+                .map((doc) => ({ id: doc.id, ...doc.data() }))
+                .filter((l) => l.isActive !== false && l.hidden !== true);
+
+              setListings(items);
+              setLoading(false);
+            },
+            (error) => {
+              // ⚠️ لو فشل orderBy (index/compat)، نستخدم fallback بدون ترتيب
+              if (withOrder) {
+                try { if (unsub) unsub(); } catch {}
+                subscribeWithQuery(false);
+                return;
+              }
+              console.error('[ListingsPageClient] onSnapshot error:', error);
+              setErr('تعذر تحميل الإعلانات. يرجى المحاولة لاحقاً.');
+              setLoading(false);
+            }
+          );
+        };
+
+        subscribeWithQuery(true);
       } catch (error) {
-        console.error('[ListingsPageClient] Client-side fetch error:', error);
+        console.error('[ListingsPageClient] Firebase load error:', error);
         setErr('تعذر تحميل الإعلانات. يرجى المحاولة لاحقاً.');
-      } finally {
         setLoading(false);
       }
     };
 
-    fetchClientSide();
-  }, [initialListings, clientFetchAttempted]);
+    subscribe();
+
+    return () => {
+      cancelled = true;
+      try { if (unsub) unsub(); } catch {}
+    };
+  }, [initialListings]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
