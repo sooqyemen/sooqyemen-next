@@ -1,329 +1,361 @@
-// app/chat/[id]/page.jsx
+// 📁 app/chat/[id]/page.jsx
 'use client';
 
-import { useEffect, useMemo, useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { db, firebase } from '@/lib/firebaseClient'; // ✅ compat
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import {
+  doc,
+  getDoc,
+  onSnapshot,
+  updateDoc,
+  arrayRemove,
+  arrayUnion,
+} from 'firebase/firestore';
+import { db } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import ChatBox from '@/components/Chat/ChatBox';
 
-function ChatPageContent({ chatId }) {
+// مكون للحماية من التسرب السريع (Quick Navigation)
+function ChatPageContent({ chatId, listingId, otherUid }) {
   const router = useRouter();
-  const sp = useSearchParams();
   const { user, loading: authLoading } = useAuth();
-
-  const listingId = sp?.get('listingId') || null;
-  const otherUidParam = sp?.get('otherUid') || null;
-
   const [chatData, setChatData] = useState(null);
   const [listing, setListing] = useState(null);
   const [otherUser, setOtherUser] = useState(null);
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isBlocked, setIsBlocked] = useState(false);
 
-  const isAdmin = useMemo(() => {
-    const email = String(user?.email || '').toLowerCase();
-    return email === 'mansouralbarout@gmail.com' || email === 'aboramez965@gmail.com';
-  }, [user?.email]);
-
-  // ✅ جلب بيانات المحادثة + الإعلان + الطرف الآخر (Compat)
+  // ✅ جلب بيانات المحادثة والإعلان
   useEffect(() => {
-    let mounted = true;
+    if (!chatId || authLoading) return;
 
-    async function run() {
+    const fetchInitialData = async () => {
       try {
         setLoading(true);
-        setError('');
 
-        if (!chatId) {
-          setError('الرابط غير صحيح (chatId مفقود).');
+        const chatRef = doc(db, 'chats', chatId);
+        const chatDoc = await getDoc(chatRef);
+
+        if (!chatDoc.exists()) {
+          setError('المحادثة غير موجودة أو تم حذفها');
+          setLoading(false);
           return;
         }
 
-        if (authLoading) return;
+        const chatDataLocal = { id: chatDoc.id, ...chatDoc.data() };
+        setChatData(chatDataLocal);
 
-        if (!user) {
-          router.replace('/login');
+        if (!chatDataLocal.participants?.includes(user?.uid)) {
+          setError('ليس لديك صلاحية الوصول إلى هذه المحادثة');
+          setLoading(false);
           return;
         }
 
-        const chatRef = db.collection('chats').doc(chatId);
-        const chatSnap = await chatRef.get();
-
-        // ✅ لو المحادثة غير موجودة: غالباً لم يتم إنشاء مستند chat عند الضغط "بدء محادثة"
-        if (!chatSnap.exists) {
-          setError('المحادثة غير موجودة أو لم يتم إنشاؤها بعد.');
-          return;
-        }
-
-        const chatLocal = { id: chatSnap.id, ...chatSnap.data() };
-
-        // ✅ صلاحية: لازم يكون مشارك أو أدمن
-        const participants = Array.isArray(chatLocal.participants) ? chatLocal.participants : [];
-        const canAccess = participants.includes(user.uid) || isAdmin;
-
-        if (!canAccess) {
-          setError('ليس لديك صلاحية الوصول إلى هذه المحادثة.');
-          return;
-        }
-
-        if (!mounted) return;
-        setChatData(chatLocal);
-
-        // ✅ الإعلان
+        // ✅ جلب الإعلان
         if (listingId) {
-          try {
-            const listingSnap = await db.collection('listings').doc(listingId).get();
-            if (listingSnap.exists && mounted) {
-              setListing({ id: listingSnap.id, ...listingSnap.data() });
-            }
-          } catch {}
+          const listingRef = doc(db, 'listings', listingId);
+          const listingDoc = await getDoc(listingRef);
+          if (listingDoc.exists()) setListing({ id: listingDoc.id, ...listingDoc.data() });
         }
 
         // ✅ الطرف الآخر
-        const otherUid =
-          otherUidParam || participants.find((id) => id && id !== user.uid) || null;
+        const otherUserId =
+          otherUid || chatDataLocal.participants?.find((id) => id !== user?.uid);
 
-        if (otherUid) {
-          try {
-            const otherSnap = await db.collection('users').doc(otherUid).get();
-            if (otherSnap.exists && mounted) {
-              setOtherUser({ id: otherSnap.id, ...otherSnap.data() });
-            }
-          } catch {}
+        if (otherUserId) {
+          const userRef = doc(db, 'users', otherUserId);
+          const userDoc = await getDoc(userRef);
+          if (userDoc.exists()) setOtherUser({ id: userDoc.id, ...userDoc.data() });
         }
-      } catch (e) {
-        console.error('Chat init error:', e);
-        if (!mounted) return;
-
-        const code = e?.code || '';
-        if (code === 'permission-denied') {
-          setError('تم رفض الوصول (Firestore Rules). تأكد أن المستخدم ضمن participants.');
-        } else {
-          setError('حدث خطأ في تحميل المحادثة.');
-        }
+      } catch (err) {
+        console.error('خطأ في جلب بيانات المحادثة:', err);
+        setError('حدث خطأ في تحميل المحادثة');
       } finally {
-        if (mounted) setLoading(false);
+        setLoading(false);
       }
-    }
-
-    run();
-
-    return () => {
-      mounted = false;
     };
-  }, [chatId, listingId, otherUidParam, user?.uid, authLoading, isAdmin, router]);
 
-  // ✅ الاستماع للتحديثات (Compat onSnapshot)
+    fetchInitialData();
+  }, [chatId, listingId, otherUid, user?.uid, authLoading]);
+
+  // ✅ الاستماع للتحديثات
   useEffect(() => {
     if (!chatId || !user?.uid) return;
 
-    const chatRef = db.collection('chats').doc(chatId);
+    const chatRef = doc(db, 'chats', chatId);
 
-    const unsub = chatRef.onSnapshot(
-      (snap) => {
-        if (!snap.exists) return;
+    const unsubscribe = onSnapshot(
+      chatRef,
+      (docSnap) => {
+        if (!docSnap.exists()) return;
+        const updatedChat = { id: docSnap.id, ...docSnap.data() };
+        setChatData(updatedChat);
 
-        const updated = { id: snap.id, ...snap.data() };
-        setChatData(updated);
-
-        const blockedBy = Array.isArray(updated.blockedBy) ? updated.blockedBy : [];
-        setIsBlocked(blockedBy.includes(user.uid));
+        if (updatedChat.blockedBy) {
+          setIsBlocked(updatedChat.blockedBy.includes(user.uid));
+        } else {
+          setIsBlocked(false);
+        }
       },
-      (err) => {
-        console.error('Chat snapshot error:', err);
-      }
+      (err) => console.error('خطأ في تحديث المحادثة:', err)
     );
 
-    return () => unsub();
+    return () => unsubscribe();
   }, [chatId, user?.uid]);
 
-  // ✅ تعليم كمقروء (Compat update)
+  // ✅ تعليم كمقروء
   useEffect(() => {
     if (!chatId || !user?.uid || !chatData) return;
 
-    const lastBy = chatData?.lastMessageBy;
-    if (lastBy && lastBy !== user.uid) {
-      db.collection('chats')
-        .doc(chatId)
-        .update({ [`unread.${user.uid}`]: 0 })
-        .catch(() => {});
-    }
-  }, [chatId, user?.uid, chatData?.lastMessageBy]);
+    const markAsRead = async () => {
+      try {
+        if (chatData.lastMessageBy && chatData.lastMessageBy !== user.uid) {
+          const chatRef = doc(db, 'chats', chatId);
+          await updateDoc(chatRef, { [`unread.${user.uid}`]: 0 });
+        }
+      } catch (err) {
+        console.error('خطأ في تحديث حالة القراءة:', err);
+      }
+    };
+
+    markAsRead();
+  }, [chatId, user?.uid, chatData?.lastMessageBy, chatData]);
 
   const handleToggleBlock = async () => {
-    if (!chatId || !user?.uid) return;
+    if (!chatId || !user?.uid || !chatData) return;
 
     try {
-      const ref = db.collection('chats').doc(chatId);
-      const blockedBy = Array.isArray(chatData?.blockedBy) ? chatData.blockedBy : [];
-      const currentlyBlocked = blockedBy.includes(user.uid);
+      const chatRef = doc(db, 'chats', chatId);
+      const currentlyBlocked = chatData.blockedBy?.includes(user.uid);
 
-      await ref.update({
-        blockedBy: currentlyBlocked
-          ? firebase.firestore.FieldValue.arrayRemove(user.uid)
-          : firebase.firestore.FieldValue.arrayUnion(user.uid),
-      });
-    } catch (e) {
-      console.error('toggle block error', e);
+      if (currentlyBlocked) {
+        await updateDoc(chatRef, { blockedBy: arrayRemove(user.uid) });
+        setIsBlocked(false);
+      } else {
+        await updateDoc(chatRef, { blockedBy: arrayUnion(user.uid) });
+        setIsBlocked(true);
+      }
+    } catch (err) {
+      console.error('خطأ في تعديل حالة الحجب:', err);
       alert('حدث خطأ في تعديل حالة الحجب');
     }
   };
 
+  const handleDeleteChat = async () => {
+    if (!window.confirm('هل أنت متأكد من حذف هذه المحادثة؟')) return;
+    router.push('/my-chats');
+  };
+
   if (authLoading || loading) {
     return (
-      <div className="wrap">
-        <div className="center">
-          <div className="spinner" />
-          <p>جاري تحميل المحادثة...</p>
+      <div className="chat-page">
+        <div className="loading-container">
+          <div className="spinner"></div>
+          <p className="loading-text">جاري تحميل المحادثة...</p>
         </div>
-        <style jsx>{styles}</style>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="wrap">
-        <div className="panel">
-          <div className="icon">⚠️</div>
-          <h1>حدث خطأ</h1>
-          <p className="muted">{error}</p>
-
-          <div className="row">
-            <button className="btn btnPrimary" onClick={() => router.push('/my-chats')}>
+      <div className="chat-page">
+        <div className="error-container">
+          <div className="error-icon">⚠️</div>
+          <h2 className="error-title">حدث خطأ</h2>
+          <p className="error-message">{error}</p>
+          <div className="error-actions">
+            <button className="btn btn-primary" onClick={() => router.push('/my-chats')}>
               العودة للمحادثات
             </button>
-            <button className="btn" onClick={() => window.location.reload()}>
+            <button className="btn btn-secondary" onClick={() => window.location.reload()}>
               إعادة المحاولة
             </button>
           </div>
-
-          <div className="hint">
-            إن كانت المشكلة “المحادثة غير موجودة”، لازم نضيف إنشاء مستند chat عند ضغط “بدء محادثة”.
-          </div>
         </div>
-        <style jsx>{styles}</style>
       </div>
     );
   }
 
   if (isBlocked) {
     return (
-      <div className="wrap">
-        <div className="panel">
-          <div className="icon">🚫</div>
-          <h1>المحادثة محجوبة</h1>
-          <p className="muted">لقد حجبت هذه المحادثة.</p>
-          <div className="row">
-            <button className="btn btnPrimary" onClick={handleToggleBlock}>
-              إلغاء الحجب
-            </button>
-            <button className="btn" onClick={() => router.push('/my-chats')}>
-              العودة
-            </button>
-          </div>
+      <div className="chat-page">
+        <div className="blocked-container">
+          <div className="blocked-icon">🚫</div>
+          <h2 className="blocked-title">المحادثة محجوبة</h2>
+          <p className="blocked-message">لقد حجبت هذه المحادثة.</p>
+          <button className="btn btn-primary" onClick={handleToggleBlock}>
+            إلغاء الحجب
+          </button>
         </div>
-        <style jsx>{styles}</style>
       </div>
     );
   }
 
   return (
-    <div className="chatPage">
-      <div className="chatTop">
-        <button className="back" onClick={() => router.push('/my-chats')}>←</button>
+    <div className="chat-page">
+      <div className="chat-container">
+        <header className="chat-header">
+          <div className="header-left">
+            <button className="back-btn" onClick={() => router.push('/my-chats')} aria-label="العودة">
+              ←
+            </button>
 
-        <div className="who">
-          <div className="avatar">
-            {(otherUser?.name || otherUser?.displayName || otherUser?.email || '?')
-              .toString()
-              .charAt(0)
-              .toUpperCase()}
+            {otherUser && (
+              <div className="user-info">
+                <div className="user-avatar">
+                  {otherUser.photoURL ? (
+                    <img src={otherUser.photoURL} alt={otherUser.displayName || 'مستخدم'} />
+                  ) : (
+                    <span className="avatar-placeholder">
+                      {otherUser.displayName?.charAt(0) || otherUser.email?.charAt(0) || '?'}
+                    </span>
+                  )}
+                </div>
+
+                <div className="user-details">
+                  <h1 className="user-name">
+                    {otherUser.displayName || otherUser.email || 'مستخدم'}
+                  </h1>
+                  <span className="user-status">{chatData?.lastSeen ? 'نشط الآن' : 'غير متصل'}</span>
+                </div>
+              </div>
+            )}
           </div>
-          <div className="meta">
-            <div className="name">
-              {otherUser?.name || otherUser?.displayName || otherUser?.email || 'مستخدم'}
+
+          <div className="header-right">
+            {listing && (
+              <a
+                href={`/listing/${listing.id}`}
+                className="listing-link"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span className="link-icon">📄</span>
+                <span className="link-text">عرض الإعلان</span>
+              </a>
+            )}
+
+            <div className="chat-actions">
+              <button className="action-btn" onClick={handleToggleBlock} title="حجب/إلغاء الحجب">
+                {isBlocked ? '🔓' : '🚫'}
+              </button>
+              <button className="action-btn" onClick={handleDeleteChat} title="حذف">
+                🗑️
+              </button>
+              <button className="action-btn" onClick={() => window.print()} title="طباعة">
+                🖨️
+              </button>
             </div>
-            <div className="mutedSmall">
-              {listing ? (
-                <Link className="link" href={`/listing/${listing.id}`} target="_blank">
-                  عرض الإعلان
-                </Link>
+          </div>
+        </header>
+
+        {listing && (
+          <div className="listing-preview">
+            <div className="listing-image">
+              {listing.images?.[0] ? (
+                <img src={listing.images[0]} alt={listing.title} />
               ) : (
-                '—'
+                <div className="image-placeholder">🖼️</div>
               )}
             </div>
+
+            <div className="listing-info">
+              <h3 className="listing-title">{listing.title}</h3>
+              <p className="listing-price">
+                {new Intl.NumberFormat('ar-YE', { style: 'currency', currency: 'YER' }).format(
+                  listing.priceYER || 0
+                )}
+              </p>
+              <p className="listing-location">📍 {listing.city || 'غير محدد'}</p>
+            </div>
           </div>
+        )}
+
+        <div className="chat-area">
+          <Suspense fallback={<div className="loading-messages">جاري تحميل الرسائل...</div>}>
+            <ChatBox
+              chatId={chatId}
+              listingId={listingId}
+              otherUid={otherUser?.id}
+              isBlocked={isBlocked}
+            />
+          </Suspense>
         </div>
 
-        <div className="actions">
-          <button className="act" onClick={handleToggleBlock} title="حجب/إلغاء الحجب">
-            🚫
+        <footer className="chat-footer">
+          <div className="footer-info">
+            <span className="info-item">
+              <span className="info-icon">🔒</span>
+              <span className="info-text">المحادثة مشفرة</span>
+            </span>
+            <span className="info-item">
+              <span className="info-icon">💾</span>
+              <span className="info-text">يتم حفظ الرسائل تلقائياً</span>
+            </span>
+          </div>
+
+          <button className="report-btn" onClick={() => alert('سيتم فتح نموذج الإبلاغ قريباً')}>
+            ⚠️ الإبلاغ عن محتوى غير لائق
           </button>
-        </div>
+        </footer>
       </div>
-
-      <div className="chatBody">
-        <Suspense fallback={<div className="loadingMsgs">جاري تحميل الرسائل...</div>}>
-          <ChatBox
-            chatId={chatId}
-            listingId={listingId}
-            otherUid={otherUser?.id || otherUidParam || ''}
-            isBlocked={isBlocked}
-          />
-        </Suspense>
-      </div>
-
-      <style jsx>{styles}</style>
     </div>
   );
 }
 
-export default function ChatPage({ params }) {
-  // params في App Router يجي صحيح — نستخدم decodeURIComponent بحذر
+export default function ChatPage() {
+  const router = useRouter();
+  const params = useParams();
+  const sp = useSearchParams();
+
+  // id قد يأتي string أو array
+  const raw = Array.isArray(params?.id) ? params.id[0] : params?.id;
+
   let chatId = '';
   try {
-    chatId = decodeURIComponent(params?.id || '');
+    chatId = decodeURIComponent(String(raw || ''));
   } catch {
-    chatId = String(params?.id || '');
+    chatId = String(raw || '');
+  }
+
+  const listingId = sp?.get('listingId') ? String(sp.get('listingId')) : null;
+  const otherUid = sp?.get('otherUid') ? String(sp.get('otherUid')) : null;
+
+  // ✅ لو chatId مفقود لا نخلي الصفحة تلف للأبد
+  if (!chatId) {
+    return (
+      <div className="chat-page">
+        <div className="error-container">
+          <div className="error-icon">⚠️</div>
+          <h2 className="error-title">حدث خطأ</h2>
+          <p className="error-message">الرابط غير صحيح (chatId مفقود).</p>
+          <div className="error-actions">
+            <button className="btn btn-primary" onClick={() => router.push('/my-chats')}>
+              العودة للمحادثات
+            </button>
+            <button className="btn btn-secondary" onClick={() => window.location.reload()}>
+              إعادة المحاولة
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <Suspense fallback={<div style={{ padding: 20 }}>جاري التحميل...</div>}>
-      <ChatPageContent chatId={chatId} />
+    <Suspense
+      fallback={
+        <div className="chat-page">
+          <div className="loading-container">
+            <div className="spinner"></div>
+            <p>جاري تحميل المحادثة...</p>
+          </div>
+        </div>
+      }
+    >
+      <ChatPageContent chatId={chatId} listingId={listingId} otherUid={otherUid} />
     </Suspense>
   );
 }
-
-const styles = `
-.wrap{min-height: calc(100vh - 60px);padding: 24px 16px 48px;max-width: 1100px;margin: 0 auto;}
-.center{margin-top:60px;display:flex;flex-direction:column;align-items:center;gap:10px;color:#64748b;}
-.spinner{width:40px;height:40px;border:3px solid rgba(0,0,0,.08);border-top:3px solid rgba(59,130,246,1);border-radius:50%;animation: spin 1s linear infinite;}
-@keyframes spin{to{transform:rotate(360deg)}}
-.panel{margin-top:60px;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:18px;padding:22px;text-align:center;box-shadow: 0 10px 26px rgba(0,0,0,.06);}
-.icon{font-size:2.2rem;margin-bottom:10px;}
-.row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:12px;}
-.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 12px;border-radius:12px;border:1px solid rgba(0,0,0,.10);background:#fff;color:#0f172a;font-weight:900;cursor:pointer;}
-.btnPrimary{background:#3b82f6;color:#fff;}
-.muted{color:#64748b;font-weight:850;line-height:1.8;}
-.hint{margin-top:12px;color:#64748b;font-weight:900;font-size:.92rem}
-
-.chatPage{max-width: 1100px;margin: 0 auto;padding: 14px 12px 22px;}
-.chatTop{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:12px;}
-.back{width:40px;height:40px;border-radius:12px;border:1px solid rgba(0,0,0,.10);background:#fff;font-weight:950;cursor:pointer;}
-.who{display:flex;align-items:center;gap:10px;flex:1;min-width:0;}
-.avatar{width:40px;height:40px;border-radius:14px;display:flex;align-items:center;justify-content:center;background: rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.18);font-weight:950;}
-.meta{min-width:0;}
-.name{font-weight:950;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.mutedSmall{color:#64748b;font-weight:850;font-size:.9rem;}
-.link{color:#2563eb;text-decoration:none;font-weight:950;}
-.link:hover{text-decoration:underline;}
-.actions{display:flex;gap:8px;}
-.act{width:40px;height:40px;border-radius:12px;border:1px solid rgba(0,0,0,.10);background:#fff;cursor:pointer;}
-.chatBody{margin-top:10px;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;overflow:hidden;min-height: calc(100vh - 170px);}
-.loadingMsgs{padding:16px;color:#64748b;font-weight:900;}
-`;
