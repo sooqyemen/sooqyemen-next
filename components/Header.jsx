@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useUserProfile } from '@/lib/useUserProfile';
-import YemenMarketLogo from '@/components/YemenMarketLogo';
 
 // إيميلات المدراء
 const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
@@ -25,8 +24,7 @@ export default function Header() {
 
   const closeTimerRef = useRef(null);
 
-  // التحقق إذا كان المستخدم مديراً
-  const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase());
+  const isAdmin = user?.email && ADMIN_EMAILS.includes(String(user.email).toLowerCase());
 
   const getDisplayName = () => {
     if (error === 'timeout') return 'مستخدم';
@@ -108,6 +106,34 @@ export default function Header() {
     }
   };
 
+  const Logo = ({ variant = 'desktop' }) => {
+    // الشعار الأساسي في الهيدر
+    // لازم يكون موجود داخل public/: /logo-horizontal-800.png
+    const height = variant === 'mobile' ? 34 : 40;
+
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+        {/* لو تحب أيقونة صغيرة بجانب الشعار في الجوال */}
+        {variant === 'mobile' && (
+          <img
+            src="/icon-192.png"
+            alt="سوق اليمن"
+            width={28}
+            height={28}
+            style={{ display: 'block', borderRadius: 8 }}
+          />
+        )}
+
+        <img
+          src="/logo-horizontal-800.png"
+          alt="سوق اليمن"
+          style={{ height, width: 'auto', display: 'block' }}
+          loading="eager"
+        />
+      </span>
+    );
+  };
+
   return (
     <>
       <header className="header">
@@ -118,9 +144,8 @@ export default function Header() {
               <span className="menu-icon">☰</span>
             </button>
 
-            {/* ✅ شعار الموبايل */}
-            <Link href="/" className="site-title" aria-label="الانتقال للرئيسية">
-              <YemenMarketLogo compact />
+            <Link href="/" className="site-title" aria-label="الذهاب للرئيسية">
+              <Logo variant="mobile" />
             </Link>
 
             <Link href="/add" className="add-btn-mobile" aria-label="أضف إعلان جديد">
@@ -130,9 +155,8 @@ export default function Header() {
 
           {/* Desktop */}
           <div className="desktop-nav">
-            {/* ✅ شعار الديسكتوب */}
-            <Link href="/" className="logo" aria-label="الانتقال للرئيسية">
-              <YemenMarketLogo />
+            <Link href="/" className="logo" aria-label="الذهاب للرئيسية">
+              <Logo variant="desktop" />
             </Link>
 
             <nav className="nav-links">
