@@ -4,7 +4,7 @@
 import Link from 'next/link';
 
 export default function TermsPage() {
-  const lastUpdated = '15 يناير 2024';
+  const lastUpdated = '13 يناير 2026';
 
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 40 }}>
