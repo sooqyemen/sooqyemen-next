@@ -2,6 +2,7 @@
    📁 /app/home.css - أنماط سوق اليمن الرئيسية (Scoped Fix)
    ✅ تم تعديل الملف ليؤثر على الصفحة الرئيسية فقط
    ✅ Performance optimizations added
+   ✅ Contrast fixes for Lighthouse / PageSpeed
    ============================================= */
 
 /* ===== 1. متغيرات التصميم الأساسية (آمنة عالميًا) ===== */
@@ -16,8 +17,11 @@
 
   --text-primary: #0f172a;
   --text-secondary: #334155;
-  --text-muted: #64748b;
-  --text-light: #94a3b8;
+
+  /* ✅ Contrast fix: darker muted + usable placeholder */
+  --text-muted: #475569;   /* كان #64748b */
+  --text-light: #64748b;   /* كان #94a3b8 (فاتح جدًا) */
+
   --text-white: #ffffff;
 
   --bg-primary: #ffffff;
@@ -216,7 +220,8 @@
 
 .home-page .search-icon {
   margin-left: 0.5rem;
-  color: var(--text-muted);
+  /* ✅ Contrast fix */
+  color: var(--text-secondary);
 }
 
 .home-page .search-input {
@@ -231,7 +236,9 @@
 }
 
 .home-page .search-input::placeholder {
+  /* ✅ Contrast fix */
   color: var(--text-light);
+  opacity: 1;
 }
 
 .home-page .search-button {
@@ -240,7 +247,7 @@
   border: none;
   border-radius: 40px;
   padding: 0.75rem 1.5rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
   font-size: 0.9rem;
@@ -396,7 +403,10 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: var(--text-muted);
+
+  /* ✅ Contrast fix */
+  color: var(--text-secondary);
+
   transition: all var(--transition-base);
 }
 
@@ -408,7 +418,7 @@
   background: var(--bg-primary);
   color: var(--color-primary-light);
   box-shadow: var(--shadow-sm);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .home-page .view-toggle-icon {
@@ -418,7 +428,19 @@
 .home-page .results-count {
   font-size: 0.875rem;
   color: var(--text-secondary);
-  font-weight: 600;
+  font-weight: 700;
+}
+
+/* ✅ If you have "results-number" span in the UI */
+.home-page .results-number {
+  color: var(--text-primary);
+  font-weight: 800;
+}
+
+/* ✅ If you have "view-toggle-label" text in the UI */
+.home-page .view-toggle-label {
+  color: var(--text-secondary);
+  font-weight: 800;
 }
 
 /* ===== 6. Cards ===== */
@@ -495,7 +517,7 @@
   padding: 0.25rem 0.75rem;
   border-radius: var(--radius-full);
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 700;
   z-index: 2;
 }
 
@@ -555,7 +577,8 @@
 }
 
 .home-page .location-icon {
-  color: var(--text-light);
+  /* ✅ Contrast fix */
+  color: var(--text-secondary);
   font-size: 0.9rem;
 }
 
@@ -747,7 +770,7 @@
   border: none;
   border-radius: var(--radius-md);
   padding: 0.75rem 1.5rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   text-decoration: none;
   display: inline-block;
@@ -772,7 +795,7 @@
   border: none;
   border-radius: var(--radius-full);
   padding: 1rem 1.75rem;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
   box-shadow: var(--shadow-primary);
   z-index: 100;
