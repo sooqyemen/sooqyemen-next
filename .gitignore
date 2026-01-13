@@ -14,3 +14,10 @@ yarn-error.log*
 .env.local
 .env.production
 .env.development
+# Firebase Admin key (DO NOT COMMIT)
+scripts/serviceAccount.json
+git add .gitignore
+git commit -m "Ignore Firebase service account key"
+git push
+scripts/serviceAccount.json
+scripts/serviceAccount.local.json
