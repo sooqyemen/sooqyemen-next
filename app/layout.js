@@ -10,7 +10,8 @@ export const metadata = {
     default: 'سوق اليمن - أكبر منصة للإعلانات والمزادات في اليمن',
     template: '%s | سوق اليمن',
   },
-  description: 'أكبر منصة للإعلانات والمزادات في اليمن - بيع وشراء السيارات، العقارات، الجوالات، الإلكترونيات وأكثر',
+  description:
+    'أكبر منصة للإعلانات والمزادات في اليمن - بيع وشراء السيارات، العقارات، الجوالات، الإلكترونيات وأكثر',
   keywords: ['سوق اليمن', 'إعلانات اليمن', 'بيع وشراء', 'مزادات', 'سيارات', 'عقارات', 'جوالات'],
   authors: [{ name: 'سوق اليمن' }],
   creator: 'سوق اليمن',
@@ -41,9 +42,9 @@ export const metadata = {
     description: 'أكبر منصة للإعلانات والمزادات في اليمن - بيع وشراء السيارات، العقارات، الجوالات، الإلكترونيات وأكثر',
     images: [
       {
-        url: '/icon-512.png',
-        width: 512,
-        height: 512,
+        url: '/og-image-1200x630.png',
+        width: 1200,
+        height: 630,
         alt: 'سوق اليمن',
       },
     ],
@@ -52,7 +53,7 @@ export const metadata = {
     card: 'summary_large_image',
     title: 'سوق اليمن - أكبر منصة للإعلانات والمزادات في اليمن',
     description: 'أكبر منصة للإعلانات والمزادات في اليمن',
-    images: ['/icon-512.png'],
+    images: ['/og-image-1200x630.png'],
   },
   manifest: '/manifest.json',
   alternates: {
@@ -73,42 +74,49 @@ export const metadata = {
   },
 };
 
-// ✅ الطريقة الصحيحة للـ viewport في Next.js App Router
-export const viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 5,
-  viewportFit: 'cover',
-};
-
 export default function RootLayout({ children }) {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://sooqyemen.com';
+
   return (
-    <html lang="ar" dir="rtl" suppressHydrationWarning>
+    <html lang="ar" dir="rtl">
       <head>
         <meta charSet="utf-8" />
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover"
+        />
 
-        {/* Theme color */}
         <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
         <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
 
-        {/* PWA / iOS */}
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="standalone" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-
-        {/* Helpers */}
         <meta name="format-detection" content="telephone=no" />
-        <meta httpEquiv="x-dns-prefetch-control" content="on" />
 
         {/* Preconnect to critical domains */}
         <link rel="preconnect" href="https://firebasestorage.googleapis.com" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://firebasestorage.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <meta httpEquiv="x-dns-prefetch-control" content="on" />
+
+        {/* ✅ Structured Data (يساعد جوجل يفهم شعار الموقع) */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'Organization',
+              name: 'سوق اليمن',
+              url: siteUrl,
+              logo: `${siteUrl}/icon-512.png`,
+            }),
+          }}
+        />
       </head>
 
       <body>
         <WebVitals />
-
         <a href="#main-content" className="skip-to-content">
           الانتقال إلى المحتوى الرئيسي
         </a>
