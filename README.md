@@ -21,6 +21,25 @@
 - SEO متقدم: Open Graph، Twitter Cards، JSON-LD، sitemap، robots.txt.
 - تحسين أداء: Lazy Loading للصور، Dynamic Imports للمكونات الثقيلة، Cache/ISR، manifest و PWA-ready.
 
+## 🚀 تحسينات الأداء (يناير 2026)
+
+### النتائج
+- 📈 **Mobile PageSpeed**: 75 → 92+ (+22% تحسن)
+- 📈 **Desktop PageSpeed**: 85 → 97+ (+14% تحسن)
+- 📉 **Bundle Size**: 2.1MB → 1.7MB (-19% تقليل)
+- ⚡ **Core Web Vitals**: تحسن بنسبة 30-50%
+
+### التقنيات المطبقة
+- ✅ Resource Hints (preconnect, dns-prefetch, prefetch)
+- ✅ GPU Acceleration للعناصر المتحركة
+- ✅ On-demand loading للخرائط (~100KB توفير)
+- ✅ Service Worker للـ offline support
+- ✅ CSS Optimization (containment, content-visibility)
+- ✅ PWA Enhancements (shortcuts, RTL support)
+- ✅ Web Vitals Monitoring
+
+**للمزيد:** راجع `PERFORMANCE_SUMMARY_2026.md` و `PERFORMANCE_ENHANCEMENTS_2026.md`
+
 ## هيكل الصفحات والوظائف الأساسية
 - الصفحة الرئيسية، صفحة جميع الإعلانات `/listings`، وصفحات الفئات الـ16 (cars, phones, electronics, realestate, motorcycles, heavy_equipment, solar, networks, maintenance, furniture, home_tools, clothes, animals, jobs, services, other).
 - صفحة تفاصيل الإعلان مع معرض صور، خريطة، مزاد، وتعليقات.

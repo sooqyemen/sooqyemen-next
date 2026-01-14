@@ -49,6 +49,7 @@ export default function AddPage() {
 
   const [coords, setCoords] = useState(null); // [lat, lng]
   const [locationLabel, setLocationLabel] = useState('');
+  const [showMap, setShowMap] = useState(false); // ✅ للتحميل عند الطلب
 
   const [images, setImages] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
@@ -637,7 +638,35 @@ export default function AddPage() {
           </div>
 
           <div className="map-wrapper">
-            <LocationPicker value={coords} onChange={onPick} />
+            {!showMap ? (
+              <div className="map-placeholder" style={{
+                padding: '60px 20px',
+                textAlign: 'center',
+                background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                borderRadius: '12px',
+                border: '2px dashed #0ea5e9'
+              }}>
+                <div style={{ fontSize: '48px', marginBottom: '16px' }} role="img" aria-label="أيقونة الخريطة">🗺️</div>
+                <button
+                  type="button"
+                  onClick={() => setShowMap(true)}
+                  className="btn btnPrimary"
+                  style={{
+                    padding: '12px 24px',
+                    fontSize: '16px',
+                    fontWeight: 'bold'
+                  }}
+                  aria-label="تحميل الخريطة لتحديد الموقع"
+                >
+                  <span role="img" aria-label="أيقونة موقع">📍</span> تحميل الخريطة
+                </button>
+                <p style={{ marginTop: '12px', color: '#64748b', fontSize: '14px' }}>
+                  اضغط لتحديد موقع الإعلان على الخريطة
+                </p>
+              </div>
+            ) : (
+              <LocationPicker value={coords} onChange={onPick} />
+            )}
           </div>
 
           {locationLabel && (

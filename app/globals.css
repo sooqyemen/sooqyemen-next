@@ -107,6 +107,13 @@ img{
   /* Performance optimizations */
   contain: layout style paint;
   content-visibility: auto;
+  /* GPU acceleration for smooth transitions */
+  transform: translateZ(0);
+}
+
+.card:hover,
+.card:active {
+  will-change: transform;
 }
 
 .row{
@@ -145,6 +152,13 @@ img{
   /* Mobile performance */
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  /* GPU acceleration */
+  transform: translateZ(0);
+}
+
+.btn:hover,
+.btn:active {
+  will-change: transform;
 }
 .btn:focus-visible{
   outline: 2px solid #3b82f6;

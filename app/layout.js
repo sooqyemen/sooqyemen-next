@@ -92,7 +92,14 @@ export default function RootLayout({ children }) {
         {/* Performance hints */}
         <link rel="preconnect" href="https://firebasestorage.googleapis.com" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://firebasestorage.googleapis.com" />
+        <link rel="preconnect" href="https://www.gstatic.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://www.gstatic.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <meta httpEquiv="x-dns-prefetch-control" content="on" />
+        
+        {/* Prefetch critical pages */}
+        <link rel="prefetch" href="/listings" />
+        <link rel="prefetch" href="/add" />
       </head>
 
       <body>
