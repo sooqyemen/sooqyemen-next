@@ -3,6 +3,14 @@
 ## Overview
 This document explains the Firestore security rules for the chat system.
 
+## Performance Note
+The rules use `get()` calls to verify participants, which incurs a document read for each message operation. For high-volume chat applications, consider:
+- Caching participant information in client-side state
+- Using Firebase Functions for message validation
+- Optimizing with custom claims for frequently accessed data
+
+For typical usage, the current implementation provides good security with acceptable performance.
+
 ## Rules Structure
 
 ### Chats Collection (`/chats/{chatId}`)
