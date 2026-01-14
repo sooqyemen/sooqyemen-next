@@ -49,11 +49,29 @@ export default function ChatList() {
     <div style={{ display: 'grid', gap: 10 }}>
       {items.map((c) => {
         const last = c.lastMessageText ? String(c.lastMessageText) : 'بدون رسائل';
+        const title = c.listingTitle ? `📋 ${c.listingTitle}` : '💬 محادثة';
+        const unreadCount = c.unread?.[uid] || 0;
+        
         return (
-          <Link key={c.id} href={`/chat/${c.id}`} className="card" style={{ padding: 12, textDecoration: 'none' }}>
-            <div style={{ fontWeight: 900, marginBottom: 4 }}>💬 محادثة</div>
+          <Link key={c.id} href={`/chat/${c.id}`} className="card" style={{ padding: 12, textDecoration: 'none', position: 'relative' }}>
+            <div style={{ fontWeight: 900, marginBottom: 4 }}>
+              {title}
+              {unreadCount > 0 && (
+                <span style={{ 
+                  marginLeft: 8, 
+                  background: '#ef4444', 
+                  color: 'white', 
+                  padding: '2px 8px', 
+                  borderRadius: 12, 
+                  fontSize: 11,
+                  fontWeight: 'bold'
+                }}>
+                  {unreadCount}
+                </span>
+              )}
+            </div>
             <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>{last}</div>
-            <div className="muted" style={{ fontSize: 12, direction: 'ltr' }}>{c.id}</div>
+            <div className="muted" style={{ fontSize: 11, direction: 'ltr' }}>{c.id}</div>
           </Link>
         );
       })}
