@@ -1,157 +1,311 @@
+// app/chat/[id]/page.jsx
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { db, auth, firebase } from '@/lib/firebaseClient'; 
-// تأكد من أن ملف CSS موجود في نفس المجلد
-import './chatPage.css';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { db, firebase } from '@/lib/firebaseClient';
+import { useAuth } from '@/lib/useAuth';
+
+function safeName(user) {
+  if (user?.displayName) return user.displayName;
+  if (user?.email) return String(user.email).split('@')[0];
+  return 'مستخدم';
+}
 
 export default function ChatPage({ params }) {
-  // التعامل مع params في Next.js الحديث
-  // ملاحظة: في النسخ الأحدث قد تحتاج لـ React.use() لكن سنستخدم الطريقة التقليدية الآن
-  const chatId = params.id; 
+  // ✅ مهم: Next 15/16 قد يرسل params بشكل Promise في بعض الحالات
+  const [chatId, setChatId] = useState(null);
 
-  const [user, setUser] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(true);
-  
-  // مرجع للتمرير التلقائي لأسفل الشاشة
-  const messagesEndRef = useRef(null);
-
-  // 1. التحقق من تسجيل الدخول
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((u) => {
-      setUser(u);
-      if (!u) setLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
+    let alive = true;
 
-  // 2. جلب الرسائل لحظياً (Real-time) باستخدام صيغة Compat
+    (async () => {
+      try {
+        const p = await params;
+        const id = p?.id ? String(p.id) : null;
+        if (alive) setChatId(id);
+      } catch {
+        if (alive) setChatId(null);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [params]);
+
+  const { user } = useAuth();
+  const uid = user?.uid || null;
+
+  const [text, setText] = useState('');
+  const [msgs, setMsgs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const endRef = useRef(null);
+
+  const chatRef = useMemo(() => {
+    if (!chatId) return null;
+    return db.collection('chats').doc(String(chatId));
+  }, [chatId]);
+
+  const messagesRef = useMemo(() => {
+    if (!chatRef) return null;
+    return chatRef.collection('messages');
+  }, [chatRef]);
+
+  // ✅ 1) التحقق + تجهيز الشات (حتى ما يلف للأبد)
   useEffect(() => {
     if (!chatId) return;
 
-    const unsubscribe = db
-      .collection('chats')
-      .doc(chatId)
-      .collection('messages')
-      .orderBy('createdAt', 'asc') // مهم جداً: ترتيب الرسائل زمنياً
-      .onSnapshot((snapshot) => {
-        const fetchedMessages = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setMessages(fetchedMessages);
-        setLoading(false);
-      }, (error) => {
-        console.error("Error fetching messages:", error);
-        setLoading(false);
-      });
+    (async () => {
+      try {
+        const snap = await chatRef.get();
 
-    return () => unsubscribe();
-  }, [chatId]);
+        if (!snap.exists) {
+          // الشات غير موجود
+          setErrorMsg('المحادثة غير موجودة أو الرابط غير صحيح.');
+          setLoading(false);
+          return;
+        }
 
-  // 3. التمرير التلقائي عند وصول رسالة جديدة
+        // فتح المحادثة = تصفير غير المقروء لك
+        if (uid) {
+          await chatRef.set(
+            {
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+              participantNames: { [uid]: safeName(user) },
+              unread: { [uid]: 0 },
+            },
+            { merge: true }
+          );
+        }
+
+        setErrorMsg('');
+      } catch (e) {
+        console.error('Chat init failed', e);
+        setErrorMsg('حدث خطأ أثناء فتح المحادثة.');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [chatId, chatRef, uid, user]);
+
+  // ✅ 2) الاستماع للرسائل
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (!messagesRef) return;
 
-  // 4. دالة إرسال الرسالة
-  const handleSendMessage = async (e) => {
-    e.preventDefault(); // منع إعادة تحميل الصفحة
+    const unsub = messagesRef
+      .orderBy('createdAt', 'asc')
+      .limit(200)
+      .onSnapshot(
+        (snap) => {
+          const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setMsgs(arr);
+          setLoading(false);
+        },
+        (e) => {
+          console.error('listen messages failed', e);
+          setErrorMsg('تعذر تحميل الرسائل.');
+          setLoading(false);
+        }
+      );
 
-    if (!newMessage.trim() || !user) return;
+    return () => unsub();
+  }, [messagesRef]);
 
+  // ✅ 3) سكرول تلقائي
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [msgs]);
+
+  const formatTime = (ts) => {
+    if (!ts) return '';
     try {
-      await db.collection('chats').doc(chatId).collection('messages').add({
-        text: newMessage,
-        senderId: user.uid,
-        senderEmail: user.email, // اختياري
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(), // توقيت السيرفر
-      });
-      setNewMessage(''); // مسح الحقل بعد الإرسال
-    } catch (error) {
-      console.error("Error sending message: ", error);
+      const d = ts.toDate();
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
     }
   };
 
-  // تنسيق الوقت (مثال: 10:30 PM)
-  const formatTime = (timestamp) => {
-    if (!timestamp) return '...';
-    // التعامل مع timestamp الخاص بـ Firebase
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // ✅ 4) إرسال رسالة
+  const send = async (e) => {
+    e?.preventDefault?.();
+
+    if (!uid) {
+      alert('سجّل دخولك لإرسال رسالة');
+      return;
+    }
+    if (!chatRef || !messagesRef) {
+      alert('الرابط غير صحيح (chatId مفقود).');
+      return;
+    }
+
+    const t = String(text || '').trim();
+    if (!t) return;
+
+    setSending(true);
+    setText('');
+
+    try {
+      // إضافة الرسالة
+      await messagesRef.add({
+        text: t,
+        from: uid,
+        fromName: safeName(user),
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+
+      // تحديث بيانات الشات (آخر رسالة + غير المقروء)
+      const snap = await chatRef.get();
+      const data = snap.data() || {};
+      const participants = Array.isArray(data.participants) ? data.participants : [];
+      const otherUid = participants.find((p) => String(p) !== String(uid)) || null;
+
+      await chatRef.set(
+        {
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          lastMessageText: t,
+          lastMessageBy: uid,
+          participantNames: { [uid]: safeName(user) },
+          unread: {
+            ...(otherUid ? { [otherUid]: firebase.firestore.FieldValue.increment(1) } : {}),
+            [uid]: 0,
+          },
+        },
+        { merge: true }
+      );
+    } catch (e2) {
+      console.error('send failed', e2);
+      alert('فشل إرسال الرسالة');
+      // رجّع النص لو تحب
+      setText(t);
+    } finally {
+      setSending(false);
+    }
   };
 
-  // شاشة التحميل أو الخطأ
-  if (loading) return <div className="chat-page"><div className="loading-container"><div className="spinner"></div></div></div>;
-  if (!user) return <div className="chat-page"><div className="error-container">يرجى تسجيل الدخول.</div></div>;
+  // حالات عرض واضحة بدل اللوب
+  if (!chatId) {
+    return (
+      <div className="container" style={{ padding: 16 }}>
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ fontWeight: 900, marginBottom: 6 }}>💬 المحادثة</div>
+          <div className="muted">الرابط غير صحيح (chatId مفقود).</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="container" style={{ padding: 16 }}>
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ fontWeight: 900, marginBottom: 6 }}>💬 المحادثة</div>
+          <div className="muted">يرجى تسجيل الدخول لبدء المحادثة.</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="chat-page">
-      <div className="chat-container">
-        
-        {/* --- Header: باستخدام كلاساتك الأصلية --- */}
-        <div className="chat-header">
-          <div className="header-left">
-            <button className="back-btn" onClick={() => window.history.back()}>➜</button>
-            <div className="user-info">
-              <div className="user-avatar">
-                 {/* صورة افتراضية أو صورة المستخدم */}
-                 <img src="https://via.placeholder.com/48" alt="User" />
-              </div>
-              <div className="user-details">
-                <p className="user-name">مستخدم سوق اليمن</p>
-                <span className="user-status">متصل الآن</span>
+    <div className="container" style={{ padding: 16 }}>
+      <div className="card" style={{ padding: 14 }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              className="btn"
+              onClick={() => window.history.back()}
+              type="button"
+              style={{ padding: '6px 10px' }}
+              aria-label="رجوع"
+            >
+              ←
+            </button>
+
+            <div>
+              <div style={{ fontWeight: 900 }}>المحادثة</div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                {chatId}
               </div>
             </div>
           </div>
         </div>
 
-        {/* --- منطقة المحادثة --- */}
-        <div className="chat-area">
-          <div className="messages-list">
-            {messages.length === 0 && (
-                <div style={{textAlign: 'center', padding: '20px', color: '#888'}}>
-                    لا توجد رسائل بعد، ابدأ المحادثة!
-                </div>
-            )}
-            
-            {messages.map((msg) => {
-              const isMyMessage = msg.senderId === user.uid;
+        <div style={{ height: 10 }} />
+
+        {/* Body */}
+        <div
+          style={{
+            border: '1px solid #e5e7eb',
+            borderRadius: 12,
+            padding: 10,
+            height: 520,
+            overflowY: 'auto',
+            background: '#fff',
+          }}
+        >
+          {loading ? (
+            <div className="muted">جاري تحميل الرسائل...</div>
+          ) : errorMsg ? (
+            <div className="muted">{errorMsg}</div>
+          ) : msgs.length === 0 ? (
+            <div className="muted">ابدأ أول رسالة 👇</div>
+          ) : (
+            msgs.map((m) => {
+              const mine = String(m.from) === String(uid);
               return (
-                <div 
-                  key={msg.id} 
-                  className={`message-bubble ${isMyMessage ? 'message-own' : 'message-other'}`}
+                <div
+                  key={m.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: mine ? 'flex-start' : 'flex-end',
+                    marginBottom: 8,
+                  }}
                 >
-                  <div>{msg.text}</div>
-                  <span className="msg-time">{formatTime(msg.createdAt)}</span>
+                  <div
+                    style={{
+                      maxWidth: '78%',
+                      padding: '8px 10px',
+                      borderRadius: 12,
+                      background: mine ? '#eef2ff' : '#f3f4f6',
+                      border: '1px solid #e5e7eb',
+                      whiteSpace: 'pre-wrap',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 2, opacity: 0.85 }}>
+                      {mine ? 'أنت' : m.fromName || 'مستخدم'}
+                    </div>
+                    <div style={{ fontSize: 14 }}>{m.text}</div>
+                    <div className="muted" style={{ fontSize: 11, marginTop: 4, textAlign: 'left' }}>
+                      {formatTime(m.createdAt)}
+                    </div>
+                  </div>
                 </div>
               );
-            })}
-            {/* عنصر مخفي لضمان التمرير للأسفل */}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* --- نموذج الإرسال --- */}
-          <form className="chat-input-area" onSubmit={handleSendMessage}>
-            <input
-              type="text"
-              className="chat-input"
-              placeholder="اكتب رسالتك هنا..."
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-            />
-            <button 
-              type="submit" 
-              className="send-btn" 
-              disabled={!newMessage.trim()}
-            >
-              ➤
-            </button>
-          </form>
+            })
+          )}
+          <div ref={endRef} />
         </div>
 
+        <div style={{ height: 10 }} />
+
+        {/* Input */}
+        <form className="row" style={{ gap: 8 }} onSubmit={send}>
+          <input
+            className="input"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="اكتب رسالة..."
+            disabled={sending || !!errorMsg}
+          />
+          <button className="btn btnPrimary" type="submit" disabled={sending || !text.trim() || !!errorMsg}>
+            {sending ? '...' : 'إرسال'}
+          </button>
+        </form>
       </div>
     </div>
   );
