@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 
@@ -11,7 +12,8 @@ function safeName(user) {
   return 'مستخدم';
 }
 
-export default function ChatPage({ params }) {
+export default function ChatPage() {
+  const params = useParams();
   const chatId = params?.id ? String(params.id) : '';
 
   const { user } = useAuth();
@@ -57,7 +59,6 @@ export default function ChatPage({ params }) {
           await chatRef.set(
             {
               updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-              participantNames: { [uid]: safeName(user) },
               unread: { [uid]: 0 },
             },
             { merge: true }
@@ -132,11 +133,10 @@ export default function ChatPage({ params }) {
     setText('');
 
     try {
-      // أضف الرسالة (نرسل senderUid لتوافق rules)
+      // أضف الرسالة (نستخدم from لتوافق موحد)
       await messagesRef.add({
         text: t,
-        senderUid: uid,
-        senderName: safeName(user),
+        from: uid,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       });
 
@@ -151,7 +151,6 @@ export default function ChatPage({ params }) {
           updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
           lastMessageText: t,
           lastMessageBy: uid,
-          participantNames: { [uid]: safeName(user) },
           unread: {
             ...(otherUid ? { [otherUid]: firebase.firestore.FieldValue.increment(1) } : {}),
             [uid]: 0,

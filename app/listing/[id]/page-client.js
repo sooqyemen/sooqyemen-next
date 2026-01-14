@@ -8,6 +8,8 @@ import { useRouter } from 'next/navigation';
 import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import { logListingView } from '@/lib/analytics';
+import { makeChatId } from '@/lib/chatId';
+import { ensureChatDoc } from '@/lib/chatService';
 
 // Components
 import Price from '@/components/Price';
@@ -71,13 +73,6 @@ function normalizeLatLng(input) {
 }
 
 // --- دوال مساعدة ---
-
-function makeChatId(uid1, uid2, listingId) {
-  const a = String(uid1 || '');
-  const b = String(uid2 || '');
-  const sorted = [a, b].sort().join('_');
-  return `${sorted}__${listingId}`;
-}
 
 function readViewCache() {
   try {
@@ -345,35 +340,27 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
     if (!sellerUid) return setChatErr('لا يمكن تحديد البائع');
     if (isOwner) return setChatErr('لا يمكنك مراسلة نفسك');
 
-    const cid = makeChatId(user.uid, sellerUid, listing.id);
-
     try {
       setStartingChat(true);
-      await db
-        .collection('chats')
-        .doc(cid)
-        .set(
-          {
-            participants: [user.uid, sellerUid],
-            listingId: listing.id,
-            listingTitle: String(listing.title || ''),
-            sellerUid,
-            buyerUid: user.uid,
-            sellerEmail: String(listing.userEmail || ''),
-            buyerEmail: String(user.email || ''),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
+      
+      // Generate deterministic chatId
+      const cid = makeChatId(user.uid, sellerUid, listing.id);
+      
+      // Ensure chat document exists
+      await ensureChatDoc(cid, user.uid, sellerUid, {
+        listingId: listing.id,
+        listingTitle: String(listing.title || ''),
+      });
 
-      router.push(`/chat/${encodeURIComponent(cid)}`);
+      // Navigate to chat
+      router.push(`/chat/${cid}`);
     } catch (e) {
-      console.error(e);
+      console.error('handleStartChat error:', e);
       setChatErr('تعذر فتح المحادثة');
     } finally {
       setStartingChat(false);
     }
-  }, [user, sellerUid, isOwner, listing.id, listing.title, listing.userEmail, router]);
+  }, [user, sellerUid, isOwner, listing.id, listing.title, router]);
 
   const breadcrumbItems = [
     { name: 'الرئيسية', url: '/' },
