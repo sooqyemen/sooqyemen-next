@@ -1,4 +1,4 @@
-// components/Chat/ChatBox.jsx
+// /components/Chat/ChatBox.jsx
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -13,14 +13,15 @@ function safeName(user) {
 
 export default function ChatBox({ chatId, listingId, otherUid }) {
   const { user } = useAuth();
-  const uid = user?.uid || null;
+  const uid = user?.uid || '';
 
   const [text, setText] = useState('');
   const [msgs, setMsgs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
 
-  const scrollerRef = useRef(null);
+  const endRef = useRef(null);
 
   const chatRef = useMemo(() => {
     if (!chatId) return null;
@@ -32,244 +33,161 @@ export default function ChatBox({ chatId, listingId, otherUid }) {
     return chatRef.collection('messages');
   }, [chatRef]);
 
-  // ✅ تأكيد وجود وثيقة الشات (ومشاركين) — مهم جدًا لقواعد Firestore
-  const ensureChatDoc = async () => {
-    if (!uid || !chatRef) throw new Error('missing uid/chatRef');
-    if (!otherUid) throw new Error('missing otherUid');
-
-    const snap = await chatRef.get();
-    const participants = [uid, otherUid].filter(Boolean);
-
-    if (!snap.exists) {
-      await chatRef.set(
-        {
-          participants,
-          listingId: listingId || null,
-          blockedBy: [],
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          lastMessageText: '',
-          lastMessageBy: null,
-          lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
-          participantNames: {
-            [uid]: safeName(user),
-          },
-          unread: {
-            [uid]: 0,
-            [otherUid]: 0,
-          },
-        },
-        { merge: true }
-      );
-      return;
-    }
-
-    // موجود: حدّث الاسم وصفر unread لنفسك بدون ما تمسح باقي القيم
-    await chatRef.set(
-      {
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        participantNames: { [uid]: safeName(user) },
-        [`unread.${uid}`]: 0,
-      },
-      { merge: true }
-    );
-  };
-
-  // ✅ عند فتح المحادثة: تأكد من وجودها + صفّر غير المقروء لك
+  // ✅ استماع للرسائل
   useEffect(() => {
-    if (!uid || !chatRef || !otherUid) return;
-
-    (async () => {
-      try {
-        await ensureChatDoc();
-      } catch (e) {
-        // لا نوقف الصفحة هنا — فقط نسجل
-        console.error('ensureChatDoc failed:', e?.message || e);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uid, chatRef, otherUid, listingId]);
-
-  // ✅ الاستماع للرسائل
-  useEffect(() => {
-    if (!messagesRef || !uid) return;
+    if (!messagesRef) return;
 
     const unsub = messagesRef
       .orderBy('createdAt', 'asc')
-      .limit(200)
+      .limit(300)
       .onSnapshot(
         (snap) => {
           const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           setMsgs(arr);
           setLoading(false);
+          setError('');
         },
         (e) => {
-          console.error('listen messages failed:', e);
+          console.error('messages listen failed', e);
           setLoading(false);
+          setError('تعذر تحميل الرسائل.');
         }
       );
 
     return () => unsub();
-  }, [messagesRef, uid]);
+  }, [messagesRef]);
 
-  // ✅ Auto scroll لآخر رسالة
+  // ✅ سكرول
   useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight + 200;
-  }, [msgs.length]);
+    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [msgs]);
 
-  const send = async () => {
-    if (!uid) {
-      alert('سجّل دخولك لإرسال رسالة');
-      return;
+  const formatTime = (ts) => {
+    if (!ts) return '';
+    try {
+      const d = ts.toDate();
+      return d.toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
     }
-    if (!chatId || !chatRef || !messagesRef) {
-      alert('المحادثة غير جاهزة (chatId مفقود).');
-      return;
-    }
-    if (!otherUid) {
-      alert('تعذر تحديد الطرف الآخر للمحادثة.');
-      return;
-    }
+  };
 
+  const send = async (e) => {
+    e?.preventDefault?.();
+    if (!uid) return alert('سجّل دخولك لإرسال رسالة');
     const t = String(text || '').trim();
     if (!t) return;
+    if (!chatRef || !messagesRef) return alert('الرابط غير صحيح');
 
     setSending(true);
+    setText('');
 
     try {
-      // ✅ مهم: تأكد من وجود وثيقة الشات قبل الإرسال (حتى لا تفشل rules)
-      await ensureChatDoc();
-
-      // 1) إضافة الرسالة
+      // 1) أضف الرسالة
       await messagesRef.add({
         text: t,
-        // للتوافق مع أي كود قديم/جديد
         from: uid,
-        senderId: uid,
         fromName: safeName(user),
-        senderName: safeName(user),
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       });
 
-      // 2) تحديث الشات: آخر رسالة + عداد unread (بدون مسح باقي المفاتيح)
+      // 2) حدّث الشات: آخر رسالة + unread
+      // unread للطرف الآخر + تصفير لنفسي
       await chatRef.set(
         {
           listingId: listingId || null,
           updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
           lastMessageText: t,
           lastMessageBy: uid,
-          lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
           participantNames: {
             [uid]: safeName(user),
           },
-          [`unread.${otherUid}`]: firebase.firestore.FieldValue.increment(1),
-          [`unread.${uid}`]: 0,
+          unread: {
+            ...(otherUid ? { [String(otherUid)]: firebase.firestore.FieldValue.increment(1) } : {}),
+            [uid]: 0,
+          },
         },
         { merge: true }
       );
-
-      // ✅ امسح حقل الكتابة بعد نجاح الإرسال
-      setText('');
-    } catch (e) {
-      console.error('send failed', e);
-      // عرض سبب مفيد بدل "فشل إرسال" فقط
-      const msg =
-        e?.code === 'permission-denied'
-          ? 'فشل الإرسال: الصلاحيات تمنع الإرسال (راجع Firestore Rules أو المشاركين).'
-          : 'فشل إرسال الرسالة';
-      alert(msg);
+    } catch (e2) {
+      console.error('send failed', e2);
+      setError('فشل إرسال الرسالة.');
+      setText(t);
     } finally {
       setSending(false);
     }
   };
 
-  if (!user) {
-    return <div className="card">سجّل دخولك لبدء المحادثة.</div>;
-  }
-
   return (
-    <div className="card">
-      <div style={{ fontWeight: 900, marginBottom: 10 }}>💬 المحادثة</div>
-
+    <div>
+      {/* Messages */}
       <div
-        ref={scrollerRef}
         style={{
-          border: '1px solid #e5e7eb',
-          borderRadius: 12,
-          padding: 10,
-          height: 420,
+          border: '1px solid rgba(0,0,0,.08)',
+          borderRadius: 14,
+          padding: 12,
+          height: 520,
           overflowY: 'auto',
           background: '#fff',
         }}
       >
         {loading ? (
           <div className="muted">جاري تحميل الرسائل...</div>
+        ) : error ? (
+          <div className="muted">{error}</div>
         ) : msgs.length === 0 ? (
           <div className="muted">ابدأ أول رسالة 👇</div>
         ) : (
           msgs.map((m) => {
-            const fromId = m.from || m.senderId;
-            const mine = String(fromId) === String(uid);
-            const name = m.fromName || m.senderName || 'مستخدم';
-
+            const mine = String(m.from) === String(uid);
             return (
               <div
                 key={m.id}
                 style={{
                   display: 'flex',
-                  justifyContent: mine ? 'flex-end' : 'flex-start',
-                  marginBottom: 8,
+                  justifyContent: mine ? 'flex-start' : 'flex-end',
+                  marginBottom: 10,
                 }}
               >
                 <div
                   style={{
-                    maxWidth: '78%',
-                    padding: '8px 10px',
-                    borderRadius: 12,
-                    background: mine ? '#eef2ff' : '#f3f4f6',
-                    border: '1px solid #e5e7eb',
+                    maxWidth: '80%',
+                    padding: '10px 12px',
+                    borderRadius: 14,
+                    background: mine ? 'rgba(59,130,246,.10)' : 'rgba(15,23,42,.06)',
+                    border: '1px solid rgba(0,0,0,.08)',
                     whiteSpace: 'pre-wrap',
-                    lineHeight: 1.5,
+                    lineHeight: 1.6,
                   }}
                 >
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 800,
-                      marginBottom: 2,
-                      opacity: 0.8,
-                    }}
-                  >
-                    {mine ? 'أنت' : name}
+                  <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 4, opacity: 0.85 }}>
+                    {mine ? 'أنت' : (m.fromName || 'مستخدم')}
                   </div>
                   <div style={{ fontSize: 14 }}>{m.text}</div>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 6, textAlign: 'left' }}>
+                    {formatTime(m.createdAt)}
+                  </div>
                 </div>
               </div>
             );
           })
         )}
+        <div ref={endRef} />
       </div>
 
-      <div className="row" style={{ gap: 8, marginTop: 10 }}>
+      {/* Input */}
+      <form className="row" style={{ gap: 10, marginTop: 12, alignItems: 'center' }} onSubmit={send}>
         <input
           className="input"
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="اكتب رسالة..."
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              if (!sending) send();
-            }
-          }}
           disabled={sending}
         />
-        <button className="btn btnPrimary" onClick={send} disabled={sending}>
+        <button className="btn btnPrimary" type="submit" disabled={sending || !text.trim()}>
           {sending ? '...' : 'إرسال'}
         </button>
-      </div>
+      </form>
     </div>
   );
 }
