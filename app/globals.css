@@ -69,6 +69,9 @@ img{
   /* Performance optimizations */
   content-visibility: auto;
   contain-intrinsic-size: 300px 200px;
+  /* Faster image decoding */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
 }
 
 /* ===== Accessibility - Skip to content ===== */
@@ -107,6 +110,9 @@ img{
   /* Performance optimizations */
   contain: layout style paint;
   content-visibility: auto;
+  /* GPU acceleration */
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .row{
@@ -145,6 +151,9 @@ img{
   /* Mobile performance */
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  /* GPU acceleration */
+  transform: translateZ(0);
+  will-change: transform;
 }
 .btn:focus-visible{
   outline: 2px solid #3b82f6;

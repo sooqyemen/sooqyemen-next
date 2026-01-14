@@ -30,6 +30,10 @@ const nextConfig = {
     ],
     // webpackBuildWorker: true, // فعل هذا الخيار فقط إذا كان لديك ذاكرة كافية في السيرفر
     scrollRestoration: true,
+    // تحسين الأداء مع optimizeCss
+    optimizeCss: true,
+    // تحسين font loading
+    optimizeServerReact: true,
   },
   
   // إعدادات الصور المحسنة
@@ -108,6 +112,24 @@ const nextConfig = {
         source: '/_next/static/:path*',
         headers: [
           { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
+      {
+        source: '/fonts/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
+      {
+        source: '/:path*.(woff|woff2|ttf|otf|eot)',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
+      {
+        source: '/manifest.json',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=86400' },
         ],
       },
       {
