@@ -1,446 +1,149 @@
-/* app/chat/[id]/chatPage.css */
+'use client';
 
-.chat-page {
-  min-height: 100vh;
-  background: #f8f9fa;
-  display: flex;
-  flex-direction: column;
-  /* Performance optimizations */
-  contain: layout style;
-}
+import React, { useState, useEffect, useRef } from 'react';
+import { db, auth, firebase } from '@/lib/firebaseClient'; 
+// تأكد من المسار الصحيح لملف CSS
+import './chatPage.css';
 
-/* الحاويات العامة */
-.chat-container {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  max-width: 1200px;
-  margin: 0 auto;
-  width: 100%;
-  padding: 1rem;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-  margin-top: 1rem;
-  margin-bottom: 1rem;
-}
-
-/* Header */
-.chat-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem;
-  border-bottom: 1px solid #e9ecef;
-  background: white;
-  border-radius: 8px 8px 0 0;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.back-btn {
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
-  padding: 0.75rem;
-  cursor: pointer;
-  font-size: 1.2rem;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  /* Mobile performance */
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.back-btn:hover {
-  background: #e9ecef;
-  transform: translateX(-2px);
-}
-
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.user-avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.user-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.avatar-placeholder {
-  color: white;
-  font-size: 1.2rem;
-  font-weight: bold;
-}
-
-.user-details {
-  display: flex;
-  flex-direction: column;
-}
-
-.user-name {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #212529;
-  margin: 0;
-}
-
-.user-status {
-  font-size: 0.85rem;
-  color: #6c757d;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.listing-link {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: #e7f5ff;
-  color: #228be6;
-  text-decoration: none;
-  border-radius: 6px;
-  font-weight: 600;
-  transition: all 0.2s;
-}
-
-.listing-link:hover {
-  background: #d0ebff;
-  transform: translateY(-1px);
-}
-
-.chat-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.action-btn {
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
-  border-radius: 6px;
-  padding: 0.5rem 0.75rem;
-  cursor: pointer;
-  font-size: 1.1rem;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.action-btn:hover {
-  background: #e9ecef;
-  transform: translateY(-1px);
-}
-
-.action-btn:active {
-  transform: translateY(0);
-}
-
-/* معاينة الإعلان */
-.listing-preview {
-  display: flex;
-  gap: 1rem;
-  padding: 1rem;
-  background: #f8f9fa;
-  border-radius: 8px;
-  margin: 1rem 0;
-  border: 1px solid #e9ecef;
-  align-items: center;
-}
-
-.listing-image {
-  width: 80px;
-  height: 80px;
-  border-radius: 6px;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-.listing-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.image-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #e9ecef;
-  font-size: 2rem;
-}
-
-.listing-info {
-  flex: 1;
-}
-
-.listing-title {
-  font-size: 1rem;
-  font-weight: 600;
-  margin: 0 0 0.5rem 0;
-  color: #212529;
-}
-
-.listing-price {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #228be6;
-  margin: 0 0 0.25rem 0;
-}
-
-.listing-location {
-  font-size: 0.9rem;
-  color: #6c757d;
-  margin: 0;
-}
-
-/* منطقة المحادثة */
-.chat-area {
-  flex: 1;
-  min-height: 400px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  border: 1px solid #e9ecef;
-  overflow: hidden;
-}
-
-.loading-messages {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: #6c757d;
-}
-
-/* Footer */
-.chat-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem;
-  border-top: 1px solid #e9ecef;
-  margin-top: 1rem;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.footer-info {
-  display: flex;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-}
-
-.info-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
-  color: #6c757d;
-}
-
-.info-icon {
-  font-size: 0.9rem;
-}
-
-.report-btn {
-  background: transparent;
-  border: 1px solid #ff6b6b;
-  color: #ff6b6b;
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.report-btn:hover {
-  background: #ff6b6b;
-  color: white;
-}
-
-/* حالات خاصة */
-.loading-container,
-.error-container,
-.blocked-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 3rem 2rem;
-  text-align: center;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-  margin: 2rem auto;
-  max-width: 600px;
-  width: 100%;
-}
-
-.spinner {
-  width: 50px;
-  height: 50px;
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #228be6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 1.5rem;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.loading-text {
-  color: #6c757d;
-  font-size: 1.1rem;
-}
-
-.error-icon,
-.blocked-icon {
-  font-size: 3rem;
-  margin-bottom: 1.5rem;
-}
-
-.error-title,
-.blocked-title {
-  color: #212529;
-  margin-bottom: 1rem;
-}
-
-.error-message,
-.blocked-message {
-  color: #6c757d;
-  margin-bottom: 2rem;
-  line-height: 1.6;
-}
-
-.error-actions {
-  display: flex;
-  gap: 1rem;
-}
-
-.btn {
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.2s;
-  text-decoration: none;
-  display: inline-block;
-  text-align: center;
-}
-
-.btn-primary {
-  background: #228be6;
-  color: white;
-}
-
-.btn-primary:hover {
-  background: #1c7ed6;
-  transform: translateY(-1px);
-}
-
-.btn-secondary {
-  background: #e9ecef;
-  color: #495057;
-  border: 1px solid #dee2e6;
-}
-
-.btn-secondary:hover {
-  background: #dee2e6;
-  transform: translateY(-1px);
-}
-
-/* تصميم متجاوب */
-@media (max-width: 768px) {
-  .chat-container {
-    padding: 0.5rem;
-    margin-top: 0.5rem;
-    margin-bottom: 0.5rem;
-    border-radius: 0;
-  }
+export default function ChatPage({ params }) {
+  const { id: chatId } = params;
+  const [user, setUser] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [loading, setLoading] = useState(true);
   
-  .chat-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 1rem;
-  }
-  
-  .header-left,
-  .header-right {
-    width: 100%;
-  }
-  
-  .listing-link .link-text {
-    display: none;
-  }
-  
-  .chat-actions {
-    justify-content: flex-end;
-  }
-  
-  .footer-info {
-    justify-content: center;
-  }
-  
-  .error-actions {
-    flex-direction: column;
-    width: 100%;
-  }
-  
-  .btn {
-    width: 100%;
-  }
-}
+  // Ref for auto-scroll
+  const messagesEndRef = useRef(null);
 
-@media (max-width: 480px) {
-  .user-info {
-    flex-direction: column;
-    text-align: center;
-  }
-  
-  .listing-preview {
-    flex-direction: column;
-    text-align: center;
-  }
-  
-  .listing-image {
-    width: 100%;
-    height: 120px;
-  }
+  // 1. Auth Check
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((u) => {
+      setUser(u);
+      if (!u) setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 2. Real-time Messages
+  useEffect(() => {
+    if (!chatId) return;
+
+    // استخدام syntax الـ compat كما في ملفك
+    const unsubscribe = db
+      .collection('chats')
+      .doc(chatId)
+      .collection('messages')
+      .orderBy('createdAt', 'asc')
+      .onSnapshot((snapshot) => {
+        const fetchedMessages = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setMessages(fetchedMessages);
+        setLoading(false);
+      });
+
+    return () => unsubscribe();
+  }, [chatId]);
+
+  // 3. Auto Scroll
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // 4. Send Message
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !user) return;
+
+    try {
+      await db.collection('chats').doc(chatId).collection('messages').add({
+        text: newMessage,
+        senderId: user.uid,
+        senderEmail: user.email,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      setNewMessage('');
+    } catch (error) {
+      console.error("Error sending message: ", error);
+    }
+  };
+
+  // Helper for Time
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate();
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  if (loading) return <div className="chat-page"><div className="loading-container"><div className="spinner"></div></div></div>;
+  if (!user) return <div className="chat-page"><div className="error-container">يرجى تسجيل الدخول.</div></div>;
+
+  return (
+    <div className="chat-page">
+      <div className="chat-container">
+        
+        {/* --- Header (باستخدام كلاساتك) --- */}
+        <div className="chat-header">
+          <div className="header-left">
+            {/* يمكنك إضافة Link للرجوع هنا */}
+            <button className="back-btn" onClick={() => window.history.back()}>➜</button>
+            <div className="user-info">
+              <div className="user-avatar">
+                 {/* صورة افتراضية */}
+                 <img src="https://via.placeholder.com/48" alt="User" />
+              </div>
+              <div className="user-details">
+                <p className="user-name">مستخدم سوق اليمن</p>
+                <span className="user-status">متصل الآن</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* --- Listing Preview (معاينة الإعلان - اختياري) --- */}
+        {/* <div className="listing-preview">
+            <div className="listing-image"><img src="..." /></div>
+            <div className="listing-info">
+              <h4>عنوان الإعلان هنا</h4>
+              <p className="listing-price">50,000 ر.ي</p>
+            </div>
+        </div> */}
+
+        {/* --- Chat Area (منطقة الرسائل) --- */}
+        <div className="chat-area">
+          <div className="messages-list">
+            {messages.map((msg) => {
+              const isMe = msg.senderId === user.uid;
+              return (
+                <div 
+                  key={msg.id} 
+                  className={`message-bubble ${isMe ? 'message-own' : 'message-other'}`}
+                >
+                  {msg.text}
+                  <span className="msg-time">{formatTime(msg.createdAt)}</span>
+                </div>
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* --- Input Area (مكان الكتابة) --- */}
+          <form className="chat-input-area" onSubmit={handleSendMessage}>
+            <input
+              type="text"
+              className="chat-input"
+              placeholder="اكتب رسالة..."
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+            />
+            <button type="submit" className="send-btn" disabled={!newMessage.trim()}>
+              ➤
+            </button>
+          </form>
+        </div>
+
+      </div>
+    </div>
+  );
 }
