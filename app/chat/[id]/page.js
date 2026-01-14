@@ -1,12 +1,9 @@
-// /app/chat/[id]/page.js
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
-import ChatBox from '@/components/Chat/ChatBox';
 
 function safeName(user) {
   if (user?.displayName) return user.displayName;
@@ -14,235 +11,174 @@ function safeName(user) {
   return 'مستخدم';
 }
 
-function makeChatId(uid1, uid2, listingId) {
-  const a = String(uid1 || '');
-  const b = String(uid2 || '');
-  const sorted = [a, b].sort().join('_');
-  return `${sorted}__${String(listingId || '')}`;
-}
+export default function ChatPage({ params }) {
+  const chatId = params?.id ? String(params.id) : '';
 
-export default function ChatPage({ params, searchParams }) {
-  const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user } = useAuth();
+  const uid = user?.uid ? String(user.uid) : '';
 
-  const chatId = useMemo(() => {
-    const id = params?.id ? decodeURIComponent(String(params.id)) : '';
-    return id || '';
-  }, [params]);
+  const [text, setText] = useState('');
+  const [msgs, setMsgs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const listingId = useMemo(() => {
-    const v = searchParams?.listingId ? String(searchParams.listingId) : '';
-    return v || '';
-  }, [searchParams]);
-
-  const otherUidFromQS = useMemo(() => {
-    const v = searchParams?.otherUid ? String(searchParams.otherUid) : '';
-    return v || '';
-  }, [searchParams]);
-
-  const uid = user?.uid || '';
+  const endRef = useRef(null);
 
   const chatRef = useMemo(() => {
     if (!chatId) return null;
-    return db.collection('chats').doc(String(chatId));
+    return db.collection('chats').doc(chatId);
   }, [chatId]);
 
-  const [ready, setReady] = useState(false);
-  const [err, setErr] = useState('');
-  const [chatDoc, setChatDoc] = useState(null);
-  const [otherUid, setOtherUid] = useState('');
-  const [otherName, setOtherName] = useState('');
-  const [blocked, setBlocked] = useState(false);
+  const messagesRef = useMemo(() => {
+    if (!chatRef) return null;
+    return chatRef.collection('messages');
+  }, [chatRef]);
 
-  const endTopRef = useRef(null);
-
-  // ✅ تحقق سريع من chatId
+  // 1) تأكد من وجود الشات + صفّر unread لك
   useEffect(() => {
-    if (!chatId) setErr('الرابط غير صحيح (chatId مفقود).');
-    else setErr('');
-  }, [chatId]);
-
-  // ✅ تجهيز/إنشاء المحادثة إذا غير موجودة (منع اللوب)
-  useEffect(() => {
-    if (!chatRef) return;
-    if (authLoading) return;
-
-    if (!user) {
-      setReady(true);
+    if (!chatId) {
+      setLoading(false);
+      setErrorMsg('الرابط غير صحيح (chatId مفقود).');
       return;
     }
-
-    let alive = true;
+    if (!chatRef) return;
 
     (async () => {
       try {
-        setErr('');
-        setReady(false);
-
         const snap = await chatRef.get();
-
-        // إذا غير موجود: نحاول ننشئه بشرط وجود listingId + otherUid
         if (!snap.exists) {
-          if (!listingId || !otherUidFromQS) {
-            if (!alive) return;
-            setErr('المحادثة غير موجودة. افتحها من زر "بدء محادثة" داخل الإعلان.');
-            setReady(true);
-            return;
-          }
+          setErrorMsg('المحادثة غير موجودة أو الرابط غير صحيح.');
+          setLoading(false);
+          return;
+        }
 
-          // تأكد أن chatId هو نفسه المتوقع (ثابت وغير عشوائي)
-          const expected = makeChatId(uid, otherUidFromQS, listingId);
-          // لو chatId مختلف جداً: ما نمنع، بس الأفضل يكون ثابت
-          // إذا تريد إلزام 100% احذف الشرط التالي وخليها refuse
-          // هنا نخليها تنشئ على نفس chatId القادم بالرابط
-          const participants = [uid, otherUidFromQS].filter(Boolean);
-
+        if (uid) {
           await chatRef.set(
             {
-              participants,
-              listingId,
-              createdAt: firebase.firestore.FieldValue.serverTimestamp(),
               updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-              lastMessageText: '',
-              lastMessageBy: null,
-              blockedBy: [],
-              participantNames: {
-                [uid]: safeName(user),
-              },
-              unread: {
-                [uid]: 0,
-              },
+              participantNames: { [uid]: safeName(user) },
+              unread: { [uid]: 0 },
             },
             { merge: true }
           );
         }
 
-        // تصفير غير المقروء لك عند فتح الصفحة
-        await chatRef.set(
-          {
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            participantNames: { [uid]: safeName(user) },
-            unread: { [uid]: 0 },
-          },
-          { merge: true }
-        );
-
-        if (!alive) return;
-        setReady(true);
+        setErrorMsg('');
       } catch (e) {
-        console.error('chat init failed:', e);
-        if (!alive) return;
-        setErr('حدث خطأ أثناء فتح المحادثة.');
-        setReady(true);
+        console.error('Chat init failed:', e?.code, e?.message, e);
+        setErrorMsg(e?.code ? `تعذر فتح المحادثة: ${e.code}` : 'تعذر فتح المحادثة.');
+      } finally {
+        setLoading(false);
       }
     })();
+  }, [chatId, chatRef, uid, user]);
 
-    return () => {
-      alive = false;
-    };
-  }, [chatRef, authLoading, user, uid, listingId, otherUidFromQS]);
-
-  // ✅ الاستماع لوثيقة الشات (للتحقق من المشاركين + الحجب + اسم الطرف الآخر)
+  // 2) استماع للرسائل
   useEffect(() => {
-    if (!chatRef) return;
-    if (!uid) return;
+    if (!messagesRef) return;
 
-    const unsub = chatRef.onSnapshot(
-      async (snap) => {
-        if (!snap.exists) return;
-
-        const data = { id: snap.id, ...(snap.data() || {}) };
-        setChatDoc(data);
-
-        const participants = Array.isArray(data.participants) ? data.participants : [];
-        if (participants.length && !participants.includes(uid)) {
-          setErr('ليس لديك صلاحية الوصول إلى هذه المحادثة.');
-          return;
+    const unsub = messagesRef
+      .orderBy('createdAt', 'asc')
+      .limit(200)
+      .onSnapshot(
+        (snap) => {
+          const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setMsgs(arr);
+          setLoading(false);
+        },
+        (e) => {
+          console.error('listen messages failed:', e?.code, e?.message, e);
+          setErrorMsg(e?.code ? `تعذر تحميل الرسائل: ${e.code}` : 'تعذر تحميل الرسائل.');
+          setLoading(false);
         }
-
-        const other = otherUidFromQS || participants.find((p) => String(p) !== String(uid)) || '';
-        setOtherUid(other);
-
-        // حجب؟
-        const blockedBy = Array.isArray(data.blockedBy) ? data.blockedBy : [];
-        setBlocked(blockedBy.includes(uid));
-
-        // اسم الطرف الآخر (من participantNames أو users)
-        const names = data.participantNames || {};
-        const nameFromDoc = other ? names[other] : '';
-        if (nameFromDoc) {
-          setOtherName(String(nameFromDoc));
-        } else if (other) {
-          try {
-            const uSnap = await db.collection('users').doc(String(other)).get();
-            if (uSnap.exists) {
-              const u = uSnap.data() || {};
-              setOtherName(String(u.name || u.displayName || (u.email ? String(u.email).split('@')[0] : 'مستخدم')));
-            } else {
-              setOtherName('مستخدم');
-            }
-          } catch {
-            setOtherName('مستخدم');
-          }
-        }
-
-        setErr('');
-      },
-      (e) => {
-        console.error('chat snapshot error:', e);
-        setErr('تعذر تحميل بيانات المحادثة.');
-      }
-    );
+      );
 
     return () => unsub();
-  }, [chatRef, uid, otherUidFromQS]);
+  }, [messagesRef]);
 
-  // سكرول أعلى عند فتح
+  // 3) سكرول تلقائي
   useEffect(() => {
-    endTopRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatId]);
+    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [msgs]);
 
-  const toggleBlock = async () => {
-    if (!chatRef || !uid || !chatDoc) return;
+  const formatTime = (ts) => {
+    if (!ts) return '';
     try {
-      const arr = Array.isArray(chatDoc.blockedBy) ? chatDoc.blockedBy : [];
-      const exists = arr.includes(uid);
-
-      await chatRef.set(
-        {
-          blockedBy: exists
-            ? arr.filter((x) => String(x) !== String(uid))
-            : [...arr, uid],
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-    } catch (e) {
-      console.error('toggle block failed', e);
-      alert('حدث خطأ.');
+      const d = ts.toDate();
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
     }
   };
 
-  // ---------- حالات العرض ----------
+  // 4) إرسال رسالة
+  const send = async (e) => {
+    e?.preventDefault?.();
+
+    if (!uid) {
+      setErrorMsg('سجّل دخولك لإرسال رسالة.');
+      return;
+    }
+    if (!chatRef || !messagesRef) {
+      setErrorMsg('الرابط غير صحيح (chatId مفقود).');
+      return;
+    }
+
+    const t = String(text || '').trim();
+    if (!t) return;
+
+    setSending(true);
+    setText('');
+
+    try {
+      // أضف الرسالة (نرسل senderUid لتوافق rules)
+      await messagesRef.add({
+        text: t,
+        senderUid: uid,
+        senderName: safeName(user),
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+
+      // تحديث الشات: unread للطرف الآخر إن وجد
+      const snap = await chatRef.get();
+      const data = snap.data() || {};
+      const participants = Array.isArray(data.participants) ? data.participants.map(String) : [];
+      const otherUid = participants.find((p) => p !== uid) || '';
+
+      await chatRef.set(
+        {
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          lastMessageText: t,
+          lastMessageBy: uid,
+          participantNames: { [uid]: safeName(user) },
+          unread: {
+            ...(otherUid ? { [otherUid]: firebase.firestore.FieldValue.increment(1) } : {}),
+            [uid]: 0,
+          },
+        },
+        { merge: true }
+      );
+
+      setErrorMsg('');
+    } catch (e2) {
+      console.error('send failed:', e2?.code, e2?.message, e2);
+      setErrorMsg(e2?.code ? `فشل الإرسال: ${e2.code}` : 'فشل إرسال الرسالة');
+      setText(t);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // حالات العرض
   if (!chatId) {
     return (
       <div className="container" style={{ padding: 16 }}>
         <div className="card" style={{ padding: 16 }}>
           <div style={{ fontWeight: 900, marginBottom: 6 }}>💬 المحادثة</div>
           <div className="muted">الرابط غير صحيح (chatId مفقود).</div>
-          <div className="row" style={{ gap: 10, marginTop: 12 }}>
-            <Link className="btn" href="/my-chats">العودة للمحادثات</Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (authLoading) {
-    return (
-      <div className="container" style={{ padding: 16 }}>
-        <div className="card" style={{ padding: 16 }}>
-          <div className="muted">جاري التحقق من تسجيل الدخول...</div>
+          <div style={{ height: 10 }} />
+          <Link className="btn" href="/my-chats">العودة إلى محادثاتي</Link>
         </div>
       </div>
     );
@@ -254,51 +190,8 @@ export default function ChatPage({ params, searchParams }) {
         <div className="card" style={{ padding: 16 }}>
           <div style={{ fontWeight: 900, marginBottom: 6 }}>💬 المحادثة</div>
           <div className="muted">يرجى تسجيل الدخول لبدء المحادثة.</div>
-          <div className="row" style={{ gap: 10, marginTop: 12 }}>
-            <Link className="btn btnPrimary" href="/login">تسجيل الدخول</Link>
-            <Link className="btn" href="/my-chats">العودة للمحادثات</Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!ready && !err) {
-    return (
-      <div className="container" style={{ padding: 16 }}>
-        <div className="card" style={{ padding: 16 }}>
-          <div className="muted">جاري فتح المحادثة...</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (err) {
-    return (
-      <div className="container" style={{ padding: 16 }}>
-        <div className="card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 900, marginBottom: 6 }}>حدث خطأ</div>
-          <div className="muted">{err}</div>
-          <div className="row" style={{ gap: 10, marginTop: 12 }}>
-            <button className="btn" onClick={() => router.push('/my-chats')}>العودة للمحادثات</button>
-            <button className="btn btnPrimary" onClick={() => window.location.reload()}>إعادة المحاولة</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (blocked) {
-    return (
-      <div className="container" style={{ padding: 16 }}>
-        <div className="card" style={{ padding: 16, textAlign: 'center' }}>
-          <div style={{ fontSize: 30, marginBottom: 8 }}>🚫</div>
-          <div style={{ fontWeight: 900, marginBottom: 6 }}>المحادثة محجوبة</div>
-          <div className="muted">قمت بحجب هذه المحادثة.</div>
-          <div className="row" style={{ gap: 10, marginTop: 12, justifyContent: 'center' }}>
-            <button className="btn btnPrimary" onClick={toggleBlock}>إلغاء الحجب</button>
-            <Link className="btn" href="/my-chats">العودة</Link>
-          </div>
+          <div style={{ height: 10 }} />
+          <Link className="btn" href="/login">تسجيل الدخول</Link>
         </div>
       </div>
     );
@@ -306,50 +199,104 @@ export default function ChatPage({ params, searchParams }) {
 
   return (
     <div className="container" style={{ padding: 16 }}>
-      <div ref={endTopRef} />
       <div className="card" style={{ padding: 14 }}>
         {/* Header */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 10,
-            borderBottom: '1px solid rgba(0,0,0,.06)',
-            paddingBottom: 10,
-            marginBottom: 12,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-            <button className="btn" type="button" onClick={() => router.push('/my-chats')} style={{ padding: '6px 10px' }}>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div className="row" style={{ alignItems: 'center', gap: 10 }}>
+            <button className="btn" onClick={() => window.history.back()} type="button" style={{ padding: '6px 10px' }}>
               ←
             </button>
 
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {otherName ? otherName : 'محادثة'}
-              </div>
-              <div className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {listingId ? `إعلان: ${listingId}` : chatId}
-              </div>
+            <div>
+              <div style={{ fontWeight: 900 }}>المحادثة</div>
+              <div className="muted" style={{ fontSize: 12, direction: 'ltr' }}>{chatId}</div>
             </div>
           </div>
 
-          <div className="row" style={{ gap: 8 }}>
-            {listingId ? (
-              <Link className="btn" href={`/listing/${encodeURIComponent(listingId)}`} target="_blank" rel="noopener noreferrer">
-                📄 الإعلان
-              </Link>
-            ) : null}
-
-            <button className="btn" type="button" onClick={toggleBlock} title="حجب/إلغاء الحجب">
-              🚫
-            </button>
-          </div>
+          <Link className="btn" href="/my-chats">محادثاتي</Link>
         </div>
 
-        {/* Body */}
-        <ChatBox chatId={chatId} listingId={listingId || null} otherUid={otherUid || otherUidFromQS || null} />
+        <div style={{ height: 10 }} />
+
+        {/* Error */}
+        {!!errorMsg && (
+          <div className="card" style={{ padding: 10, border: '1px solid #fee2e2', background: '#fff1f2', marginBottom: 10 }}>
+            <div style={{ fontWeight: 800 }}>تنبيه</div>
+            <div className="muted" style={{ marginTop: 4 }}>{errorMsg}</div>
+          </div>
+        )}
+
+        {/* Messages */}
+        <div
+          style={{
+            border: '1px solid #e5e7eb',
+            borderRadius: 12,
+            padding: 10,
+            height: 520,
+            overflowY: 'auto',
+            background: '#fff',
+          }}
+        >
+          {loading ? (
+            <div className="muted">جاري تحميل الرسائل...</div>
+          ) : msgs.length === 0 ? (
+            <div className="muted">ابدأ أول رسالة 👇</div>
+          ) : (
+            msgs.map((m) => {
+              const fromUid = m.senderUid || m.from || '';
+              const mine = String(fromUid) === String(uid);
+              const name = mine ? 'أنت' : (m.senderName || m.fromName || 'مستخدم');
+
+              return (
+                <div
+                  key={m.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: mine ? 'flex-end' : 'flex-start',
+                    marginBottom: 8,
+                  }}
+                >
+                  <div
+                    style={{
+                      maxWidth: '78%',
+                      padding: '8px 10px',
+                      borderRadius: 12,
+                      background: mine ? '#eef2ff' : '#f3f4f6',
+                      border: '1px solid #e5e7eb',
+                      whiteSpace: 'pre-wrap',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 2, opacity: 0.85 }}>
+                      {name}
+                    </div>
+                    <div style={{ fontSize: 14 }}>{m.text}</div>
+                    <div className="muted" style={{ fontSize: 11, marginTop: 4, textAlign: 'left' }}>
+                      {formatTime(m.createdAt)}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+          <div ref={endRef} />
+        </div>
+
+        <div style={{ height: 10 }} />
+
+        {/* Input */}
+        <form className="row" style={{ gap: 8 }} onSubmit={send}>
+          <input
+            className="input"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="اكتب رسالة..."
+            disabled={sending}
+          />
+          <button className="btn btnPrimary" type="submit" disabled={sending || !text.trim()}>
+            {sending ? '...' : 'إرسال'}
+          </button>
+        </form>
       </div>
     </div>
   );
