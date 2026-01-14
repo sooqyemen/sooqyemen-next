@@ -1,7 +1,7 @@
 // app/page.jsx
 'use client';
 
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
@@ -59,7 +59,8 @@ const CATEGORY_CONFIG = [
 ];
 
 // ✅ Blur placeholder لتحسين تجربة تحميل الصور
-const BLUR_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+const BLUR_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
 
 function safeText(v) {
   return typeof v === 'string' ? v : '';
@@ -73,19 +74,49 @@ function normalizeCategoryKey(v) {
   const norm = lowered.replace(/\s+/g, '_').replace(/-/g, '_').replace(/__+/g, '_');
 
   const map = {
-    real_estate: 'realestate', realestate: 'realestate',
-    mobiles: 'phones', mobile: 'phones', phones: 'phones', phone: 'phones',
-    animals_birds: 'animals', animalsbirds: 'animals', animals: 'animals',
-    heavy_equipment: 'heavy_equipment', heavyequipment: 'heavy_equipment', 'heavy equipment': 'heavy_equipment',
-    network: 'networks', networks: 'networks',
+    real_estate: 'realestate',
+    realestate: 'realestate',
+    mobiles: 'phones',
+    mobile: 'phones',
+    phones: 'phones',
+    phone: 'phones',
+    animals_birds: 'animals',
+    animalsbirds: 'animals',
+    animals: 'animals',
+    heavy_equipment: 'heavy_equipment',
+    heavyequipment: 'heavy_equipment',
+    'heavy equipment': 'heavy_equipment',
+    network: 'networks',
+    networks: 'networks',
     maintenance: 'maintenance',
-    home_tools: 'home_tools', hometools: 'home_tools', 'home tools': 'home_tools',
-    سيارات: 'cars', عقارات: 'realestate', جوالات: 'phones', إلكترونيات: 'electronics', الكترونيات: 'electronics',
-    دراجات_نارية: 'motorcycles', دراجات: 'motorcycles', معدات_ثقيلة: 'heavy_equipment',
-    طاقة_شمسية: 'solar', نت_وشبكات: 'networks', نت_و_شبكات: 'networks', صيانة: 'maintenance',
-    أثاث: 'furniture', اثاث: 'furniture', ملابس: 'clothes', حيوانات_وطيور: 'animals', حيوانات: 'animals',
-    وظائف: 'jobs', خدمات: 'services', اخرى: 'other', أخرى: 'other',
-    أدوات_منزلية: 'home_tools', ادوات_منزلية: 'home_tools', 'أدوات منزلية': 'home_tools', 'ادوات منزلية': 'home_tools',
+    home_tools: 'home_tools',
+    hometools: 'home_tools',
+    'home tools': 'home_tools',
+    سيارات: 'cars',
+    عقارات: 'realestate',
+    جوالات: 'phones',
+    إلكترونيات: 'electronics',
+    الكترونيات: 'electronics',
+    دراجات_نارية: 'motorcycles',
+    دراجات: 'motorcycles',
+    معدات_ثقيلة: 'heavy_equipment',
+    طاقة_شمسية: 'solar',
+    نت_وشبكات: 'networks',
+    نت_و_شبكات: 'networks',
+    صيانة: 'maintenance',
+    أثاث: 'furniture',
+    اثاث: 'furniture',
+    ملابس: 'clothes',
+    حيوانات_وطيور: 'animals',
+    حيوانات: 'animals',
+    وظائف: 'jobs',
+    خدمات: 'services',
+    اخرى: 'other',
+    أخرى: 'other',
+    أدوات_منزلية: 'home_tools',
+    ادوات_منزلية: 'home_tools',
+    'أدوات منزلية': 'home_tools',
+    'ادوات منزلية': 'home_tools',
   };
   return map[norm] || map[raw] || norm;
 }
@@ -298,7 +329,9 @@ function SearchBar({ search, setSearch, suggestions }) {
     <div className="search-wrapper" ref={searchRef}>
       <div className="search-container">
         <div className="search-input-wrapper">
-          <span className="search-icon" aria-hidden="true">🔍</span>
+          <span className="search-icon" aria-hidden="true">
+            🔍
+          </span>
           <input
             ref={inputRef}
             className="search-input focus-ring"
@@ -331,7 +364,9 @@ function SearchBar({ search, setSearch, suggestions }) {
               role="option"
               aria-selected={search === s}
             >
-              <span className="suggestion-icon" aria-hidden="true">🔍</span>
+              <span className="suggestion-icon" aria-hidden="true">
+                🔍
+              </span>
               <span className="suggestion-text">{s}</span>
             </button>
           ))}
@@ -343,12 +378,29 @@ function SearchBar({ search, setSearch, suggestions }) {
 
 export default function HomePageClient({ initialListings = [] }) {
   const router = useRouter();
+
+  // ✅ Pagination
+  const PAGE_SIZE = 24;
+  const lastDocRef = useRef(null);
+  const loadMoreSentinelRef = useRef(null);
+  const aliveRef = useRef(true);
+
   const [listings, setListings] = useState(initialListings);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(initialListings.length === 0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [viewMode, setViewMode] = useState('grid');
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -356,10 +408,14 @@ export default function HomePageClient({ initialListings = [] }) {
     try {
       const params = new URLSearchParams(window.location.search);
       fromUrl = normalizeRefCode(params.get('ref'));
-    } catch { fromUrl = ''; }
+    } catch {
+      fromUrl = '';
+    }
 
     let stored = '';
-    try { stored = window.localStorage.getItem(STORAGE_CODE) || ''; } catch {}
+    try {
+      stored = window.localStorage.getItem(STORAGE_CODE) || '';
+    } catch {}
 
     const code = fromUrl || normalizeRefCode(stored);
     if (code) {
@@ -383,69 +439,137 @@ export default function HomePageClient({ initialListings = [] }) {
     if (saved === 'grid' || saved === 'list' || saved === 'map') setViewMode(saved);
   }, []);
 
+  // ✅ جلب أول صفحة (مرة واحدة) بدل onSnapshot + limit(100)
   useEffect(() => {
-    const hadSSR = initialListings.length > 0;
-    if (hadSSR) {
-      // عند وجود بيانات SSR، نعرضها مباشرة… لكن نستمر بالاشتراك لتحديث القائمة فوراً بعد أي حقن/تعديل.
-      setLoading(false);
-    }
-    let unsub = null;
     let cancelled = false;
 
-    const subscribeWithDb = async () => {
-      if (!hadSSR) setLoading(true);
+    const fetchFirstPage = async () => {
+      // لو عندنا SSR، نعرضها فوراً ولا نسحب 100
+      if (initialListings.length > 0) {
+        setLoading(false);
+        setError('');
+        // إذا SSR أقل من PAGE_SIZE ما نغلق hasMore لأن عندنا إمكانية تحميل المزيد
+        setHasMore(true);
+        return;
+      }
+
+      setLoading(true);
       setError('');
-      let triedFallback = false;
 
       try {
         const { db } = await loadFirebaseClient();
         if (cancelled) return;
 
-        const subscribe = (withOrder) => {
-          const base = db.collection('listings');
-          const q = withOrder ? base.orderBy('createdAt', 'desc').limit(100) : base.limit(100);
+        const q = db.collection('listings').orderBy('createdAt', 'desc').limit(PAGE_SIZE);
+        const snap = await q.get();
 
-          unsub = q.onSnapshot(
-            (snapshot) => {
-              const data = snapshot.docs
-                .map((doc) => ({ id: doc.id, ...doc.data() }))
-                .filter((listing) => listing.isActive !== false && listing.hidden !== true);
-              setListings(data);
-              setLoading(false);
-            },
-            (err) => {
-              if (withOrder && !triedFallback) {
-                triedFallback = true;
-                try { if (unsub) unsub(); } catch {}
-                subscribe(false);
-                return;
-              }
-              setError(err?.message || 'حدث خطأ في جلب الإعلانات');
-              setLoading(false);
-            }
-          );
-        };
+        const data = snap.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() }))
+          .filter((listing) => listing.isActive !== false && listing.hidden !== true);
 
-        subscribe(true);
-      } catch (e) {
-        if (cancelled) return;
-        setError('تعذّر الاتصال بقاعدة البيانات');
+        if (!aliveRef.current || cancelled) return;
+
+        setListings(data);
+        lastDocRef.current = snap.docs[snap.docs.length - 1] || null;
+        setHasMore(snap.docs.length === PAGE_SIZE);
         setLoading(false);
+      } catch (e) {
+        if (!aliveRef.current || cancelled) return;
+        setError(e?.message || 'حدث خطأ في جلب الإعلانات');
+        setLoading(false);
+        setHasMore(false);
       }
     };
 
-    const cancelIdle = scheduleIdleCallback(subscribeWithDb);
+    const cancelIdle = scheduleIdleCallback(fetchFirstPage);
 
     return () => {
       cancelled = true;
       cancelIdle?.();
-      try { if (unsub) unsub(); } catch {}
     };
   }, [initialListings.length]);
 
+  // ✅ تحميل المزيد (Pagination)
+  const fetchMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+
+    setLoadingMore(true);
+    setError('');
+
+    try {
+      const { db } = await loadFirebaseClient();
+
+      // لو بدأنا بـ SSR (ولم نحدد cursor بعد)
+      if (!lastDocRef.current) {
+        const firstSnap = await db.collection('listings').orderBy('createdAt', 'desc').limit(PAGE_SIZE).get();
+        lastDocRef.current = firstSnap.docs[firstSnap.docs.length - 1] || null;
+
+        if (!lastDocRef.current) {
+          if (!aliveRef.current) return;
+          setHasMore(false);
+          setLoadingMore(false);
+          return;
+        }
+      }
+
+      const lastDoc = lastDocRef.current;
+      const snap = await db
+        .collection('listings')
+        .orderBy('createdAt', 'desc')
+        .startAfter(lastDoc)
+        .limit(PAGE_SIZE)
+        .get();
+
+      const data = snap.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((listing) => listing.isActive !== false && listing.hidden !== true);
+
+      if (!aliveRef.current) return;
+
+      setListings((prev) => {
+        const existing = new Set(prev.map((x) => x.id));
+        const merged = [...prev, ...data.filter((x) => !existing.has(x.id))];
+        return merged;
+      });
+
+      lastDocRef.current = snap.docs[snap.docs.length - 1] || lastDocRef.current;
+      setHasMore(snap.docs.length === PAGE_SIZE);
+      setLoadingMore(false);
+    } catch (e) {
+      if (!aliveRef.current) return;
+      setError(e?.message || 'فشل تحميل المزيد');
+      setLoadingMore(false);
+    }
+  }, [PAGE_SIZE, hasMore, loadingMore]);
+
+  // ✅ تحميل تلقائي عند النزول (نوقفه في وضع الخريطة حتى لا تثقل markers)
+  useEffect(() => {
+    const el = loadMoreSentinelRef.current;
+    if (!el) return;
+    if (!hasMore || loading || loadingMore) return;
+    if (viewMode === 'map') return;
+
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) fetchMore();
+      },
+      { root: null, rootMargin: '900px 0px', threshold: 0 }
+    );
+
+    obs.observe(el);
+    return () => {
+      try {
+        obs.disconnect();
+      } catch {}
+    };
+  }, [fetchMore, hasMore, loading, loadingMore, viewMode]);
+
   const handleCategoryClick = (category) => {
     if (!category) return;
-    if (category.key === 'all') { setSelectedCategory('all'); return; }
+    if (category.key === 'all') {
+      setSelectedCategory('all');
+      return;
+    }
     setSelectedCategory(category.key);
     if (category.href) router.push(category.href);
   };
@@ -482,8 +606,11 @@ export default function HomePageClient({ initialListings = [] }) {
       const locationLabel = safeText(listing.locationLabel).toLowerCase();
       const description = safeText(listing.description).toLowerCase();
       return (
-        title.includes(q) || city.includes(q) ||
-        locationLabel.includes(q) || description.includes(q) || listingCat.includes(q)
+        title.includes(q) ||
+        city.includes(q) ||
+        locationLabel.includes(q) ||
+        description.includes(q) ||
+        listingCat.includes(q)
       );
     });
   }, [listings, search, selectedCategory]);
@@ -499,134 +626,206 @@ export default function HomePageClient({ initialListings = [] }) {
     <>
       <WebsiteJsonLd />
       <div className="home-page" dir="rtl">
-      <section className="hero-section" aria-label="القسم الرئيسي">
-        <div className="hero-container">
-          <div className="hero-content">
-            <h1 className="hero-title">سوق اليمن</h1>
-            <p className="hero-subtitle">أكبر منصة للإعلانات والمزادات في اليمن - بيع وشراء كل شيء</p>
-            <SearchBar search={search} setSearch={setSearch} suggestions={suggestions} />
-          </div>
-        </div>
-      </section>
-
-      <main className="main-content" role="main">
-        <div className="container">
-          <div className="categories-container" aria-label="أقسام الإعلانات">
-            <div className="categories-scroll" role="tablist">
-              {CATEGORY_CONFIG.map((category) => {
-                const isActive = selectedCategory === category.key;
-                return (
-                  <button
-                    key={category.key}
-                    type="button"
-                    className={`category-button focus-ring ${isActive ? 'active' : ''}`}
-                    onClick={() => handleCategoryClick(category)}
-                    role="tab"
-                    aria-selected={isActive}
-                  >
-                    <span className="category-button-icon" aria-hidden="true">{category.icon}</span>
-                    <span className="category-button-label">{category.label}</span>
-                  </button>
-                );
-              })}
+        <section className="hero-section" aria-label="القسم الرئيسي">
+          <div className="hero-container">
+            <div className="hero-content">
+              <h1 className="hero-title">سوق اليمن</h1>
+              <p className="hero-subtitle">أكبر منصة للإعلانات والمزادات في اليمن - بيع وشراء كل شيء</p>
+              <SearchBar search={search} setSearch={setSearch} suggestions={suggestions} />
             </div>
           </div>
+        </section>
 
-          <div className="toolbar">
-            <div className="toolbar-left">
-              <div className="view-toggle" role="group" aria-label="طريقة العرض">
-                <button
-                  type="button"
-                  className={`view-toggle-button focus-ring ${viewMode === 'grid' ? 'active' : ''}`}
-                  onClick={() => handleViewModeChange('grid')}
-                  aria-pressed={viewMode === 'grid'}
-                  title="عرض شبكي"
-                >
-                  <span className="view-toggle-icon" aria-hidden="true">◼️◼️</span>
-                  <span className="view-toggle-label">شبكة</span>
-                </button>
-                <button
-                  type="button"
-                  className={`view-toggle-button focus-ring ${viewMode === 'list' ? 'active' : ''}`}
-                  onClick={() => handleViewModeChange('list')}
-                  aria-pressed={viewMode === 'list'}
-                  title="عرض قائمة"
-                >
-                  <span className="view-toggle-icon" aria-hidden="true">☰</span>
-                  <span className="view-toggle-label">قائمة</span>
-                </button>
-                <button
-                  type="button"
-                  className={`view-toggle-button focus-ring ${viewMode === 'map' ? 'active' : ''}`}
-                  onClick={() => handleViewModeChange('map')}
-                  aria-pressed={viewMode === 'map'}
-                  title="عرض خريطة"
-                >
-                  <span className="view-toggle-icon" aria-hidden="true">🗺️</span>
-                  <span className="view-toggle-label">خريطة</span>
-                </button>
+        <main className="main-content" role="main">
+          <div className="container">
+            <div className="categories-container" aria-label="أقسام الإعلانات">
+              <div className="categories-scroll" role="tablist">
+                {CATEGORY_CONFIG.map((category) => {
+                  const isActive = selectedCategory === category.key;
+                  return (
+                    <button
+                      key={category.key}
+                      type="button"
+                      className={`category-button focus-ring ${isActive ? 'active' : ''}`}
+                      onClick={() => handleCategoryClick(category)}
+                      role="tab"
+                      aria-selected={isActive}
+                    >
+                      <span className="category-button-icon" aria-hidden="true">
+                        {category.icon}
+                      </span>
+                      <span className="category-button-label">{category.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
-            <div className="toolbar-right">
-              <span className="results-count" aria-live="polite">
-                <span className="results-number">{filteredListings.length}</span> إعلان
-              </span>
+
+            <div className="toolbar">
+              <div className="toolbar-left">
+                <div className="view-toggle" role="group" aria-label="طريقة العرض">
+                  <button
+                    type="button"
+                    className={`view-toggle-button focus-ring ${viewMode === 'grid' ? 'active' : ''}`}
+                    onClick={() => handleViewModeChange('grid')}
+                    aria-pressed={viewMode === 'grid'}
+                    title="عرض شبكي"
+                  >
+                    <span className="view-toggle-icon" aria-hidden="true">
+                      ◼️◼️
+                    </span>
+                    <span className="view-toggle-label">شبكة</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`view-toggle-button focus-ring ${viewMode === 'list' ? 'active' : ''}`}
+                    onClick={() => handleViewModeChange('list')}
+                    aria-pressed={viewMode === 'list'}
+                    title="عرض قائمة"
+                  >
+                    <span className="view-toggle-icon" aria-hidden="true">
+                      ☰
+                    </span>
+                    <span className="view-toggle-label">قائمة</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`view-toggle-button focus-ring ${viewMode === 'map' ? 'active' : ''}`}
+                    onClick={() => handleViewModeChange('map')}
+                    aria-pressed={viewMode === 'map'}
+                    title="عرض خريطة"
+                  >
+                    <span className="view-toggle-icon" aria-hidden="true">
+                      🗺️
+                    </span>
+                    <span className="view-toggle-label">خريطة</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* ✅ تم حذف عدّاد النتائج بالكامل */}
             </div>
+
+            {loading ? (
+              <SkeletonLoader count={viewMode === 'list' ? 4 : 6} type={viewMode === 'grid' ? 'grid' : 'list'} />
+            ) : error ? (
+              <div className="error-retry-wrapper">
+                <EmptyState type="error" icon="⚠️" title="حدث خطأ" message={error} showAction={false} />
+                <button className="error-retry-button focus-ring" onClick={handleRetry} aria-label="إعادة المحاولة">
+                  🔄 إعادة المحاولة
+                </button>
+              </div>
+            ) : filteredListings.length === 0 ? (
+              <EmptyState
+                icon="📭"
+                title="لا توجد إعلانات"
+                message={
+                  search || selectedCategory !== 'all'
+                    ? 'لا توجد إعلانات مطابقة لبحثك حالياً.'
+                    : 'لا توجد إعلانات منشورة حالياً.'
+                }
+                actionText="➕ أضف أول إعلان"
+                actionUrl="/add"
+              />
+            ) : viewMode === 'map' ? (
+              <div className="map-view">
+                <HomeMapView listings={filteredListings} />
+              </div>
+            ) : viewMode === 'grid' ? (
+              <>
+                <div className="grid-view" role="list" aria-label="قائمة الإعلانات">
+                  {filteredListings.map((listing, index) => (
+                    <GridListingCard key={listing.id} listing={listing} priority={index < 4} />
+                  ))}
+                </div>
+
+                {/* ✅ نقطة تحميل تلقائي */}
+                <div ref={loadMoreSentinelRef} style={{ height: 1 }} />
+
+                {/* ✅ رسالة خفيفة بدون أرقام */}
+                <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center' }}>
+                  {loadingMore ? (
+                    <div className="muted" style={{ padding: 10 }}>
+                      ...جاري تحميل المزيد
+                    </div>
+                  ) : hasMore ? (
+                    <div className="muted" style={{ padding: 10 }}>
+                      انزل لأسفل لتحميل المزيد
+                    </div>
+                  ) : (
+                    <div className="muted" style={{ padding: 10 }}>
+                      لا يوجد المزيد
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="list-view" role="list" aria-label="قائمة الإعلانات">
+                  {filteredListings.map((listing, index) => (
+                    <ListListingCard key={listing.id} listing={listing} priority={index < 3} />
+                  ))}
+                </div>
+
+                {/* ✅ نقطة تحميل تلقائي */}
+                <div ref={loadMoreSentinelRef} style={{ height: 1 }} />
+
+                <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center' }}>
+                  {loadingMore ? (
+                    <div className="muted" style={{ padding: 10 }}>
+                      ...جاري تحميل المزيد
+                    </div>
+                  ) : hasMore ? (
+                    <div className="muted" style={{ padding: 10 }}>
+                      انزل لأسفل لتحميل المزيد
+                    </div>
+                  ) : (
+                    <div className="muted" style={{ padding: 10 }}>
+                      لا يوجد المزيد
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
+        </main>
 
-          {loading ? (
-            <SkeletonLoader count={viewMode === 'list' ? 4 : 6} type={viewMode === 'grid' ? 'grid' : 'list'} />
-          ) : error ? (
-            <div className="error-retry-wrapper">
-              <EmptyState type="error" icon="⚠️" title="حدث خطأ" message={error} showAction={false} />
-              <button className="error-retry-button focus-ring" onClick={handleRetry} aria-label="إعادة المحاولة">
-                🔄 إعادة المحاولة
-              </button>
-            </div>
-          ) : filteredListings.length === 0 ? (
-            <EmptyState
-              icon="📭"
-              title="لا توجد إعلانات"
-              message={search || selectedCategory !== 'all' ? 'لا توجد إعلانات مطابقة لبحثك حالياً.' : 'لا توجد إعلانات منشورة حالياً.'}
-              actionText="➕ أضف أول إعلان"
-              actionUrl="/add"
-            />
-          ) : viewMode === 'map' ? (
-            <div className="map-view"><HomeMapView listings={filteredListings} /></div>
-          ) : viewMode === 'grid' ? (
-            <div className="grid-view" role="list" aria-label="قائمة الإعلانات">
-              {filteredListings.map((listing, index) => (
-                <GridListingCard key={listing.id} listing={listing} priority={index < 4} />
-              ))}
-            </div>
-          ) : (
-            <div className="list-view" role="list" aria-label="قائمة الإعلانات">
-              {filteredListings.map((listing, index) => (
-                <ListListingCard key={listing.id} listing={listing} priority={index < 3} />
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
+        <Link href="/add" className="floating-add-button focus-ring" aria-label="إضافة إعلان جديد" title="أضف إعلان جديد">
+          <span className="floating-add-icon" aria-hidden="true">
+            ➕
+          </span>
+          <span className="floating-add-text">أضف إعلان</span>
+        </Link>
 
-      <Link href="/add" className="floating-add-button focus-ring" aria-label="إضافة إعلان جديد" title="أضف إعلان جديد">
-        <span className="floating-add-icon" aria-hidden="true">➕</span>
-        <span className="floating-add-text">أضف إعلان</span>
-      </Link>
-
-      <style jsx>{`
-        .hidden { display: none !important; }
-        .map-view { height: 500px; border-radius: 12px; overflow: hidden; margin-bottom: 2.5rem; }
-        .list-category-label { margin-right: 4px; }
-        .results-number { font-weight: 700; color: var(--color-primary-light); }
-        .view-toggle-label { font-size: 0.875rem; }
-        @media (max-width: 768px) {
-          .map-view { height: 400px; }
-          .view-toggle-label { display: none; }
-          .view-toggle-button { padding: 0.5rem; }
-        }
-      `}</style>
-    </div>
+        <style jsx>{`
+          .hidden {
+            display: none !important;
+          }
+          .map-view {
+            height: 500px;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 2.5rem;
+          }
+          .list-category-label {
+            margin-right: 4px;
+          }
+          .view-toggle-label {
+            font-size: 0.875rem;
+          }
+          @media (max-width: 768px) {
+            .map-view {
+              height: 400px;
+            }
+            .view-toggle-label {
+              display: none;
+            }
+            .view-toggle-button {
+              padding: 0.5rem;
+            }
+          }
+        `}</style>
+      </div>
     </>
   );
 }
