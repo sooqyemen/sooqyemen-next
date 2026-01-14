@@ -1,95 +1,115 @@
-'use client';
+/* app/chat/[id]/chatPage.css */
 
-import React, { useState, useEffect, useRef } from 'react';
-import { db, auth, firebase } from '@/lib/firebaseClient'; 
-// ❌ تم حذف سطر استيراد CSS من هنا لمنع تكرار البناء وتعارض الملفات
+.chat-page {
+  padding: 16px;
+}
 
-export default function ChatPage({ params }) {
-  const chatId = params.id; 
-  const [user, setUser] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(true);
-  const messagesEndRef = useRef(null);
+.chat-container {
+  max-width: 980px;
+  margin: 0 auto;
+}
 
-  useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((u) => {
-      setUser(u);
-      if (!u) setLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+}
 
-  useEffect(() => {
-    if (!chatId) return;
-    const unsubscribe = db.collection('chats').doc(chatId).collection('messages')
-      .orderBy('createdAt', 'asc')
-      .onSnapshot((snapshot) => {
-        setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        setLoading(false);
-      });
-    return () => unsubscribe();
-  }, [chatId]);
+.back-btn {
+  cursor: pointer;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  border-radius: 10px;
+  padding: 6px 10px;
+}
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+.chat-area {
+  margin-top: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
 
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !user) return;
-    try {
-      await db.collection('chats').doc(chatId).collection('messages').add({
-        text: newMessage,
-        senderId: user.uid,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      });
-      setNewMessage('');
-    } catch (error) { console.error(error); }
-  };
+.messages-list {
+  height: 520px;
+  overflow-y: auto;
+  padding: 10px;
+}
 
-  const formatTime = (t) => t?.toDate ? t.toDate().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
+.message-bubble {
+  max-width: 78%;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
 
-  if (loading) return <div className="chat-page">جاري التحميل...</div>;
-  if (!user) return <div className="chat-page">يرجى تسجيل الدخول.</div>;
+.message-own {
+  background: #eef2ff;
+  margin-left: auto;
+}
 
-  return (
-    <div className="chat-page">
-      <div className="chat-container">
-        
-        {/* الهيدر من كودك الأصلي */}
-        <div className="chat-header">
-          <div className="header-left">
-            <button className="back-btn" onClick={() => window.history.back()}>➜</button>
-            <div className="user-info">
-              <div className="user-avatar"><img src="https://via.placeholder.com/48" alt="U" /></div>
-              <div className="user-details"><p className="user-name">مستخدم</p><span className="user-status">متصل</span></div>
-            </div>
-          </div>
-        </div>
+.message-other {
+  background: #f3f4f6;
+  margin-right: auto;
+}
 
-        {/* منطقة المحادثة */}
-        <div className="chat-area">
-          <div className="messages-list">
-            {messages.map((msg) => {
-              const isMe = msg.senderId === user.uid;
-              return (
-                <div key={msg.id} className={`message-bubble ${isMe ? 'message-own' : 'message-other'}`}>
-                  {msg.text}
-                  <span className="msg-time">{formatTime(msg.createdAt)}</span>
-                </div>
-              );
-            })}
-            <div ref={messagesEndRef} />
-          </div>
+.msg-time {
+  display: block;
+  font-size: 11px;
+  opacity: 0.7;
+  margin-top: 4px;
+  text-align: left;
+}
 
-          <form className="chat-input-area" onSubmit={handleSendMessage}>
-            <input type="text" className="chat-input" placeholder="اكتب..." value={newMessage} onChange={(e) => setNewMessage(e.target.value)} />
-            <button type="submit" className="send-btn" disabled={!newMessage.trim()}>➤</button>
-          </form>
-        </div>
+.chat-input-area {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid #e5e7eb;
+}
 
-      </div>
-    </div>
-  );
+.chat-input {
+  flex: 1;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px;
+  outline: none;
+}
+
+.send-btn {
+  border: 0;
+  border-radius: 10px;
+  padding: 0 14px;
+  cursor: pointer;
+}
+
+.loading-container,
+.error-container {
+  padding: 18px;
+  text-align: center;
+}
+
+.spinner {
+  width: 26px;
+  height: 26px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #111827;
+  border-radius: 50%;
+  margin: 0 auto;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
