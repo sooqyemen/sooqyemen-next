@@ -1,7 +1,7 @@
 // /app/listings/page.js
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
@@ -9,30 +9,29 @@ import Image from 'next/image';
 import Price from '@/components/Price';
 import ListingCard from '@/components/ListingCard';
 
-// Dynamically import the map component with SSR disabled
 const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
   ssr: false,
   loading: () => (
-    <div style={{ 
-      padding: '40px 20px', 
-      textAlign: 'center', 
-      background: '#f8f9fa', 
-      borderRadius: '12px',
-      border: '2px dashed #dee2e6'
-    }}>
+    <div
+      style={{
+        padding: '40px 20px',
+        textAlign: 'center',
+        background: '#f8f9fa',
+        borderRadius: '12px',
+        border: '2px dashed #dee2e6',
+      }}
+    >
       <div style={{ fontSize: '48px', marginBottom: '16px' }}>🗺️</div>
       <div style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>
         جاري تحميل الخريطة...
       </div>
-      <div style={{ fontSize: '14px', color: '#6c757d' }}>
-        يرجى الانتظار
-      </div>
+      <div style={{ fontSize: '14px', color: '#6c757d' }}>يرجى الانتظار</div>
     </div>
   ),
 });
 
-// ✅ Blur placeholder لتحسين تجربة تحميل الصور
-const BLUR_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+const BLUR_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
 
 function safeText(v) {
   return typeof v === 'string' ? v : '';
@@ -145,17 +144,9 @@ function ListingRow({ listing }) {
           {listing.auctionEnabled ? <span className="badge">⚡ مزاد</span> : null}
         </div>
 
-        <div className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>
-          {shortDesc}
-        </div>
+        <div className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>{shortDesc}</div>
       </div>
 
-      {/* تحسين للجوال */}
-      <div
-        style={{
-          display: 'none',
-        }}
-      />
       <style jsx>{`
         @media (max-width: 640px) {
           a.card {
@@ -172,72 +163,83 @@ function ListingRow({ listing }) {
 }
 
 export default function ListingsPageClient({ initialListings = [] }) {
+  const PAGE_SIZE = 24; // نفس رقم SSR
+
   const [view, setView] = useState('grid'); // grid | list | map
   const [listings, setListings] = useState(initialListings);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(initialListings.length === 0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [err, setErr] = useState('');
   const [search, setSearch] = useState('');
+  const [hasMore, setHasMore] = useState(true);
+
+  const lastDocRef = useRef(null);
+  const aliveRef = useRef(true);
+
   useEffect(() => {
-    // ✅ نعرض بيانات SSR فوراً (للـ SEO + سرعة أول فتح)
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
+
+  // ✅ تحميل أول صفحة من Firestore فقط لو SSR فاضي
+  useEffect(() => {
+    // إذا عندنا SSR، ما نعمل سحب كبير ولا realtime.
     if (initialListings && initialListings.length > 0) {
       setListings(initialListings);
+      setLoading(false);
+
+      // نعتبر أن فيه "ممكن المزيد" طالما استلمنا PAGE_SIZE كاملة
+      setHasMore(initialListings.length === PAGE_SIZE);
+
+      // ملاحظة: للـ pagination نحتاج lastDoc من Firestore، لكن SSR جاي كـ plain objects.
+      // لذلك سنجلب صفحة صغيرة (PAGE_SIZE) فقط عند أول ضغط "تحميل المزيد" لتحديد المؤشر بشكل صحيح.
+      // هذا أفضل من سحب 500.
+      lastDocRef.current = null;
+      return;
     }
 
-    let unsub = null;
+    // لو SSR فاضي -> نجلب أول PAGE_SIZE
     let cancelled = false;
 
-    const subscribe = async () => {
+    const fetchFirst = async () => {
       setLoading(true);
       setErr('');
 
       try {
-        // Dynamic import to avoid loading Firebase on initial render
         const { db } = await import('@/lib/firebaseClient');
         if (cancelled) return;
 
-        const base = db.collection('listings');
+        const snap = await db
+          .collection('listings')
+          .orderBy('createdAt', 'desc')
+          .limit(PAGE_SIZE)
+          .get();
 
-        const subscribeWithQuery = (withOrder) => {
-          const q = withOrder
-            ? base.orderBy('createdAt', 'desc').limit(500)
-            : base.limit(500);
+        const items = snap.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() }))
+          .filter((l) => l.isActive !== false && l.hidden !== true);
 
-          unsub = q.onSnapshot(
-            (snap) => {
-              const items = snap.docs
-                .map((doc) => ({ id: doc.id, ...doc.data() }))
-                .filter((l) => l.isActive !== false && l.hidden !== true);
+        if (!aliveRef.current || cancelled) return;
 
-              setListings(items);
-              setLoading(false);
-            },
-            (error) => {
-              // ⚠️ لو فشل orderBy (index/compat)، نستخدم fallback بدون ترتيب
-              if (withOrder) {
-                try { if (unsub) unsub(); } catch {}
-                subscribeWithQuery(false);
-                return;
-              }
-              console.error('[ListingsPageClient] onSnapshot error:', error);
-              setErr('تعذر تحميل الإعلانات. يرجى المحاولة لاحقاً.');
-              setLoading(false);
-            }
-          );
-        };
-
-        subscribeWithQuery(true);
-      } catch (error) {
-        console.error('[ListingsPageClient] Firebase load error:', error);
+        setListings(items);
+        lastDocRef.current = snap.docs[snap.docs.length - 1] || null;
+        setHasMore(snap.docs.length === PAGE_SIZE);
+        setLoading(false);
+      } catch (e) {
+        console.error('[ListingsPageClient] fetchFirst error:', e);
+        if (!aliveRef.current || cancelled) return;
         setErr('تعذر تحميل الإعلانات. يرجى المحاولة لاحقاً.');
         setLoading(false);
+        setHasMore(false);
       }
     };
 
-    subscribe();
+    fetchFirst();
 
     return () => {
       cancelled = true;
-      try { if (unsub) unsub(); } catch {}
     };
   }, [initialListings]);
 
@@ -254,10 +256,66 @@ export default function ListingsPageClient({ initialListings = [] }) {
     });
   }, [listings, search]);
 
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+
+    setLoadingMore(true);
+    setErr('');
+
+    try {
+      const { db } = await import('@/lib/firebaseClient');
+
+      // ✅ إذا كانت lastDocRef null (غالبًا لأننا بدأنا بـ SSR)
+      // نجلب الصفحة الأولى من Firestore مرة واحدة فقط لتحديد cursor الصحيح
+      if (!lastDocRef.current) {
+        const snap0 = await db
+          .collection('listings')
+          .orderBy('createdAt', 'desc')
+          .limit(PAGE_SIZE)
+          .get();
+
+        lastDocRef.current = snap0.docs[snap0.docs.length - 1] || null;
+
+        // إذا مافي cursor، مافي المزيد
+        if (!lastDocRef.current) {
+          setHasMore(false);
+          setLoadingMore(false);
+          return;
+        }
+      }
+
+      const snap = await db
+        .collection('listings')
+        .orderBy('createdAt', 'desc')
+        .startAfter(lastDocRef.current)
+        .limit(PAGE_SIZE)
+        .get();
+
+      const items = snap.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((l) => l.isActive !== false && l.hidden !== true);
+
+      if (!aliveRef.current) return;
+
+      // دمج بدون تكرار (احتياط)
+      const existing = new Set(listings.map((x) => x.id));
+      const merged = [...listings, ...items.filter((x) => !existing.has(x.id))];
+
+      setListings(merged);
+      lastDocRef.current = snap.docs[snap.docs.length - 1] || lastDocRef.current;
+      setHasMore(snap.docs.length === PAGE_SIZE);
+      setLoadingMore(false);
+    } catch (e) {
+      console.error('[ListingsPageClient] loadMore error:', e);
+      if (!aliveRef.current) return;
+      setErr('تعذر تحميل المزيد. حاول مرة أخرى.');
+      setLoadingMore(false);
+    }
+  };
+
   return (
     <div dir="rtl">
       <div className="container" style={{ paddingTop: 14, paddingBottom: 24 }}>
-        {/* العنوان */}
         <div className="card" style={{ padding: 16, marginBottom: 12 }}>
           <div style={{ fontWeight: 900, fontSize: 20 }}>جميع الإعلانات</div>
           <div className="muted" style={{ marginTop: 6 }}>
@@ -265,7 +323,6 @@ export default function ListingsPageClient({ initialListings = [] }) {
           </div>
         </div>
 
-        {/* شريط الأدوات */}
         <div className="card" style={{ padding: 12, marginBottom: 12 }}>
           <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <div className="row" style={{ gap: 8 }}>
@@ -298,7 +355,6 @@ export default function ListingsPageClient({ initialListings = [] }) {
           </div>
         </div>
 
-        {/* المحتوى */}
         {loading ? (
           <div className="card" style={{ padding: 16 }}>
             <div className="muted">جاري التحميل…</div>
@@ -322,23 +378,47 @@ export default function ListingsPageClient({ initialListings = [] }) {
         ) : view === 'map' ? (
           <HomeMapView listings={filtered} />
         ) : view === 'list' ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {filtered.map((l) => (
-              <ListingRow key={l.id} listing={l} />
-            ))}
-          </div>
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {filtered.map((l) => (
+                <ListingRow key={l.id} listing={l} />
+              ))}
+            </div>
+
+            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center' }}>
+              {hasMore ? (
+                <button className={`btn ${loadingMore ? '' : 'btnPrimary'}`} onClick={loadMore} disabled={loadingMore}>
+                  {loadingMore ? '...جاري تحميل المزيد' : 'تحميل المزيد'}
+                </button>
+              ) : (
+                <div className="muted" style={{ padding: 10 }}>لا يوجد المزيد</div>
+              )}
+            </div>
+          </>
         ) : (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-              gap: 12,
-            }}
-          >
-            {filtered.map((l) => (
-              <ListingCard key={l.id} listing={l} />
-            ))}
-          </div>
+          <>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+                gap: 12,
+              }}
+            >
+              {filtered.map((l) => (
+                <ListingCard key={l.id} listing={l} />
+              ))}
+            </div>
+
+            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center' }}>
+              {hasMore ? (
+                <button className={`btn ${loadingMore ? '' : 'btnPrimary'}`} onClick={loadMore} disabled={loadingMore}>
+                  {loadingMore ? '...جاري تحميل المزيد' : 'تحميل المزيد'}
+                </button>
+              ) : (
+                <div className="muted" style={{ padding: 10 }}>لا يوجد المزيد</div>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>
