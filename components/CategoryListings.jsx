@@ -3,7 +3,7 @@
 
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '@/lib/firebaseClient';
 import ListingCard from '@/components/ListingCard';
 
@@ -39,7 +39,6 @@ const ALIASES = {
 function normalizeSlug(v) {
   const raw = String(v || '').trim();
   if (!raw) return '';
-
   const mapped = ALIASES[raw] || raw;
 
   return String(mapped)
@@ -49,134 +48,33 @@ function normalizeSlug(v) {
     .replace(/-+/g, '_');
 }
 
-function listingCategorySlug(listing) {
-  const raw =
-    listing?.category ??
-    listing?.categorySlug ??
-    listing?.categoryId ??
-    listing?.cat ??
-    '';
+export default function CategoryListings({ category }) {
+  const PAGE_SIZE = 20;
 
-  return normalizeSlug(raw);
-}
-
-export default function CategoryListings({ category, initialListings = [] }) {
   const [view, setView] = useState('grid'); // grid | list | map
   const [q, setQ] = useState('');
-  const [items, setItems] = useState(initialListings);
-  const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [err, setErr] = useState('');
+  const [hasMore, setHasMore] = useState(true);
 
+  // cursor: آخر DocumentSnapshot تم جلبه
+  const lastDocRef = useRef(null);
+
+  // لتجنب setState بعد unmount
+  const aliveRef = useRef(true);
   useEffect(() => {
-    // إذا كان عندنا بيانات SSR نعرضها فوراً… لكن نستمر بالاشتراك عشان تظهر الإعلانات الجديدة مباشرة.
-    const hadSSR = initialListings.length > 0;
-    if (hadSSR) {
-      setLoading(false);
-    }
-
-    // fallback: إذا ما كان في بيانات SSR، نجلب من Firebase
-    // ✅ category قد يكون string أو array
-    const catsRaw = Array.isArray(category) ? category : [category];
-    const cats = catsRaw.map(normalizeSlug).filter(Boolean);
-    const catsSet = new Set(cats);
-
-    setLoading(true);
-    setErr('');
-
-    let unsub = null;
-
-    if (!cats.length) {
-      setItems([]);
-      setLoading(false);
-      return;
-    }
-
-    // ✅ إذا قسم واحد فقط، نحاول Query مباشر (أسرع)
-    const single = cats.length === 1 ? cats[0] : '';
-
-    const fallbackFetchAndFilter = () => {
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[CategoryListings] Using fallback fetch for category: ${single || cats.join(', ')}`);
-      }
-      const ref2 = db.collection('listings').orderBy('createdAt', 'desc').limit(400);
-      unsub = ref2.onSnapshot(
-        (snap2) => {
-          const all = snap2.docs
-            .map((d) => ({ id: d.id, ...d.data() }))
-            .filter((l) => l.isActive !== false && l.hidden !== true);
-
-          const filtered = all.filter((l) => catsSet.has(listingCategorySlug(l)));
-
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`[CategoryListings] Fallback fetch: ${all.length} total listings, ${filtered.length} match category`);
-            if (filtered.length === 0 && all.length > 0 && all.length <= 10) {
-              // Only show sample when we have a small dataset to avoid performance issues
-              const categories = all.map(l => `${l.id}: ${l.category}`);
-              console.log('[CategoryListings] Sample categories from listings:', categories);
-              console.log('[CategoryListings] Looking for categories:', Array.from(catsSet));
-            } else if (filtered.length === 0 && all.length > 10) {
-              console.log('[CategoryListings] No matches found. Try checking category field names in Firebase.');
-            }
-          }
-
-          setItems(filtered);
-          setLoading(false);
-        },
-        (e2) => {
-          console.error(e2);
-          setErr(e2?.message || 'فشل تحميل إعلانات القسم');
-          setLoading(false);
-        }
-      );
-    };
-
-    try {
-      if (!single) {
-        // عدة أسماء للقسم -> استخدم fallback مباشرة
-        fallbackFetchAndFilter();
-      } else {
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`[CategoryListings] Attempting direct query for category: "${single}"`);
-        }
-        const ref = db
-          .collection('listings')
-          .where('category', '==', single)
-          .orderBy('createdAt', 'desc')
-          .limit(200);
-
-        unsub = ref.onSnapshot(
-          (snap) => {
-            const data = snap.docs
-              .map((d) => ({ id: d.id, ...d.data() }))
-              .filter((l) => l.isActive !== false && l.hidden !== true);
-
-            if (process.env.NODE_ENV === 'development') {
-              console.log(`[CategoryListings] Direct query success: ${data.length} listings found for "${single}"`);
-            }
-
-            setItems(data);
-            setLoading(false);
-          },
-          (e) => {
-            if (process.env.NODE_ENV === 'development') {
-              console.warn(`[CategoryListings] Direct query failed for "${single}", falling back to filter:`, e.code || e.message);
-            } else {
-              console.error('Category query failed (maybe needs index):', e);
-            }
-            fallbackFetchAndFilter();
-          }
-        );
-      }
-    } catch (e) {
-      console.error(e);
-      setErr('فشل الاتصال بقاعدة البيانات');
-      setLoading(false);
-    }
-
+    aliveRef.current = true;
     return () => {
-      if (typeof unsub === 'function') unsub();
+      aliveRef.current = false;
     };
-  }, [category, initialListings.length]);
+  }, []);
+
+  // ✅ category قد يكون string أو array
+  const catsRaw = Array.isArray(category) ? category : [category];
+  const cats = catsRaw.map(normalizeSlug).filter(Boolean);
+  const single = cats.length === 1 ? cats[0] : '';
 
   const filtered = useMemo(() => {
     const s = String(q || '').trim().toLowerCase();
@@ -190,6 +88,114 @@ export default function CategoryListings({ category, initialListings = [] }) {
     });
   }, [items, q]);
 
+  async function fetchFirstPage() {
+    setErr('');
+    setLoading(true);
+    setHasMore(true);
+    lastDocRef.current = null;
+
+    if (!cats.length) {
+      setItems([]);
+      setLoading(false);
+      setHasMore(false);
+      return;
+    }
+
+    // ⚠️ هذا الحل يعتمد أن قيمة category في الداتا = single (مثل cars/phones...)
+    // إذا عندك داخل الداتا عربي/إنجليزي مختلط، الأفضل إضافة حقل categorySlug موحّد (أشرح لك تحت).
+    if (!single) {
+      // إذا عندك عدة أسماء/أكثر من قسم، الأفضل تبني Query مختلف (IN) أو تعتمد حقل موحّد.
+      // الآن سنعرض رسالة واضحة بدل ما نسحب 400 ونفلتر.
+      setItems([]);
+      setLoading(false);
+      setHasMore(false);
+      setErr('إعدادات القسم غير واضحة (أكثر من اسم للقسم). يفضّل توحيد حقل categorySlug في الإعلانات.');
+      return;
+    }
+
+    try {
+      const ref = db
+        .collection('listings')
+        .where('category', '==', single)
+        .orderBy('createdAt', 'desc')
+        .limit(PAGE_SIZE);
+
+      const snap = await ref.get();
+
+      const data = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((l) => l.isActive !== false && l.hidden !== true);
+
+      if (!aliveRef.current) return;
+
+      setItems(data);
+
+      // حفظ المؤشر
+      const last = snap.docs[snap.docs.length - 1] || null;
+      lastDocRef.current = last;
+
+      // إذا رجع أقل من PAGE_SIZE غالبًا ما فيه المزيد
+      setHasMore(snap.docs.length === PAGE_SIZE);
+      setLoading(false);
+    } catch (e) {
+      console.error(e);
+      if (!aliveRef.current) return;
+      setErr(e?.message || 'فشل تحميل إعلانات القسم');
+      setLoading(false);
+      setHasMore(false);
+    }
+  }
+
+  async function fetchMore() {
+    if (!hasMore || loadingMore) return;
+    if (!single) return;
+
+    const lastDoc = lastDocRef.current;
+    if (!lastDoc) {
+      setHasMore(false);
+      return;
+    }
+
+    setLoadingMore(true);
+    setErr('');
+
+    try {
+      const ref = db
+        .collection('listings')
+        .where('category', '==', single)
+        .orderBy('createdAt', 'desc')
+        .startAfter(lastDoc)
+        .limit(PAGE_SIZE);
+
+      const snap = await ref.get();
+
+      const data = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((l) => l.isActive !== false && l.hidden !== true);
+
+      if (!aliveRef.current) return;
+
+      setItems((prev) => [...prev, ...data]);
+
+      const newLast = snap.docs[snap.docs.length - 1] || null;
+      lastDocRef.current = newLast;
+
+      setHasMore(snap.docs.length === PAGE_SIZE);
+      setLoadingMore(false);
+    } catch (e) {
+      console.error(e);
+      if (!aliveRef.current) return;
+      setErr(e?.message || 'فشل تحميل المزيد');
+      setLoadingMore(false);
+    }
+  }
+
+  // عند تغيير القسم: نعيد التحميل من البداية
+  useEffect(() => {
+    fetchFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [single, cats.join('|')]);
+
   if (loading) {
     return (
       <div className="card" style={{ padding: 16 }}>
@@ -198,7 +204,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
     );
   }
 
-  if (err) {
+  if (err && items.length === 0) {
     return (
       <div className="card" style={{ padding: 16, border: '1px solid #fecaca' }}>
         <div style={{ fontWeight: 900, color: '#b91c1c' }}>⚠️ حدث خطأ</div>
@@ -248,17 +254,38 @@ export default function CategoryListings({ category, initialListings = [] }) {
       ) : view === 'map' ? (
         <HomeMapView listings={filtered} />
       ) : (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: view === 'grid' ? 'repeat(auto-fill, minmax(240px, 1fr))' : '1fr',
-            gap: 12,
-          }}
-        >
-          {filtered.map((l) => (
-            <ListingCard key={l.id} listing={l} />
-          ))}
-        </div>
+        <>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: view === 'grid' ? 'repeat(auto-fill, minmax(240px, 1fr))' : '1fr',
+              gap: 12,
+            }}
+          >
+            {filtered.map((l) => (
+              <ListingCard key={l.id} listing={l} />
+            ))}
+          </div>
+
+          {/* تحميل المزيد */}
+          <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center' }}>
+            {hasMore ? (
+              <button className={`btn ${loadingMore ? '' : 'btnPrimary'}`} onClick={fetchMore} disabled={loadingMore}>
+                {loadingMore ? '...جاري تحميل المزيد' : 'تحميل المزيد'}
+              </button>
+            ) : (
+              <div className="muted" style={{ padding: 10 }}>لا يوجد المزيد</div>
+            )}
+          </div>
+
+          {/* خطأ أثناء تحميل المزيد */}
+          {err && items.length > 0 ? (
+            <div className="card" style={{ padding: 12, marginTop: 12, border: '1px solid #fecaca' }}>
+              <div style={{ fontWeight: 900, color: '#b91c1c' }}>⚠️</div>
+              <div className="muted" style={{ marginTop: 6 }}>{err}</div>
+            </div>
+          ) : null}
+        </>
       )}
     </div>
   );
