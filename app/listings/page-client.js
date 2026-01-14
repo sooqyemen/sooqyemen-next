@@ -81,7 +81,7 @@ function ListingRow({ listing }) {
           height: 120,
           borderRadius: 12,
           overflow: 'hidden',
-          background: '#f1ftbbf9',
+          background: '#f1f5f9', // ✅ تصحيح اللون
           flexShrink: 0,
         }}
       >
@@ -146,7 +146,9 @@ function ListingRow({ listing }) {
           {listing.auctionEnabled ? <span className="badge">⚡ مزاد</span> : null}
         </div>
 
-        <div className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>{shortDesc}</div>
+        <div className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>
+          {shortDesc}
+        </div>
       </div>
 
       <style jsx>{`
@@ -243,7 +245,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
     return () => {
       cancelled = true;
     };
-  }, [initialListings]);
+  }, [initialListings, PAGE_SIZE]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -300,10 +302,11 @@ export default function ListingsPageClient({ initialListings = [] }) {
       if (!aliveRef.current) return;
 
       // دمج بدون تكرار (احتياط)
-      const existing = new Set(listings.map((x) => x.id));
-      const merged = [...listings, ...items.filter((x) => !existing.has(x.id))];
+      setListings((prev) => {
+        const existing = new Set(prev.map((x) => x.id));
+        return [...prev, ...items.filter((x) => !existing.has(x.id))];
+      });
 
-      setListings(merged);
       lastDocRef.current = snap.docs[snap.docs.length - 1] || lastDocRef.current;
       setHasMore(snap.docs.length === PAGE_SIZE);
       setLoadingMore(false);
@@ -313,7 +316,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
       setErr('تعذر تحميل المزيد. حاول مرة أخرى.');
       setLoadingMore(false);
     }
-  }, [hasMore, loadingMore, listings]);
+  }, [hasMore, loadingMore, PAGE_SIZE]);
 
   // ✅ Infinite Scroll: تحميل تلقائي عند الوصول لنهاية القائمة
   useEffect(() => {
@@ -387,9 +390,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
               ➕ أضف إعلان
             </Link>
 
-            <div className="muted" style={{ fontWeight: 900 }}>
-              {filtered.length} إعلان
-            </div>
+            {/* ✅ تم حذف عدّاد {filtered.length} إعلان */}
           </div>
         </div>
 
@@ -429,15 +430,20 @@ export default function ListingsPageClient({ initialListings = [] }) {
 
             <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center' }}>
               {loadingMore ? (
-                <div className="muted" style={{ padding: 10 }}>...جاري تحميل المزيد</div>
+                <div className="muted" style={{ padding: 10 }}>
+                  ...جاري تحميل المزيد
+                </div>
               ) : hasMore ? (
-                <div className="muted" style={{ padding: 10 }}>انزل لأسفل لتحميل المزيد</div>
+                <div className="muted" style={{ padding: 10 }}>
+                  انزل لأسفل لتحميل المزيد
+                </div>
               ) : (
-                <div className="muted" style={{ padding: 10 }}>لا يوجد المزيد</div>
+                <div className="muted" style={{ padding: 10 }}>
+                  لا يوجد المزيد
+                </div>
               )}
             </div>
 
-            {/* خطأ أثناء تحميل المزيد */}
             {err && listings.length > 0 ? (
               <div className="card" style={{ padding: 12, marginTop: 12, border: '1px solid rgba(220,38,38,.25)' }}>
                 <div style={{ fontWeight: 900, color: '#991b1b' }}>⚠️ {err}</div>
@@ -463,15 +469,20 @@ export default function ListingsPageClient({ initialListings = [] }) {
 
             <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center' }}>
               {loadingMore ? (
-                <div className="muted" style={{ padding: 10 }}>...جاري تحميل المزيد</div>
+                <div className="muted" style={{ padding: 10 }}>
+                  ...جاري تحميل المزيد
+                </div>
               ) : hasMore ? (
-                <div className="muted" style={{ padding: 10 }}>انزل لأسفل لتحميل المزيد</div>
+                <div className="muted" style={{ padding: 10 }}>
+                  انزل لأسفل لتحميل المزيد
+                </div>
               ) : (
-                <div className="muted" style={{ padding: 10 }}>لا يوجد المزيد</div>
+                <div className="muted" style={{ padding: 10 }}>
+                  لا يوجد المزيد
+                </div>
               )}
             </div>
 
-            {/* خطأ أثناء تحميل المزيد */}
             {err && listings.length > 0 ? (
               <div className="card" style={{ padding: 12, marginTop: 12, border: '1px solid rgba(220,38,38,.25)' }}>
                 <div style={{ fontWeight: 900, color: '#991b1b' }}>⚠️ {err}</div>
