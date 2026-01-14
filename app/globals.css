@@ -69,9 +69,6 @@ img{
   /* Performance optimizations */
   content-visibility: auto;
   contain-intrinsic-size: 300px 200px;
-  /* Faster image decoding */
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
 }
 
 /* ===== Accessibility - Skip to content ===== */
@@ -110,8 +107,12 @@ img{
   /* Performance optimizations */
   contain: layout style paint;
   content-visibility: auto;
-  /* GPU acceleration */
+  /* GPU acceleration for smooth transitions */
   transform: translateZ(0);
+}
+
+.card:hover,
+.card:active {
   will-change: transform;
 }
 
@@ -153,6 +154,10 @@ img{
   -webkit-tap-highlight-color: transparent;
   /* GPU acceleration */
   transform: translateZ(0);
+}
+
+.btn:hover,
+.btn:active {
   will-change: transform;
 }
 .btn:focus-visible{

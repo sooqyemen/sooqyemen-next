@@ -646,7 +646,7 @@ export default function AddPage() {
                 borderRadius: '12px',
                 border: '2px dashed #0ea5e9'
               }}>
-                <div style={{ fontSize: '48px', marginBottom: '16px' }}>🗺️</div>
+                <div style={{ fontSize: '48px', marginBottom: '16px' }} role="img" aria-label="أيقونة الخريطة">🗺️</div>
                 <button
                   type="button"
                   onClick={() => setShowMap(true)}
@@ -656,8 +656,9 @@ export default function AddPage() {
                     fontSize: '16px',
                     fontWeight: 'bold'
                   }}
+                  aria-label="تحميل الخريطة لتحديد الموقع"
                 >
-                  📍 تحميل الخريطة
+                  <span role="img" aria-label="أيقونة موقع">📍</span> تحميل الخريطة
                 </button>
                 <p style={{ marginTop: '12px', color: '#64748b', fontSize: '14px' }}>
                   اضغط لتحديد موقع الإعلان على الخريطة
