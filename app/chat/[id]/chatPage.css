@@ -2,20 +2,16 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { db, auth, firebase } from '@/lib/firebaseClient'; 
-// تأكد من المسار الصحيح لملف CSS
-import './chatPage.css';
+// ❌ تم حذف سطر استيراد CSS من هنا لمنع تكرار البناء وتعارض الملفات
 
 export default function ChatPage({ params }) {
-  const { id: chatId } = params;
+  const chatId = params.id; 
   const [user, setUser] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
-  
-  // Ref for auto-scroll
   const messagesEndRef = useRef(null);
 
-  // 1. Auth Check
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((u) => {
       setUser(u);
@@ -24,102 +20,61 @@ export default function ChatPage({ params }) {
     return () => unsubscribe();
   }, []);
 
-  // 2. Real-time Messages
   useEffect(() => {
     if (!chatId) return;
-
-    // استخدام syntax الـ compat كما في ملفك
-    const unsubscribe = db
-      .collection('chats')
-      .doc(chatId)
-      .collection('messages')
+    const unsubscribe = db.collection('chats').doc(chatId).collection('messages')
       .orderBy('createdAt', 'asc')
       .onSnapshot((snapshot) => {
-        const fetchedMessages = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setMessages(fetchedMessages);
+        setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         setLoading(false);
       });
-
     return () => unsubscribe();
   }, [chatId]);
 
-  // 3. Auto Scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // 4. Send Message
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !user) return;
-
     try {
       await db.collection('chats').doc(chatId).collection('messages').add({
         text: newMessage,
         senderId: user.uid,
-        senderEmail: user.email,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       });
       setNewMessage('');
-    } catch (error) {
-      console.error("Error sending message: ", error);
-    }
+    } catch (error) { console.error(error); }
   };
 
-  // Helper for Time
-  const formatTime = (timestamp) => {
-    if (!timestamp) return '';
-    const date = timestamp.toDate();
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
+  const formatTime = (t) => t?.toDate ? t.toDate().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
 
-  if (loading) return <div className="chat-page"><div className="loading-container"><div className="spinner"></div></div></div>;
-  if (!user) return <div className="chat-page"><div className="error-container">يرجى تسجيل الدخول.</div></div>;
+  if (loading) return <div className="chat-page">جاري التحميل...</div>;
+  if (!user) return <div className="chat-page">يرجى تسجيل الدخول.</div>;
 
   return (
     <div className="chat-page">
       <div className="chat-container">
         
-        {/* --- Header (باستخدام كلاساتك) --- */}
+        {/* الهيدر من كودك الأصلي */}
         <div className="chat-header">
           <div className="header-left">
-            {/* يمكنك إضافة Link للرجوع هنا */}
             <button className="back-btn" onClick={() => window.history.back()}>➜</button>
             <div className="user-info">
-              <div className="user-avatar">
-                 {/* صورة افتراضية */}
-                 <img src="https://via.placeholder.com/48" alt="User" />
-              </div>
-              <div className="user-details">
-                <p className="user-name">مستخدم سوق اليمن</p>
-                <span className="user-status">متصل الآن</span>
-              </div>
+              <div className="user-avatar"><img src="https://via.placeholder.com/48" alt="U" /></div>
+              <div className="user-details"><p className="user-name">مستخدم</p><span className="user-status">متصل</span></div>
             </div>
           </div>
         </div>
 
-        {/* --- Listing Preview (معاينة الإعلان - اختياري) --- */}
-        {/* <div className="listing-preview">
-            <div className="listing-image"><img src="..." /></div>
-            <div className="listing-info">
-              <h4>عنوان الإعلان هنا</h4>
-              <p className="listing-price">50,000 ر.ي</p>
-            </div>
-        </div> */}
-
-        {/* --- Chat Area (منطقة الرسائل) --- */}
+        {/* منطقة المحادثة */}
         <div className="chat-area">
           <div className="messages-list">
             {messages.map((msg) => {
               const isMe = msg.senderId === user.uid;
               return (
-                <div 
-                  key={msg.id} 
-                  className={`message-bubble ${isMe ? 'message-own' : 'message-other'}`}
-                >
+                <div key={msg.id} className={`message-bubble ${isMe ? 'message-own' : 'message-other'}`}>
                   {msg.text}
                   <span className="msg-time">{formatTime(msg.createdAt)}</span>
                 </div>
@@ -128,18 +83,9 @@ export default function ChatPage({ params }) {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* --- Input Area (مكان الكتابة) --- */}
           <form className="chat-input-area" onSubmit={handleSendMessage}>
-            <input
-              type="text"
-              className="chat-input"
-              placeholder="اكتب رسالة..."
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-            />
-            <button type="submit" className="send-btn" disabled={!newMessage.trim()}>
-              ➤
-            </button>
+            <input type="text" className="chat-input" placeholder="اكتب..." value={newMessage} onChange={(e) => setNewMessage(e.target.value)} />
+            <button type="submit" className="send-btn" disabled={!newMessage.trim()}>➤</button>
           </form>
         </div>
 
