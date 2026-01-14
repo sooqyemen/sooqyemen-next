@@ -5,6 +5,16 @@ import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 
+const unreadBadgeStyle = {
+  marginLeft: 8,
+  background: '#ef4444',
+  color: 'white',
+  padding: '2px 8px',
+  borderRadius: 12,
+  fontSize: 11,
+  fontWeight: 'bold',
+};
+
 export default function ChatList() {
   const { user } = useAuth();
   const uid = user?.uid ? String(user.uid) : '';
@@ -57,15 +67,7 @@ export default function ChatList() {
             <div style={{ fontWeight: 900, marginBottom: 4 }}>
               {title}
               {unreadCount > 0 && (
-                <span style={{ 
-                  marginLeft: 8, 
-                  background: '#ef4444', 
-                  color: 'white', 
-                  padding: '2px 8px', 
-                  borderRadius: 12, 
-                  fontSize: 11,
-                  fontWeight: 'bold'
-                }}>
+                <span style={unreadBadgeStyle}>
                   {unreadCount}
                 </span>
               )}
