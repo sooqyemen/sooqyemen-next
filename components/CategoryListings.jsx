@@ -62,6 +62,9 @@ export default function CategoryListings({ category }) {
   // cursor: آخر DocumentSnapshot تم جلبه
   const lastDocRef = useRef(null);
 
+  // ✅ Infinite Scroll sentinel
+  const loadMoreRef = useRef(null);
+
   // لتجنب setState بعد unmount
   const aliveRef = useRef(true);
   useEffect(() => {
@@ -102,10 +105,7 @@ export default function CategoryListings({ category }) {
     }
 
     // ⚠️ هذا الحل يعتمد أن قيمة category في الداتا = single (مثل cars/phones...)
-    // إذا عندك داخل الداتا عربي/إنجليزي مختلط، الأفضل إضافة حقل categorySlug موحّد (أشرح لك تحت).
     if (!single) {
-      // إذا عندك عدة أسماء/أكثر من قسم، الأفضل تبني Query مختلف (IN) أو تعتمد حقل موحّد.
-      // الآن سنعرض رسالة واضحة بدل ما نسحب 400 ونفلتر.
       setItems([]);
       setLoading(false);
       setHasMore(false);
@@ -130,11 +130,9 @@ export default function CategoryListings({ category }) {
 
       setItems(data);
 
-      // حفظ المؤشر
       const last = snap.docs[snap.docs.length - 1] || null;
       lastDocRef.current = last;
 
-      // إذا رجع أقل من PAGE_SIZE غالبًا ما فيه المزيد
       setHasMore(snap.docs.length === PAGE_SIZE);
       setLoading(false);
     } catch (e) {
@@ -175,7 +173,11 @@ export default function CategoryListings({ category }) {
 
       if (!aliveRef.current) return;
 
-      setItems((prev) => [...prev, ...data]);
+      // دمج بدون تكرار (احتياط)
+      setItems((prev) => {
+        const existing = new Set(prev.map((x) => x.id));
+        return [...prev, ...data.filter((x) => !existing.has(x.id))];
+      });
 
       const newLast = snap.docs[snap.docs.length - 1] || null;
       lastDocRef.current = newLast;
@@ -195,6 +197,40 @@ export default function CategoryListings({ category }) {
     fetchFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [single, cats.join('|')]);
+
+  // ✅ تحميل تلقائي عند النزول للأسفل (Infinite Scroll)
+  useEffect(() => {
+    // لا نحمل تلقائي أثناء عرض الخريطة
+    if (view === 'map') return;
+
+    const el = loadMoreRef.current;
+    if (!el) return;
+
+    if (!hasMore || loading || loadingMore) return;
+
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (!first?.isIntersecting) return;
+        if (loadingMore || !hasMore) return;
+        fetchMore();
+      },
+      {
+        root: null,
+        rootMargin: '800px 0px',
+        threshold: 0,
+      }
+    );
+
+    obs.observe(el);
+
+    return () => {
+      try {
+        obs.disconnect();
+      } catch {}
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, hasMore, loading, loadingMore, single]);
 
   if (loading) {
     return (
@@ -237,9 +273,7 @@ export default function CategoryListings({ category }) {
             placeholder="ابحث داخل القسم..."
           />
 
-          <div className="muted" style={{ fontWeight: 800 }}>
-            {filtered.length} إعلان
-          </div>
+          {/* ✅ تم حذف عدّاد {filtered.length} إعلان */}
         </div>
       </div>
 
@@ -267,18 +301,19 @@ export default function CategoryListings({ category }) {
             ))}
           </div>
 
-          {/* تحميل المزيد */}
+          {/* ✅ نقطة التحميل التلقائي */}
+          <div ref={loadMoreRef} style={{ height: 1 }} />
+
           <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center' }}>
-            {hasMore ? (
-              <button className={`btn ${loadingMore ? '' : 'btnPrimary'}`} onClick={fetchMore} disabled={loadingMore}>
-                {loadingMore ? '...جاري تحميل المزيد' : 'تحميل المزيد'}
-              </button>
+            {loadingMore ? (
+              <div className="muted" style={{ padding: 10 }}>...جاري تحميل المزيد</div>
+            ) : hasMore ? (
+              <div className="muted" style={{ padding: 10 }}>انزل لأسفل لتحميل المزيد</div>
             ) : (
               <div className="muted" style={{ padding: 10 }}>لا يوجد المزيد</div>
             )}
           </div>
 
-          {/* خطأ أثناء تحميل المزيد */}
           {err && items.length > 0 ? (
             <div className="card" style={{ padding: 12, marginTop: 12, border: '1px solid #fecaca' }}>
               <div style={{ fontWeight: 900, color: '#b91c1c' }}>⚠️</div>
