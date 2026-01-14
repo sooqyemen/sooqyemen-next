@@ -83,11 +83,10 @@ export default function ChatBox({ chatId, listingId, otherUid }) {
     setText('');
 
     try {
-      // 1) أضف الرسالة
+      // 1) أضف الرسالة (using 'from' for consistency)
       await messagesRef.add({
         text: t,
         from: uid,
-        fromName: safeName(user),
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       });
 
@@ -99,9 +98,6 @@ export default function ChatBox({ chatId, listingId, otherUid }) {
           updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
           lastMessageText: t,
           lastMessageBy: uid,
-          participantNames: {
-            [uid]: safeName(user),
-          },
           unread: {
             ...(otherUid ? { [String(otherUid)]: firebase.firestore.FieldValue.increment(1) } : {}),
             [uid]: 0,
