@@ -1,7 +1,7 @@
-// /app/listings/page.js
+// app/listings/page-client.js
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
@@ -9,6 +9,7 @@ import Image from 'next/image';
 import Price from '@/components/Price';
 import ListingCard from '@/components/ListingCard';
 
+// Dynamically import the map component with SSR disabled
 const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
   ssr: false,
   loading: () => (
@@ -30,6 +31,7 @@ const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
   ),
 });
 
+// ✅ Blur placeholder لتحسين تجربة تحميل الصور
 const BLUR_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
 
@@ -79,7 +81,7 @@ function ListingRow({ listing }) {
           height: 120,
           borderRadius: 12,
           overflow: 'hidden',
-          background: '#f1f5f9',
+          background: '#f1ftbbf9',
           flexShrink: 0,
         }}
       >
@@ -174,6 +176,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
   const [hasMore, setHasMore] = useState(true);
 
   const lastDocRef = useRef(null);
+  const loadMoreRef = useRef(null);
   const aliveRef = useRef(true);
 
   useEffect(() => {
@@ -189,18 +192,17 @@ export default function ListingsPageClient({ initialListings = [] }) {
     if (initialListings && initialListings.length > 0) {
       setListings(initialListings);
       setLoading(false);
+      setErr('');
 
-      // نعتبر أن فيه "ممكن المزيد" طالما استلمنا PAGE_SIZE كاملة
+      // نفترض وجود المزيد إذا استلمنا PAGE_SIZE كاملة
       setHasMore(initialListings.length === PAGE_SIZE);
 
-      // ملاحظة: للـ pagination نحتاج lastDoc من Firestore، لكن SSR جاي كـ plain objects.
-      // لذلك سنجلب صفحة صغيرة (PAGE_SIZE) فقط عند أول ضغط "تحميل المزيد" لتحديد المؤشر بشكل صحيح.
-      // هذا أفضل من سحب 500.
+      // SSR يعطينا Objects (ليس DocumentSnapshot)
+      // لذلك نحدد cursor لاحقًا عند أول تحميل إضافي
       lastDocRef.current = null;
       return;
     }
 
-    // لو SSR فاضي -> نجلب أول PAGE_SIZE
     let cancelled = false;
 
     const fetchFirst = async () => {
@@ -256,7 +258,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
     });
   }, [listings, search]);
 
-  const loadMore = async () => {
+  const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
 
     setLoadingMore(true);
@@ -276,8 +278,8 @@ export default function ListingsPageClient({ initialListings = [] }) {
 
         lastDocRef.current = snap0.docs[snap0.docs.length - 1] || null;
 
-        // إذا مافي cursor، مافي المزيد
         if (!lastDocRef.current) {
+          if (!aliveRef.current) return;
           setHasMore(false);
           setLoadingMore(false);
           return;
@@ -311,11 +313,46 @@ export default function ListingsPageClient({ initialListings = [] }) {
       setErr('تعذر تحميل المزيد. حاول مرة أخرى.');
       setLoadingMore(false);
     }
-  };
+  }, [hasMore, loadingMore, listings]);
+
+  // ✅ Infinite Scroll: تحميل تلقائي عند الوصول لنهاية القائمة
+  useEffect(() => {
+    // اختياري: لا تحمل تلقائي أثناء عرض الخريطة
+    if (view === 'map') return;
+
+    const el = loadMoreRef.current;
+    if (!el) return;
+
+    if (!hasMore || loading || loadingMore) return;
+
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (!first?.isIntersecting) return;
+        // حماية إضافية
+        if (loadingMore || !hasMore) return;
+        loadMore();
+      },
+      {
+        root: null,
+        rootMargin: '800px 0px',
+        threshold: 0,
+      }
+    );
+
+    obs.observe(el);
+
+    return () => {
+      try {
+        obs.disconnect();
+      } catch {}
+    };
+  }, [view, hasMore, loading, loadingMore, loadMore]);
 
   return (
     <div dir="rtl">
       <div className="container" style={{ paddingTop: 14, paddingBottom: 24 }}>
+        {/* العنوان */}
         <div className="card" style={{ padding: 16, marginBottom: 12 }}>
           <div style={{ fontWeight: 900, fontSize: 20 }}>جميع الإعلانات</div>
           <div className="muted" style={{ marginTop: 6 }}>
@@ -323,6 +360,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
           </div>
         </div>
 
+        {/* شريط الأدوات */}
         <div className="card" style={{ padding: 12, marginBottom: 12 }}>
           <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <div className="row" style={{ gap: 8 }}>
@@ -355,11 +393,12 @@ export default function ListingsPageClient({ initialListings = [] }) {
           </div>
         </div>
 
+        {/* المحتوى */}
         {loading ? (
           <div className="card" style={{ padding: 16 }}>
             <div className="muted">جاري التحميل…</div>
           </div>
-        ) : err ? (
+        ) : err && listings.length === 0 ? (
           <div className="card" style={{ padding: 16, border: '1px solid rgba(220,38,38,.25)' }}>
             <div style={{ fontWeight: 900, color: '#991b1b' }}>⚠️ {err}</div>
           </div>
@@ -385,15 +424,25 @@ export default function ListingsPageClient({ initialListings = [] }) {
               ))}
             </div>
 
+            {/* ✅ نقطة التحميل التلقائي */}
+            <div ref={loadMoreRef} style={{ height: 1 }} />
+
             <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center' }}>
-              {hasMore ? (
-                <button className={`btn ${loadingMore ? '' : 'btnPrimary'}`} onClick={loadMore} disabled={loadingMore}>
-                  {loadingMore ? '...جاري تحميل المزيد' : 'تحميل المزيد'}
-                </button>
+              {loadingMore ? (
+                <div className="muted" style={{ padding: 10 }}>...جاري تحميل المزيد</div>
+              ) : hasMore ? (
+                <div className="muted" style={{ padding: 10 }}>انزل لأسفل لتحميل المزيد</div>
               ) : (
                 <div className="muted" style={{ padding: 10 }}>لا يوجد المزيد</div>
               )}
             </div>
+
+            {/* خطأ أثناء تحميل المزيد */}
+            {err && listings.length > 0 ? (
+              <div className="card" style={{ padding: 12, marginTop: 12, border: '1px solid rgba(220,38,38,.25)' }}>
+                <div style={{ fontWeight: 900, color: '#991b1b' }}>⚠️ {err}</div>
+              </div>
+            ) : null}
           </>
         ) : (
           <>
@@ -409,15 +458,25 @@ export default function ListingsPageClient({ initialListings = [] }) {
               ))}
             </div>
 
+            {/* ✅ نقطة التحميل التلقائي */}
+            <div ref={loadMoreRef} style={{ height: 1 }} />
+
             <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center' }}>
-              {hasMore ? (
-                <button className={`btn ${loadingMore ? '' : 'btnPrimary'}`} onClick={loadMore} disabled={loadingMore}>
-                  {loadingMore ? '...جاري تحميل المزيد' : 'تحميل المزيد'}
-                </button>
+              {loadingMore ? (
+                <div className="muted" style={{ padding: 10 }}>...جاري تحميل المزيد</div>
+              ) : hasMore ? (
+                <div className="muted" style={{ padding: 10 }}>انزل لأسفل لتحميل المزيد</div>
               ) : (
                 <div className="muted" style={{ padding: 10 }}>لا يوجد المزيد</div>
               )}
             </div>
+
+            {/* خطأ أثناء تحميل المزيد */}
+            {err && listings.length > 0 ? (
+              <div className="card" style={{ padding: 12, marginTop: 12, border: '1px solid rgba(220,38,38,.25)' }}>
+                <div style={{ fontWeight: 900, color: '#991b1b' }}>⚠️ {err}</div>
+              </div>
+            ) : null}
           </>
         )}
       </div>
