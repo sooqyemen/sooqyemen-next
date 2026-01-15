@@ -48,16 +48,16 @@ function normalizeSlug(v) {
     .replace(/-+/g, '_');
 }
 
-export default function CategoryListings({ category }) {
-  const PAGE_SIZE = 20;
+export default function CategoryListings({ category, initialListings = [] }) {
+  const PAGE_SIZE = 24;
 
   const [view, setView] = useState('grid'); // grid | list | map
   const [q, setQ] = useState('');
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState(initialListings);
+  const [loading, setLoading] = useState(initialListings.length === 0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [err, setErr] = useState('');
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(initialListings.length >= PAGE_SIZE);
 
   // cursor: آخر DocumentSnapshot تم جلبه
   const lastDocRef = useRef(null);
@@ -73,6 +73,26 @@ export default function CategoryListings({ category }) {
       aliveRef.current = false;
     };
   }, []);
+
+  // ✅ Setup pagination cursor from initialListings
+  useEffect(() => {
+    if (initialListings.length > 0 && !lastDocRef.current) {
+      const setupCursor = async () => {
+        const lastId = initialListings[initialListings.length - 1]?.id;
+        if (lastId) {
+          try {
+            const lastSnap = await db.collection('listings').doc(lastId).get();
+            if (lastSnap.exists) {
+              lastDocRef.current = lastSnap;
+            }
+          } catch (e) {
+            console.error('Failed to setup pagination cursor:', e);
+          }
+        }
+      };
+      setupCursor();
+    }
+  }, [initialListings]);
 
   // ✅ category قد يكون string أو array
   const catsRaw = Array.isArray(category) ? category : [category];
@@ -92,6 +112,11 @@ export default function CategoryListings({ category }) {
   }, [items, q]);
 
   async function fetchFirstPage() {
+    // Skip if we already have initialListings
+    if (initialListings.length > 0) {
+      return;
+    }
+
     setErr('');
     setLoading(true);
     setHasMore(true);

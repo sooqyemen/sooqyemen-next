@@ -1,6 +1,6 @@
 import { fetchListingIdsForSitemap } from '@/lib/firestoreRest';
 
-const BASE_URL = 'https://sooqyemen.com';
+const BASE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://sooqyemen.com').replace(/\/+$/, '');
 
 export default async function sitemap() {
   // ==========================================
@@ -9,7 +9,7 @@ export default async function sitemap() {
   const routes = [
     // الصفحات الأساسية
     '',              // الرئيسية
-    '/ads',          // كل الإعلانات
+    '/listings',     // كل الإعلانات
     '/add',          // إضافة إعلان
     '/about',        // من نحن
     '/contact',      // اتصل بنا
@@ -22,17 +22,18 @@ export default async function sitemap() {
     '/phones',           // جوالات
     '/electronics',      // إلكترونيات
     '/motorcycles',      // دراجات نارية
-    '/heavy-equipment',  // معدات ثقيلة
+    '/heavy_equipment',  // معدات ثقيلة
     '/solar',            // طاقة شمسية
-    '/internet-networks',// نت وشبكات
+    '/networks',         // نت وشبكات
     '/maintenance',      // صيانة
     '/furniture',        // أثاث
-    '/home-appliances',  // أدوات منزلية
+    '/home_tools',       // أدوات منزلية
     '/clothes',          // ملابس
     '/animals-birds',    // حيوانات وطيور
     '/jobs',             // وظائف
     '/services',         // خدمات
     '/other',            // أخرى
+    '/categories',       // الأقسام
   ];
 
   // تحويل القائمة إلى روابط

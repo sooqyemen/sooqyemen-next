@@ -5,23 +5,21 @@ import { useAuth } from '@/lib/useAuth';
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 
-import {
-  doc,
-  getDoc,
-  setDoc,
-  serverTimestamp,
-  collection,
-  query,
-  where,
-  getCountFromServer,
-  getDocs,
-  addDoc,
-  limit,
-} from 'firebase/firestore';
-import { db } from '@/lib/firebaseClient';
+import { firebase, db } from '@/lib/firebaseClient';
 
 const COMMISSION_PER_SIGNUP_SAR = 0.25;
 const MIN_PAYOUT_SAR = 50;
+
+// ✅ Helper for count queries (compat fallback)
+async function countCompat(q) {
+  try {
+    const snap = await q.count().get();
+    return snap.data().count;
+  } catch {
+    const s = await q.get();
+    return s.size;
+  }
+}
 
 function formatJoinedDate(user, userDocData) {
   const ts = userDocData?.createdAt;
@@ -114,13 +112,17 @@ export default function ProfilePage() {
   // ✅ تدعم userId (قديم) + ownerUid (جديد)
   const fetchReferral = async (uid) => {
     // 1) محاولة بالصيغة القديمة userId
-    let qRef = query(collection(db, 'referral_links'), where('userId', '==', uid), limit(1));
-    let snap = await getDocs(qRef);
+    let snap = await db.collection('referral_links')
+      .where('userId', '==', uid)
+      .limit(1)
+      .get();
 
     // 2) لو ما لقى.. جرّب الصيغة الجديدة ownerUid
     if (snap.empty) {
-      qRef = query(collection(db, 'referral_links'), where('ownerUid', '==', uid), limit(1));
-      snap = await getDocs(qRef);
+      snap = await db.collection('referral_links')
+        .where('ownerUid', '==', uid)
+        .limit(1)
+        .get();
     }
 
     if (snap.empty) return null;
@@ -164,7 +166,7 @@ export default function ProfilePage() {
       // ✅ إنشاء رابط جديد مرة واحدة
       const code = generateReferralCode(8);
 
-      await addDoc(collection(db, 'referral_links'), {
+      await db.collection('referral_links').add({
         userId: user.uid, // نخليه موجود للتوافق
         ownerUid: user.uid, // نخليه موجود للتوافق
         userEmail: user.email || '',
@@ -174,8 +176,8 @@ export default function ProfilePage() {
         signups: 0,
         currency: 'SAR',
         commissionPerSignup: COMMISSION_PER_SIGNUP_SAR,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       });
 
       // reload to get doc id/code safely
@@ -213,12 +215,12 @@ export default function ProfilePage() {
     const loadUserDoc = async () => {
       setErr('');
       try {
-        const ref = doc(db, 'users', user.uid);
-        const snap = await getDoc(ref);
+        const ref = db.collection('users').doc(user.uid);
+        const snap = await ref.get();
 
         if (!mounted) return;
 
-        if (snap.exists()) {
+        if (snap.exists) {
           const data = snap.data();
           setUserDocData(data);
 
@@ -243,11 +245,11 @@ export default function ProfilePage() {
             city: 'صنعاء',
             bio: '',
             ratingAvg: null,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
           };
 
-          await setDoc(ref, initial, { merge: true });
+          await ref.set(initial, { merge: true });
 
           if (!mounted) return;
 
@@ -292,59 +294,53 @@ export default function ProfilePage() {
       try {
         const uid = user.uid;
 
-        const qAll = query(collection(db, 'listings'), where('userId', '==', uid));
-        const qActive = query(
-          collection(db, 'listings'),
-          where('userId', '==', uid),
-          where('isActive', '==', true)
-        );
+        const qAll = db.collection('listings').where('userId', '==', uid);
+        const qActive = db.collection('listings')
+          .where('userId', '==', uid)
+          .where('isActive', '==', true);
 
         let soldCount = 0;
 
-        const allCountPromise = getCountFromServer(qAll);
-        const activeCountPromise = getCountFromServer(qActive);
+        const allCountPromise = countCompat(qAll);
+        const activeCountPromise = countCompat(qActive);
 
         let soldPromise1 = null;
         try {
-          const qSoldStatus = query(
-            collection(db, 'listings'),
-            where('userId', '==', uid),
-            where('status', '==', 'sold')
-          );
-          soldPromise1 = getCountFromServer(qSoldStatus);
+          const qSoldStatus = db.collection('listings')
+            .where('userId', '==', uid)
+            .where('status', '==', 'sold');
+          soldPromise1 = countCompat(qSoldStatus);
         } catch {
           soldPromise1 = null;
         }
 
         let soldPromise2 = null;
         try {
-          const qSoldFlag = query(
-            collection(db, 'listings'),
-            where('userId', '==', uid),
-            where('isSold', '==', true)
-          );
-          soldPromise2 = getCountFromServer(qSoldFlag);
+          const qSoldFlag = db.collection('listings')
+            .where('userId', '==', uid)
+            .where('isSold', '==', true);
+          soldPromise2 = countCompat(qSoldFlag);
         } catch {
           soldPromise2 = null;
         }
 
-        const [allCountRes, activeCountRes, soldRes1, soldRes2] = await Promise.all([
+        const [allCount, activeCount, sold1, sold2] = await Promise.all([
           allCountPromise,
           activeCountPromise,
           soldPromise1,
           soldPromise2,
         ]);
 
-        const sold1 = soldRes1?.data?.().count ?? 0;
-        const sold2 = soldRes2?.data?.().count ?? 0;
-        soldCount = Math.max(sold1, sold2);
+        const soldC1 = sold1 ?? 0;
+        const soldC2 = sold2 ?? 0;
+        soldCount = Math.max(soldC1, soldC2);
 
         if (!mounted) return;
 
         setStats((s) => ({
           ...s,
-          listings: allCountRes.data().count,
-          active: activeCountRes.data().count,
+          listings: allCount,
+          active: activeCount,
           sold: soldCount,
         }));
       } catch (e) {
@@ -386,17 +382,16 @@ export default function ProfilePage() {
     setErr('');
 
     try {
-      const ref = doc(db, 'users', user.uid);
+      const ref = db.collection('users').doc(user.uid);
 
-      await setDoc(
-        ref,
+      await ref.set(
         {
           name: formData.name || '',
           phone: formData.phone || '',
           city: formData.city || 'صنعاء',
           bio: formData.bio || '',
           email: user.email || formData.email || '',
-          updatedAt: serverTimestamp(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true }
       );

@@ -1,11 +1,13 @@
 // 📁 /app/robots.txt/route.js
 export async function GET() {
-  const content = `# سوق اليمن - Sooq Yemen
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://sooqyemen.com').replace(/\/+$/, '');
+
+  const content = `# Sooq Yemen
 User-agent: *
 Allow: /
 
 # Sitemaps
-Sitemap: https://www.sooqyemen.com/sitemap.xml
+Sitemap: ${siteUrl}/sitemap.xml
 
 # Disallow admin and private pages
 Disallow: /admin/
