@@ -5,7 +5,7 @@ User-agent: *
 Allow: /
 
 # Sitemaps
-Sitemap: https://www.sooqyemen.com/sitemap.xml
+Sitemap: https://sooqyemen.com/sitemap.xml
 
 # Disallow admin and private pages
 Disallow: /admin/
