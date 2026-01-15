@@ -241,7 +241,7 @@ function ListListingCard({ listing, priority = false }) {
               fetchPriority={priority ? 'high' : 'auto'}
               placeholder="blur"
               blurDataURL={BLUR_DATA_URL}
-              sizes="150px"
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 150px"
               style={{ objectFit: 'cover', width: '100%', height: '100%' }}
               onError={(e) => {
                 e.target.style.display = 'none';
@@ -735,7 +735,7 @@ export default function HomePageClient({ initialListings = [] }) {
               <>
                 <div className="grid-view" role="list" aria-label="قائمة الإعلانات">
                   {filteredListings.map((listing, index) => (
-                    <GridListingCard key={listing.id} listing={listing} priority={index < 4} />
+                    <GridListingCard key={listing.id} listing={listing} priority={index === 0} />
                   ))}
                 </div>
 
@@ -763,7 +763,7 @@ export default function HomePageClient({ initialListings = [] }) {
               <>
                 <div className="list-view" role="list" aria-label="قائمة الإعلانات">
                   {filteredListings.map((listing, index) => (
-                    <ListListingCard key={listing.id} listing={listing} priority={index < 3} />
+                    <ListListingCard key={listing.id} listing={listing} priority={index === 0} />
                   ))}
                 </div>
 
