@@ -241,7 +241,7 @@ function ListListingCard({ listing, priority = false }) {
               fetchPriority={priority ? 'high' : 'auto'}
               placeholder="blur"
               blurDataURL={BLUR_DATA_URL}
-              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 150px"
+              sizes="(max-width: 768px) 100vw, 140px"
               style={{ objectFit: 'cover', width: '100%', height: '100%' }}
               onError={(e) => {
                 e.target.style.display = 'none';
