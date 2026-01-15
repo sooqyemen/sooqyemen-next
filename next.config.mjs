@@ -15,7 +15,7 @@ const nextConfig = {
     } : false,
   },
   
-  // تحسينات البناء (تم حذف swcMinify لأنه مفعل تلقائياً)
+  // تحسينات البناء
   productionBrowserSourceMaps: false,
   compress: true,
   
@@ -28,11 +28,8 @@ const nextConfig = {
       'date-fns',
       '@mui/icons-material'
     ],
-    // webpackBuildWorker: true, // فعل هذا الخيار فقط إذا كان لديك ذاكرة كافية في السيرفر
     scrollRestoration: true,
-    // تحسين الأداء مع optimizeCss
     optimizeCss: true,
-    // تحسين font loading
     optimizeServerReact: true,
   },
   
@@ -55,8 +52,7 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'placehold.co',
       },
-
-      // ✅ إضافة دومينات picsum للصور المزروعة
+      // صور picsum
       {
         protocol: 'https',
         hostname: 'picsum.photos',
@@ -65,21 +61,16 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'fastly.picsum.photos',
       },
-
+      // ✅ تم الإبقاء على الدومين الصحيح فقط
       {
         protocol: 'https',
         hostname: 'sooqyemen.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'www.sooqyemen.com',
       },
     ],
     minimumCacheTTL: 86400, // 24 ساعة
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
-    // تعطيل التحسين في وضع التطوير لتسريع العمل
     unoptimized: process.env.NODE_ENV === 'development',
   },
   
@@ -139,7 +130,6 @@ const nextConfig = {
     ];
   },
 
-  // إعدادات إضافية
   poweredByHeader: false,
   generateEtags: true,
 };
