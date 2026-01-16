@@ -65,7 +65,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
   // ✅ وضع القائمة: كرت أفقي (مناسب للجوال)
   if (variant === 'list') {
     return (
-      <Link href={href} className="card lc-list" style={{ display: 'block', textDecoration: 'none' }}>
+      <Link href={href} className="card lc-list" style={{ display: 'flex', flexDirection: 'column', textDecoration: 'none' }}>
         <div className="row lc-list-row" style={{ gap: 12, alignItems: 'center' }}>
           {/* صورة */}
           <div className="lc-thumb">
@@ -110,11 +110,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
               </div>
             </div>
 
-            {shortDesc ? (
-              <div className="muted lc-desc" style={{ marginTop: 8 }}>
-                {shortDesc}
-              </div>
-            ) : null}
+            <div className="muted lc-desc" style={{ marginTop: 8 }}>{shortDesc || ""}</div>
           </div>
         </div>
 
@@ -132,7 +128,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           .lc-thumb-img {
             width: 100%;
             height: 100%;
-            object-fit: contain;
+            object-fit: cover;
             display: block;
           }
           .lc-thumb-empty{
@@ -149,6 +145,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
             font-weight: 900;
             font-size: 15px;
             line-height: 1.4;
+            min-height: 42px;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
@@ -157,6 +154,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           .lc-desc{
             font-size: 13px;
             line-height: 1.5;
+            min-height: 40px;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
@@ -165,7 +163,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
 
           @media (max-width: 480px) {
             .lc-thumb { width: 105px; height: 88px; }
-            .lc-title { font-size: 14px; }
+            .lc-title { font-size: 14px; min-height: 39px; }
           }
         `}</style>
       </Link>
@@ -174,7 +172,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
 
   // ✅ وضع الشبكة: كرت عمودي (مثل الرئيسية)
   return (
-    <Link href={href} className="card lc-grid" style={{ display: 'block', textDecoration: 'none' }}>
+    <Link href={href} className="card lc-grid" style={{ display: 'flex', flexDirection: 'column', textDecoration: 'none' }}>
       {/* الصورة */}
       {img ? (
         <div className="lc-imgWrap">
@@ -192,7 +190,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
         <div className="lc-imgEmpty">بدون صورة</div>
       )}
 
-      <div style={{ marginTop: 10 }}>
+      <div className="lc-body" style={{ marginTop: 10 }}>
         {/* العنوان */}
         <div className="lc-title">
           {listing?.title || 'بدون عنوان'}
@@ -222,14 +220,21 @@ export default function ListingCard({ listing, variant = 'grid' }) {
         </div>
 
         {/* وصف مختصر */}
-        {shortDesc ? (
-          <p className="muted lc-desc" style={{ marginTop: 8, marginBottom: 0 }}>
-            {shortDesc}
-          </p>
-        ) : null}
+        <p className="muted lc-desc" style={{ marginTop: 8, marginBottom: 0 }}>{shortDesc || ""}</p>
       </div>
 
       <style jsx>{`
+        .lc-grid{
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+        }
+        .lc-body{
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+        }
+
         .lc-imgWrap{
           overflow: hidden;
           border-radius: 12px;
@@ -239,7 +244,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
         .lc-img{
           width: 100%;
           height: 170px;
-          object-fit: contain;
+          object-fit: cover;
           display: block;
         }
         .lc-imgEmpty{
@@ -258,6 +263,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           font-weight: 900;
           margin-bottom: 4px;
           line-height: 1.4;
+            min-height: 42px;
           font-size: 15px;
           display: -webkit-box;
           -webkit-line-clamp: 2;
@@ -267,6 +273,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
         .lc-desc{
           font-size: 13px;
           line-height: 1.5;
+            min-height: 40px;
           display: -webkit-box;
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
@@ -280,7 +287,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
         @media (max-width: 480px) {
           .lc-img { height: 145px; }
           .lc-imgEmpty { height: 145px; }
-          .lc-title { font-size: 14px; }
+          .lc-title { font-size: 14px; min-height: 39px; }
         }
       `}</style>
     </Link>
