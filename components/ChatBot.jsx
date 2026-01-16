@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useAuth } from '@/lib/useAuth';
 
 export default function ChatBot() {
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     { role: 'assistant', text: 'مرحباً بك في سوق اليمن! 🇾🇪 كيف يمكنني مساعدتك في العثور على عقار أو سيارة اليوم؟' }
@@ -29,9 +31,23 @@ export default function ChatBot() {
     setIsLoading(true);
 
     try {
+      // ✅ إذا المستخدم مسجل دخول: نرسل الـ ID Token للمساعد
+      let token = '';
+      try {
+        if (user && typeof user.getIdToken === 'function') {
+          token = await user.getIdToken();
+        }
+      } catch (e1) {
+        // لا نوقف المساعد إذا فشل جلب التوكن
+        console.warn('[ChatBot] getIdToken failed', e1);
+      }
+
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ message: input }),
       });
 
@@ -87,8 +103,8 @@ export default function ChatBot() {
             ))}
             {isLoading && (
               <div className="message-row bot-row">
-                <div className="message-bubble bot-bubble typing">
-                  جاري الكتابة... ✍️
+                <div className="message-bubble bot-bubble">
+                  جاري الكتابة...
                 </div>
               </div>
             )}
@@ -96,161 +112,127 @@ export default function ChatBot() {
           </div>
 
           {/* الإدخال */}
-          <form onSubmit={sendMessage} className="input-area">
+          <form className="input-area" onSubmit={sendMessage}>
             <input
-              type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="اكتب استفسارك هنا..."
               disabled={isLoading}
             />
-            <button type="submit" disabled={isLoading || !input.trim()}>
-              ➤
+            <button type="submit" disabled={isLoading}>
+              إرسال
             </button>
           </form>
         </div>
       )}
 
       <style jsx>{`
-        /* زر الفتح */
         .chat-toggle-btn {
           position: fixed;
-          bottom: 24px;
-          left: 24px;
+          bottom: 20px;
+          right: 20px;
           z-index: 9999;
-          background-color: #2563eb;
+          background: linear-gradient(135deg, #2563eb, #0ea5e9);
           color: white;
-          padding: 16px;
-          border-radius: 50px;
           border: none;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-          cursor: pointer;
+          border-radius: 999px;
+          padding: 12px 16px;
           display: flex;
-          align-items: center;
           gap: 8px;
-          font-family: inherit;
-          transition: transform 0.2s;
+          align-items: center;
+          cursor: pointer;
+          box-shadow: 0 10px 25px rgba(0,0,0,0.18);
+          font-weight: 700;
         }
-        .chat-toggle-btn:hover {
-          transform: scale(1.05);
-          background-color: #1d4ed8;
-        }
-        .chat-toggle-btn .icon { font-size: 24px; }
-        .chat-toggle-btn .text { font-weight: bold; font-size: 16px; }
-
-        /* نافذة الشات */
+        .chat-toggle-btn .icon { font-size: 18px; }
         .chat-window {
           position: fixed;
-          bottom: 24px;
-          left: 24px;
-          width: 350px;
-          height: 500px;
-          background: white;
-          border-radius: 16px;
-          box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+          bottom: 20px;
+          right: 20px;
+          width: 360px;
+          height: 520px;
           z-index: 9999;
+          background: white;
+          border-radius: 14px;
+          box-shadow: 0 18px 40px rgba(0,0,0,0.22);
+          overflow: hidden;
           display: flex;
           flex-direction: column;
-          overflow: hidden;
-          border: 1px solid #e2e8f0;
-          font-family: sans-serif;
         }
-
-        /* الهيدر */
         .chat-header {
-          background-color: #2563eb;
+          background: linear-gradient(135deg, #0f172a, #1e293b);
           color: white;
-          padding: 16px;
+          padding: 12px 14px;
           display: flex;
           justify-content: space-between;
           align-items: center;
         }
         .header-info { display: flex; align-items: center; gap: 10px; }
-        .header-info h3 { margin: 0; font-size: 16px; font-weight: bold; }
-        .status { font-size: 12px; color: #dbeafe; display: flex; align-items: center; gap: 4px; }
-        .dot { width: 8px; height: 8px; background: #4ade80; border-radius: 50%; }
-        .close-btn { background: none; border: none; color: white; font-size: 20px; cursor: pointer; }
-
-        /* منطقة الرسائل */
+        .header-info h3 { margin: 0; font-size: 14px; }
+        .header-info .icon { font-size: 18px; }
+        .status { font-size: 12px; opacity: 0.9; display: flex; align-items: center; gap: 6px; }
+        .dot { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; display: inline-block; }
+        .close-btn {
+          background: transparent;
+          border: none;
+          color: white;
+          font-size: 18px;
+          cursor: pointer;
+        }
         .messages-area {
           flex: 1;
-          padding: 16px;
-          background-color: #f8fafc;
+          padding: 12px;
           overflow-y: auto;
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
+          background: #f8fafc;
         }
-        .message-row { display: flex; width: 100%; }
+        .message-row { display: flex; margin: 8px 0; }
         .user-row { justify-content: flex-end; }
         .bot-row { justify-content: flex-start; }
-        
         .message-bubble {
-          max-width: 80%;
-          padding: 10px 14px;
-          border-radius: 14px;
-          font-size: 14px;
-          line-height: 1.5;
-          word-wrap: break-word;
+          max-width: 78%;
+          padding: 10px 12px;
+          border-radius: 12px;
+          font-size: 13px;
+          line-height: 1.6;
+          white-space: pre-wrap;
         }
-        .user-bubble {
-          background-color: #2563eb;
-          color: white;
-          border-bottom-right-radius: 2px;
-        }
-        .bot-bubble {
-          background-color: white;
-          color: #1e293b;
-          border: 1px solid #e2e8f0;
-          border-bottom-left-radius: 2px;
-        }
-        .typing { color: #64748b; font-style: italic; }
-
-        /* الإدخال */
+        .user-bubble { background: #2563eb; color: white; border-bottom-right-radius: 4px; }
+        .bot-bubble { background: white; color: #0f172a; border: 1px solid #e2e8f0; border-bottom-left-radius: 4px; }
         .input-area {
-          padding: 12px;
-          background: white;
-          border-top: 1px solid #e2e8f0;
+          padding: 10px;
           display: flex;
           gap: 8px;
+          background: white;
+          border-top: 1px solid #e2e8f0;
         }
         .input-area input {
           flex: 1;
-          padding: 10px 16px;
-          border-radius: 24px;
-          border: 1px solid #cbd5e1;
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+          padding: 10px 12px;
           outline: none;
-          font-size: 14px;
+          font-size: 13px;
         }
-        .input-area input:focus { border-color: #2563eb; }
         .input-area button {
-          background: #2563eb;
-          color: white;
-          width: 40px;
-          height: 40px;
-          border-radius: 50%;
           border: none;
+          border-radius: 10px;
+          background: #0f172a;
+          color: white;
+          padding: 10px 12px;
           cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 18px;
-          transform: rotate(180deg); /* لأن الأيقونة تتجه لليمين ونحن RTL */
+          font-weight: 700;
         }
         .input-area button:disabled { background: #94a3b8; cursor: not-allowed; }
 
         @media (max-width: 480px) {
           .chat-window {
             width: 100%;
-            height: 100%;
+            right: 0;
             bottom: 0;
-            left: 0;
+            height: 70vh;
             border-radius: 0;
           }
-          .chat-toggle-btn {
-            bottom: 20px;
-            left: 20px;
-          }
+          .chat-toggle-btn { right: 14px; bottom: 14px; }
         }
       `}</style>
     </>
