@@ -1,61 +1,142 @@
 import { NextResponse } from 'next/server';
+import admin, { adminAuth, adminDb } from '@/lib/firebaseAdmin';
 
-// قاعدة معرفية بسيطة للمساعد الذكي
+// =========================
+// مساعد ذكي (FAQ + إحصاءات + إنشاء إعلان عبر محادثة)
+// =========================
+
+// قاعدة معرفية بسيطة (FAQ)
 const knowledgeBase = {
   // أسئلة حول الموقع
-  'ما هو|ماهو|ايش هو|شنو هو': 'سوق اليمن هو أكبر منصة للإعلانات والمزادات في اليمن. نقدم خدمة بيع وشراء السيارات، العقارات، الجوالات، الإلكترونيات، والمزيد. يمكنك تصفح أكثر من 16 فئة مختلفة.',
-  
+  'ما هو|ماهو|ايش هو|شنو هو':
+    'سوق اليمن هو أكبر منصة للإعلانات والمزادات في اليمن. نقدم خدمة بيع وشراء السيارات، العقارات، الجوالات، الإلكترونيات، والمزيد. يمكنك تصفح أكثر من 16 فئة مختلفة.',
+
   // كيفية إضافة إعلان
-  'كيف اضيف|كيف انشر|كيف اعلن|اضافة اعلان|نشر اعلان': 'لإضافة إعلان، اتبع هذه الخطوات:\n1. سجل دخول أو أنشئ حساب جديد\n2. اضغط على زر "إضافة إعلان" من القائمة\n3. اختر الفئة المناسبة\n4. املأ تفاصيل الإعلان وأضف الصور\n5. اضغط نشر\n\nيمكنك الانتقال مباشرة لصفحة الإضافة من هنا: /add',
-  
+  'كيف اضيف|كيف انشر|كيف اعلن|اضافة اعلان|نشر اعلان':
+    'لإضافة إعلان، اتبع هذه الخطوات:\n1) سجل دخول أو أنشئ حساب جديد\n2) اضغط على زر "إضافة إعلان" من القائمة\n3) اختر الفئة المناسبة\n4) املأ تفاصيل الإعلان وأضف الصور\n5) اضغط نشر\n\nيمكنك الانتقال مباشرة لصفحة الإضافة من هنا: /add',
+
   // الفئات المتاحة
-  'فئات|اقسام|تصنيفات|categories': 'الفئات المتوفرة في سوق اليمن:\n🚗 سيارات\n🏠 عقارات\n📱 جوالات\n💻 إلكترونيات\n🏍️ دراجات نارية\n🚜 معدات ثقيلة\n☀️ طاقة شمسية\n🌐 شبكات\n🔧 صيانة\n🛋️ أثاث\n🏡 أدوات منزلية\n👔 ملابس\n🐾 حيوانات\n💼 وظائف\n⚙️ خدمات\n📦 أخرى',
-  
+  'فئات|اقسام|تصنيفات|categories':
+    'الفئات المتوفرة في سوق اليمن:\n🚗 سيارات\n🏠 عقارات\n📱 جوالات\n💻 إلكترونيات\n🏍️ دراجات نارية\n🚜 معدات ثقيلة\n☀️ طاقة شمسية\n🌐 نت وشبكات\n🔧 صيانة\n🛋️ أثاث\n🏡 أدوات منزلية\n👔 ملابس\n🐾 حيوانات وطيور\n💼 وظائف\n⚙️ خدمات\n📦 أخرى',
+
   // المحادثات
-  'محادثة|شات|تواصل مع البائع': 'يمكنك التواصل مع البائع مباشرة من خلال:\n1. افتح صفحة الإعلان\n2. اضغط على زر "💬 محادثة"\n3. ابدأ المحادثة مع البائع\n\nيمكنك أيضاً مراجعة جميع محادثاتك من صفحة "محادثاتي".',
-  
+  'محادثة|شات|تواصل مع البائع':
+    'يمكنك التواصل مع البائع مباشرة من خلال:\n1) افتح صفحة الإعلان\n2) اضغط على زر "💬 محادثة"\n3) ابدأ المحادثة مع البائع\n\nيمكنك أيضاً مراجعة جميع محادثاتك من صفحة "محادثاتي".',
+
   // المزادات
-  'مزاد|مزادات|auction': 'المزادات في سوق اليمن تتيح لك:\n• المزايدة على المنتجات\n• متابعة المزادات المفتوحة\n• الحصول على أفضل الأسعار\n\nابحث عن الإعلانات التي تحتوي على علامة "مزاد" للمشاركة.',
-  
+  'مزاد|مزادات|auction':
+    'المزادات في سوق اليمن تتيح لك:\n• المزايدة على المنتجات\n• متابعة المزادات المفتوحة\n• الحصول على أفضل الأسعار\n\nابحث عن الإعلانات التي تحتوي على علامة "مزاد" للمشاركة.',
+
   // التسجيل والحساب
-  'تسجيل|حساب|دخول|login|register': 'للتسجيل في سوق اليمن:\n1. اضغط على "تسجيل" من القائمة\n2. أدخل بريدك الإلكتروني وكلمة المرور\n3. أكمل البيانات الشخصية\n\nأو يمكنك استخدام التسجيل السريع عبر Google.',
-  
+  'تسجيل|حساب|دخول|login|register':
+    'للتسجيل في سوق اليمن:\n1) اضغط على "تسجيل" من القائمة\n2) أدخل بريدك الإلكتروني وكلمة المرور\n3) أكمل البيانات الشخصية\n\nأو يمكنك استخدام التسجيل السريع عبر Google.',
+
   // البحث
-  'بحث|search|ابحث': 'للبحث عن إعلان:\n1. استخدم شريط البحث في الأعلى\n2. أو تصفح الفئات المختلفة\n3. استخدم الفلاتر لتضييق النتائج\n\nيمكنك أيضاً استخدام الخريطة للبحث حسب الموقع.',
-  
+  'بحث|search|ابحث':
+    'للبحث عن إعلان:\n1) استخدم شريط البحث في الأعلى\n2) أو تصفح الفئات المختلفة\n3) استخدم الفلاتر لتضييق النتائج\n\nيمكنك أيضاً استخدام الخريطة للبحث حسب الموقع.',
+
   // معلومات الإعلان
-  'صور|اضافة صور|رفع صور': 'يمكنك إضافة حتى 8 صور لكل إعلان. تأكد من:\n• جودة الصور عالية\n• الصور واضحة وتظهر المنتج بشكل جيد\n• تنوع الزوايا',
-  
+  'صور|اضافة صور|رفع صور':
+    'يمكنك إضافة حتى 8 صور لكل إعلان. تأكد من:\n• جودة الصور عالية\n• الصور واضحة وتظهر المنتج بشكل جيد\n• تنوع الزوايا',
+
   // الأسعار
-  'سعر|اسعار|price|prices': 'في سوق اليمن يمكنك عرض الأسعار بـ:\n• الريال اليمني (ر.ي)\n• الدولار الأمريكي ($)\n\nيمكنك أيضاً اختيار "قابل للتفاوض" إذا كنت مرناً في السعر.',
-  
+  'سعر|اسعار|price|prices':
+    'في سوق اليمن يمكنك عرض الأسعار بـ:\n• الريال اليمني (ر.ي)\n• الريال السعودي (SAR)\n• الدولار الأمريكي (USD)\n\nيمكنك أيضاً اختيار "قابل للتفاوض" إذا كنت مرناً في السعر.',
+
   // الموقع
-  'موقع|خريطة|location|map': 'نستخدم الخرائط التفاعلية لمساعدتك في:\n• تحديد موقع المنتج\n• البحث حسب المنطقة\n• معرفة المسافة من موقعك\n\nيمكنك تفعيل الموقع للحصول على نتائج أدق.',
-  
+  'موقع|خريطة|location|map':
+    'نستخدم الخرائط التفاعلية لمساعدتك في:\n• تحديد موقع المنتج\n• البحث حسب المنطقة\n• معرفة المسافة من موقعك\n\nيمكنك تفعيل الموقع للحصول على نتائج أدق.',
+
   // الدعم والمساعدة
-  'مساعدة|دعم|help|support|مشكلة': 'إذا كنت تواجه أي مشكلة:\n• تفضل بزيارة صفحة المساعدة: /help\n• أو تواصل معنا: /contact\n• أو راسلنا على البريد الإلكتروني\n\nنحن هنا لمساعدتك! 😊',
-  
+  'مساعدة|دعم|help|support|مشكلة':
+    'إذا كنت تواجه أي مشكلة:\n• تفضل بزيارة صفحة المساعدة: /help\n• أو تواصل معنا: /contact\n\nنحن هنا لمساعدتك! 😊',
+
   // شروط الاستخدام
-  'شروط|سياسة|privacy|terms': 'للاطلاع على:\n• شروط الاستخدام: /terms\n• سياسة الخصوصية: /privacy\n\nنحن نحترم خصوصيتك ونحمي بياناتك.',
+  'شروط|سياسة|privacy|terms':
+    'للاطلاع على:\n• شروط الاستخدام: /terms\n• سياسة الخصوصية: /privacy\n\nنحن نحترم خصوصيتك ونحمي بياناتك.',
 };
 
-// دالة لإيجاد أفضل تطابق
+// =========================
+// إعدادات + أدوات مساعدة
+// =========================
+
+const DEFAULT_SAR = 425; // 1 SAR = 425 YER
+const DEFAULT_USD = 1632; // 1 USD = 1632 YER
+const DRAFTS_COLLECTION = 'assistant_drafts';
+
+const CATEGORIES = [
+  { slug: 'cars', name: 'سيارات', keywords: ['سيارة', 'سيارات', 'car', 'cars'] },
+  { slug: 'realestate', name: 'عقارات', keywords: ['عقار', 'عقارات', 'شقة', 'شقق', 'أرض', 'ارض', 'realestate', 'estate'] },
+  { slug: 'phones', name: 'جوالات', keywords: ['جوال', 'جوالات', 'هاتف', 'هواتف', 'phone', 'phones'] },
+  { slug: 'electronics', name: 'إلكترونيات', keywords: ['الكترونيات', 'إلكترونيات', 'electronics'] },
+  { slug: 'motorcycles', name: 'دراجات نارية', keywords: ['دراجة', 'دراجات', 'دراجات نارية', 'motorcycle', 'motorcycles'] },
+  { slug: 'heavy_equipment', name: 'معدات ثقيلة', keywords: ['معدات', 'معدات ثقيلة', 'شيول', 'حفار', 'heavy', 'equipment'] },
+  { slug: 'solar', name: 'طاقة شمسية', keywords: ['طاقة شمسية', 'الواح', 'ألواح', 'بطاريات', 'solar'] },
+  { slug: 'networks', name: 'نت وشبكات', keywords: ['نت', 'شبكات', 'انترنت', 'internet', 'networks'] },
+  { slug: 'maintenance', name: 'صيانة', keywords: ['صيانة', 'تصليح', 'maintenance'] },
+  { slug: 'furniture', name: 'أثاث', keywords: ['اثاث', 'أثاث', 'furniture'] },
+  { slug: 'home_tools', name: 'أدوات منزلية', keywords: ['ادوات منزلية', 'أدوات منزلية', 'home tools'] },
+  { slug: 'clothes', name: 'ملابس', keywords: ['ملابس', 'clothes'] },
+  { slug: 'animals', name: 'حيوانات وطيور', keywords: ['حيوانات', 'طيور', 'حيوان', 'animal', 'animals'] },
+  { slug: 'jobs', name: 'وظائف', keywords: ['وظائف', 'وظيفة', 'job', 'jobs'] },
+  { slug: 'services', name: 'خدمات', keywords: ['خدمات', 'service', 'services'] },
+  { slug: 'other', name: 'أخرى', keywords: ['اخرى', 'أخرى', 'other'] },
+];
+
+function normalizeText(input) {
+  return String(input || '')
+    .toLowerCase()
+    .replace(/[إأآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function escapeRegex(s) {
+  return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function categoryNameFromSlug(slug) {
+  const item = CATEGORIES.find((c) => c.slug === slug);
+  return item ? item.name : slug;
+}
+
+function detectCategorySlug(raw) {
+  const t = normalizeText(raw);
+
+  // match slug directly
+  for (const c of CATEGORIES) {
+    if (t.includes(normalizeText(c.slug))) return c.slug;
+  }
+
+  // match keywords
+  for (const c of CATEGORIES) {
+    for (const kw of c.keywords) {
+      const k = normalizeText(kw);
+      if (k && t.includes(k)) return c.slug;
+    }
+  }
+
+  return null;
+}
+
+// دالة لإيجاد أفضل تطابق (FAQ)
 function findBestMatch(message) {
-  const lowerMessage = message.toLowerCase().trim();
-  
-  // البحث عن تطابق في قاعدة المعرفة
+  const lowerMessage = normalizeText(message);
+
   for (const [pattern, response] of Object.entries(knowledgeBase)) {
     const patterns = pattern.split('|');
-    // استخدام word boundaries للتطابق الأدق
-    if (patterns.some(p => {
-      // إنشاء regex مع word boundaries لتجنب التطابقات الخاطئة
-      const regex = new RegExp(`(^|\\s)${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|\\s|[،.؟!])`, 'i');
-      return regex.test(lowerMessage) || lowerMessage.includes(p);
-    })) {
+    if (
+      patterns.some((p) => {
+        const p2 = normalizeText(p);
+        const regex = new RegExp(`(^|\\s)${escapeRegex(p2)}($|\\s|[،.؟!])`, 'i');
+        return regex.test(lowerMessage) || lowerMessage.includes(p2);
+      })
+    ) {
       return response;
     }
   }
-  
   return null;
 }
 
@@ -63,57 +144,472 @@ function findBestMatch(message) {
 const greetings = ['مرحبا', 'اهلا', 'السلام', 'صباح', 'مساء', 'هلا', 'هلو', 'hello', 'hi'];
 const thanks = ['شكرا', 'شكراً', 'يعطيك', 'thanks', 'thank you'];
 
+// =========================
+// Auth helpers
+// =========================
+
+async function getUserFromRequest(request) {
+  const h = request.headers.get('authorization') || request.headers.get('Authorization') || '';
+  const m = String(h).match(/^Bearer\s+(.+)$/i);
+  const token = m && m[1] ? m[1].trim() : '';
+  if (!token) return null;
+  if (!adminAuth) return { error: 'admin_not_configured' };
+
+  try {
+    const decoded = await adminAuth.verifyIdToken(token);
+    return {
+      uid: decoded.uid,
+      email: decoded.email || null,
+      name: decoded.name || decoded.displayName || null,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+function adminNotReadyMessage() {
+  return (
+    'هذه الميزة تحتاج تفعيل Firebase Admin في بيئة الاستضافة.\n\n' +
+    'تأكد من إضافة المتغيرات التالية في Vercel/Netlify ثم أعد النشر:\n' +
+    '• FIREBASE_PROJECT_ID\n' +
+    '• FIREBASE_CLIENT_EMAIL\n' +
+    '• FIREBASE_PRIVATE_KEY\n\n' +
+    'بعدها سيقدر المساعد يحسب الأعداد ويضيف إعلانات لك وأنت مسجل دخول.'
+  );
+}
+
+// =========================
+// Counts (كم إعلان؟)
+// =========================
+
+function extractCountIntent(messageRaw) {
+  const t = normalizeText(messageRaw);
+  const asksHowMany = t.startsWith('كم') || t.includes('كم ') || t.includes('عدد') || t.includes('احص');
+  if (!asksHowMany) return null;
+
+  const mentionsAds = t.includes('اعلان') || t.includes('اعلانات') || t.includes('إعلان') || t.includes('إعلانات');
+  const cat = detectCategorySlug(t);
+
+  // أمثلة: "كم اعلان سيارات" أو "كم سيارات" أو "عدد عقارات"
+  if (mentionsAds || cat || t.includes('عقار') || t.includes('سيار') || t.includes('جوال')) {
+    return { category: cat };
+  }
+
+  return null;
+}
+
+async function tryCountListings(categorySlug) {
+  if (!adminDb) return { ok: false, reason: 'admin_not_configured' };
+
+  const base = adminDb.collection('listings').where('isActive', '==', true);
+  const q = categorySlug ? base.where('category', '==', categorySlug) : base;
+
+  // "hidden" قد يكون غير موجود في بعض الإعلانات؛ لذلك: public = totalActive - hiddenTrue
+  try {
+    const [totalAgg, hiddenAgg] = await Promise.all([
+      q.count().get(),
+      q.where('hidden', '==', true).count().get(),
+    ]);
+
+    const totalActive = Number(totalAgg?.data()?.count || 0);
+    const hiddenTrue = Number(hiddenAgg?.data()?.count || 0);
+    const publicCount = Math.max(0, totalActive - hiddenTrue);
+    return { ok: true, totalActive, hiddenTrue, publicCount };
+  } catch (e) {
+    // fallback: قراءة عدد محدود (غير مثالي، لكنه يمنع انهيار المساعد)
+    try {
+      const limit = 5000;
+      const snap = await q.limit(limit).get();
+      const approx = snap.size;
+      return { ok: true, totalActive: approx, hiddenTrue: 0, publicCount: approx, approximate: snap.size >= limit };
+    } catch (e2) {
+      return { ok: false, reason: 'count_failed' };
+    }
+  }
+}
+
+// =========================
+// Listing Wizard (إضافة إعلان عبر الشات)
+// =========================
+
+function isStartCreateListing(messageRaw) {
+  const t = normalizeText(messageRaw);
+  return (
+    t.includes('اضف اعلان') ||
+    t.includes('اضافه اعلان') ||
+    t.includes('انشئ اعلان') ||
+    t.includes('سوي اعلان') ||
+    t.includes('ابغى اعلان') ||
+    t.includes('ابغى اضيف اعلان')
+  );
+}
+
+function isCancel(messageRaw) {
+  const t = normalizeText(messageRaw);
+  return t === 'الغاء' || t === 'إلغاء' || t.includes('الغاء') || t.includes('كنسل') || t.includes('cancel') || t.includes('حذف المسوده');
+}
+
+function isConfirmPublish(messageRaw) {
+  const t = normalizeText(messageRaw);
+  return t === 'نشر' || t === 'انشر' || t.includes('تاكيد') || t.includes('تأكيد') || t.includes('اعتماد') || t.includes('نشر الاعلان');
+}
+
+function extractNumber(messageRaw) {
+  const t = String(messageRaw || '').replace(/[,،]/g, '');
+  const m = t.match(/(\d+(?:\.\d+)?)/);
+  return m ? Number(m[1]) : null;
+}
+
+function detectCurrency(messageRaw) {
+  const t = normalizeText(messageRaw);
+  if (t.includes('sar') || t.includes('سعود') || t.includes('ريال سعودي')) return 'SAR';
+  if (t.includes('usd') || t.includes('دولار') || t.includes('$')) return 'USD';
+  return 'YER';
+}
+
+async function getRatesServer() {
+  if (!adminDb) return { sar: DEFAULT_SAR, usd: DEFAULT_USD };
+  try {
+    const snap = await adminDb.collection('settings').doc('rates').get();
+    const raw = snap.exists ? snap.data() : null;
+    const sar = raw && raw.sar != null ? Number(raw.sar) : raw && raw.sarToYer != null ? Number(raw.sarToYer) : DEFAULT_SAR;
+    const usd = raw && raw.usd != null ? Number(raw.usd) : raw && raw.usdToYer != null ? Number(raw.usdToYer) : DEFAULT_USD;
+    return {
+      sar: sar > 0 ? sar : DEFAULT_SAR,
+      usd: usd > 0 ? usd : DEFAULT_USD,
+    };
+  } catch {
+    return { sar: DEFAULT_SAR, usd: DEFAULT_USD };
+  }
+}
+
+function toYERServer(amount, currency, rates) {
+  const v = Number(amount || 0);
+  if (!v || !isFinite(v)) return 0;
+  if (currency === 'SAR') return Math.round(v * (rates?.sar || DEFAULT_SAR));
+  if (currency === 'USD') return Math.round(v * (rates?.usd || DEFAULT_USD));
+  return Math.round(v);
+}
+
+async function loadDraft(uid) {
+  if (!adminDb) return null;
+  const ref = adminDb.collection(DRAFTS_COLLECTION).doc(uid);
+  const snap = await ref.get();
+  return snap.exists ? snap.data() : null;
+}
+
+async function saveDraft(uid, data) {
+  if (!adminDb) return;
+  const ref = adminDb.collection(DRAFTS_COLLECTION).doc(uid);
+  await ref.set(
+    {
+      ...data,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+async function clearDraft(uid) {
+  if (!adminDb) return;
+  await adminDb.collection(DRAFTS_COLLECTION).doc(uid).delete();
+}
+
+function categoriesHint() {
+  const lines = CATEGORIES.map((c) => `• ${c.name} (${c.slug})`);
+  return lines.join('\n');
+}
+
+function draftSummary(d) {
+  const data = d?.data || {};
+  const parts = [];
+  if (data.category) parts.push(`القسم: ${categoryNameFromSlug(data.category)}`);
+  if (data.title) parts.push(`العنوان: ${data.title}`);
+  if (data.description) parts.push(`الوصف: ${data.description}`);
+  if (data.city) parts.push(`المدينة: ${data.city}`);
+  if (data.originalPrice) {
+    parts.push(`السعر: ${data.originalPrice} ${data.originalCurrency || 'YER'}`);
+  }
+  if (data.phone) parts.push(`الهاتف: ${data.phone}`);
+  return parts.join('\n');
+}
+
+async function handleListingWizard({ user, message }) {
+  // هذه الميزة تتطلب Admin SDK حتى نتحقق من التوكن ونكتب على Firestore
+  if (!adminDb || !adminAuth) {
+    return { reply: adminNotReadyMessage() };
+  }
+
+  if (isCancel(message)) {
+    await clearDraft(user.uid);
+    return { reply: 'تم إلغاء مسودة الإعلان ✅\nإذا حبيت نبدأ من جديد اكتب: أضف إعلان' };
+  }
+
+  let draft = await loadDraft(user.uid);
+
+  // بدء المسار
+  if (!draft) {
+    await saveDraft(user.uid, { step: 'category', data: {} });
+    return {
+      reply:
+        'تمام! بنضيف إعلان من داخل الشات ✅\n\n' +
+        'الخطوة 1/5: اختر القسم (اكتب اسم القسم):\n' +
+        categoriesHint() +
+        '\n\n(تقدر تلغي بأي وقت بكتابة: إلغاء)',
+    };
+  }
+
+  const step = String(draft.step || 'category');
+  const data = draft.data || {};
+  const msg = String(message || '').trim();
+
+  // لو المستخدم كتب "أضف إعلان" وهو داخل المسار بالفعل
+  if (isStartCreateListing(msg)) {
+    await saveDraft(user.uid, { step: 'category', data: {} });
+    return {
+      reply:
+        'بدأنا من جديد ✅\n\n' +
+        'الخطوة 1/5: اختر القسم (اكتب اسم القسم):\n' +
+        categoriesHint() +
+        '\n\n(تقدر تلغي بأي وقت بكتابة: إلغاء)',
+    };
+  }
+
+  // نشر نهائي
+  if (step === 'confirm') {
+    if (!isConfirmPublish(msg)) {
+      return {
+        reply:
+          'هذه مسودة الإعلان الحالية:\n\n' +
+          draftSummary(draft) +
+          '\n\nإذا كل شيء تمام اكتب: نشر\nأو اكتب: إلغاء لإلغاء المسودة.',
+      };
+    }
+
+    const rates = await getRatesServer();
+    const originalCurrency = data.originalCurrency || 'YER';
+    const originalPrice = Number(data.originalPrice || 0);
+    const priceYER = toYERServer(originalPrice, originalCurrency, rates);
+
+    const listing = {
+      title: String(data.title || '').trim(),
+      description: String(data.description || '').trim(),
+      city: String(data.city || '').trim(),
+      category: String(data.category || '').trim(),
+
+      phone: data.phone ? String(data.phone).trim() : null,
+      isWhatsapp: true,
+
+      priceYER: Number(priceYER),
+      originalPrice: Number(originalPrice),
+      originalCurrency,
+      currencyBase: 'YER',
+
+      coords: null,
+      lat: null,
+      lng: null,
+      locationLabel: null,
+      images: [],
+
+      userId: user.uid,
+      userEmail: user.email || null,
+      userName: user.name || null,
+
+      views: 0,
+      likes: 0,
+      isActive: true,
+      hidden: false,
+
+      auctionEnabled: false,
+      auctionEndAt: null,
+      currentBidYER: null,
+
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    const ref = await adminDb.collection('listings').add(listing);
+    await clearDraft(user.uid);
+
+    return {
+      reply:
+        'تم نشر الإعلان ✅\n\n' +
+        `رابط الإعلان: /listing/${ref.id}\n\n` +
+        'ملاحظة: رفع الصور عبر الشات غير مفعّل حالياً. لإضافة صور افتح الإعلان ثم عدّل عليه أو استخدم صفحة /add.',
+    };
+  }
+
+  // خطوات جمع البيانات
+  if (step === 'category') {
+    const cat = detectCategorySlug(msg);
+    if (!cat) {
+      return {
+        reply:
+          'ما قدرت أحدد القسم من رسالتك 🤔\n' +
+          'اكتب اسم القسم (مثلاً: سيارات أو عقارات)\n\n' +
+          categoriesHint(),
+      };
+    }
+    await saveDraft(user.uid, { step: 'title', data: { ...data, category: cat } });
+    return { reply: `تمام ✅ القسم: ${categoryNameFromSlug(cat)}\n\nالخطوة 2/5: اكتب عنوان الإعلان.` };
+  }
+
+  if (step === 'title') {
+    const title = msg.trim();
+    if (!title || title.length < 5) {
+      return { reply: 'العنوان لازم يكون واضح (5 أحرف على الأقل). اكتب عنوان الإعلان الآن.' };
+    }
+    await saveDraft(user.uid, { step: 'description', data: { ...data, title } });
+    return { reply: 'تمام ✅\n\nالخطوة 3/5: اكتب وصف الإعلان (على الأقل 10 أحرف).' };
+  }
+
+  if (step === 'description') {
+    const description = msg.trim();
+    if (!description || description.length < 10) {
+      return { reply: 'الوصف قصير. اكتب وصف أوضح (10 أحرف على الأقل).' };
+    }
+    await saveDraft(user.uid, { step: 'city', data: { ...data, description } });
+    return { reply: 'تمام ✅\n\nالخطوة 4/5: اكتب اسم المدينة.' };
+  }
+
+  if (step === 'city') {
+    const city = msg.trim();
+    if (!city || city.length < 2) {
+      return { reply: 'اكتب اسم المدينة بشكل صحيح (مثلاً: صنعاء).' };
+    }
+    await saveDraft(user.uid, { step: 'price', data: { ...data, city } });
+    return { reply: 'تمام ✅\n\nالخطوة 5/5: اكتب السعر (مثال: 100000) ويمكن تكتب العملة معها مثل: 100 USD أو 100 SAR.' };
+  }
+
+  if (step === 'price') {
+    const n = extractNumber(msg);
+    if (!n || n <= 0) {
+      return { reply: 'ما فهمت السعر. اكتب رقم فقط (مثال: 100000) أو (100 USD).' };
+    }
+    const originalCurrency = detectCurrency(msg);
+    const phone = null;
+    await saveDraft(user.uid, {
+      step: 'confirm',
+      data: { ...data, originalPrice: n, originalCurrency, phone },
+    });
+
+    const fakeDraft = { step: 'confirm', data: { ...data, originalPrice: n, originalCurrency, phone } };
+    return {
+      reply:
+        'وصلنا للنهاية ✅ هذه مسودة إعلانك:\n\n' +
+        draftSummary(fakeDraft) +
+        '\n\nإذا كل شيء تمام اكتب: نشر\nأو اكتب: إلغاء لإلغاء المسودة.',
+    };
+  }
+
+  // خطوة غير معروفة
+  await saveDraft(user.uid, { step: 'category', data: {} });
+  return {
+    reply:
+      'صار عندي لخبطة بسيطة 😅 خلّينا نبدأ من جديد.\n\n' +
+      'الخطوة 1/5: اختر القسم (اكتب اسم القسم):\n' +
+      categoriesHint(),
+  };
+}
+
+// =========================
+// Route
+// =========================
+
 export async function POST(request) {
   try {
-    const { message } = await request.json();
-    
+    const body = await request.json().catch(() => ({}));
+    const message = body?.message;
+
     if (!message || typeof message !== 'string') {
-      return NextResponse.json(
-        { error: 'الرسالة مطلوبة' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'الرسالة مطلوبة' }, { status: 400 });
     }
 
     const trimmedMessage = message.trim();
     if (trimmedMessage.length === 0) {
-      return NextResponse.json(
-        { error: 'الرسالة فارغة' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'الرسالة فارغة' }, { status: 400 });
     }
 
-    // تحقق من التحية
-    const lowerMessage = trimmedMessage.toLowerCase();
-    if (greetings.some(g => lowerMessage.includes(g))) {
+    const normalized = normalizeText(trimmedMessage);
+    const user = await getUserFromRequest(request);
+
+    // 1) إلغاء مسودة (لو مسجل دخول)
+    if (user && !user.error && isCancel(normalized)) {
+      const res = await handleListingWizard({ user, message: normalized });
+      return NextResponse.json({ reply: res.reply });
+    }
+
+    // 2) إحصاءات: كم إعلان؟
+    const countIntent = extractCountIntent(normalized);
+    if (countIntent) {
+      const { category } = countIntent;
+      const result = await tryCountListings(category);
+
+      if (!result.ok) {
+        return NextResponse.json({ reply: adminNotReadyMessage() });
+      }
+
+      const label = category ? categoryNameFromSlug(category) : 'كل الأقسام';
+      const numberText = result.approximate ? `${result.publicCount}+` : String(result.publicCount);
       return NextResponse.json({
-        reply: 'مرحباً بك في سوق اليمن! 🇾🇪\n\nأنا المساعد الذكي، يمكنني مساعدتك في:\n• معرفة المزيد عن الموقع\n• كيفية إضافة إعلان\n• التواصل مع البائعين\n• البحث عن المنتجات\n\nكيف يمكنني مساعدتك؟'
+        reply:
+          `عدد الإعلانات (المتاحة) في ${label}: ${numberText}\n` +
+          (category ? '' : '\nتقدر تسأل مثلاً: كم إعلان سيارات؟'),
       });
     }
 
-    // تحقق من الشكر
-    if (thanks.some(t => lowerMessage.includes(t))) {
+    // 3) إضافة إعلان عبر الشات (يتطلب تسجيل الدخول)
+    if (isStartCreateListing(normalized) || (user && !user.error && (await loadDraft(user.uid)))) {
+      if (!user || user.error) {
+        return NextResponse.json({
+          reply:
+            'لإضافة إعلان عبر المساعد لازم تسجل دخول أولاً ✅\n\n' +
+            'بعد تسجيل الدخول اكتب: أضف إعلان\n' +
+            'أو استخدم صفحة الإضافة مباشرة: /add',
+        });
+      }
+
+      const res = await handleListingWizard({ user, message: normalized });
+      return NextResponse.json({ reply: res.reply });
+    }
+
+    // 4) تحية / شكر
+    if (greetings.some((g) => normalized.includes(normalizeText(g)))) {
       return NextResponse.json({
-        reply: 'العفو! 😊 أنا هنا دائماً لمساعدتك. إذا كان لديك أي استفسار آخر، لا تتردد في السؤال.'
+        reply:
+          'مرحباً بك في سوق اليمن! 🇾🇪\n\n' +
+          'أقدر أساعدك في:\n' +
+          '• معرفة معلومات عن الموقع\n' +
+          '• كيفية إضافة إعلان\n' +
+          '• حساب عدد الإعلانات (مثلاً: كم إعلان سيارات؟)\n' +
+          '• إضافة إعلان من داخل الشات (اكتب: أضف إعلان)\n\n' +
+          'كيف أساعدك؟',
       });
     }
 
-    // البحث عن إجابة في قاعدة المعرفة
+    if (thanks.some((t) => normalized.includes(normalizeText(t)))) {
+      return NextResponse.json({
+        reply: 'العفو! 😊 إذا عندك أي استفسار آخر، أنا حاضر.',
+      });
+    }
+
+    // 5) FAQ
     const answer = findBestMatch(trimmedMessage);
-    
     if (answer) {
       return NextResponse.json({ reply: answer });
     }
 
-    // رد افتراضي إذا لم يتم العثور على تطابق
+    // رد افتراضي
     return NextResponse.json({
-      reply: 'عذراً، لم أفهم سؤالك تماماً. 🤔\n\nيمكنني مساعدتك في:\n• معلومات عن الموقع وخدماته\n• كيفية إضافة أو البحث عن إعلانات\n• التواصل والمحادثات\n• المزادات والفئات\n• المساعدة والدعم\n\nحاول إعادة صياغة سؤالك أو اطرح سؤالاً محدداً، وسأكون سعيداً بمساعدتك!'
+      reply:
+        'ما فهمت سؤالك تماماً 🤔\n\n' +
+        'أمثلة سريعة:\n' +
+        '• كم إعلان سيارات في الموقع؟\n' +
+        '• كيف أضيف إعلان؟\n' +
+        '• أضف إعلان (لبدء إضافة إعلان من الشات)\n\n' +
+        'حاول تكتب سؤالك بصياغة أبسط وسأساعدك.',
     });
-
   } catch (error) {
-    console.error('خطأ في API المساعد الذكي:', error);
-    return NextResponse.json(
-      { error: 'حدث خطأ في معالجة الطلب' },
-      { status: 500 }
-    );
+    console.error('Chat API error:', error);
+    return NextResponse.json({ error: 'حدث خطأ في معالجة الطلب' }, { status: 500 });
   }
 }
