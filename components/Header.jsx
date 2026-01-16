@@ -113,8 +113,14 @@ export default function Header() {
 
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+        {/*
+          ⚠️ كان المسار السابق: /brand/mark-128.png
+          وهذا الملف غير موجود داخل public لذلك يظهر الشعار "مكسّر" في الهيدر.
+          الحل: استخدام الأيقونات الموجودة فعلاً داخل public.
+        */}
         <img
-          src="/brand/mark-128.png"
+          src="/icon-192.png"
+          srcSet="/icon-192.png 1x, /icon-512.png 2x"
           alt="سوق اليمن"
           width={iconSize}
           height={iconSize}
