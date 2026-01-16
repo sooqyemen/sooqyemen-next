@@ -1,5 +1,5 @@
 // app/layout.js
-import ChatBot from '@/components/ChatBot';
+import ChatBot from '@/components/ChatBot'; // ✅ مستورد بشكل صحيح
 import './globals.css';
 import Header from '@/components/Header';
 import ClientProviders from '@/components/ClientProviders';
@@ -115,6 +115,10 @@ export default function RootLayout({ children }) {
             {children}
           </main>
           <div className="safe-area-bottom" />
+          
+          {/* ✅ تمت إضافة الشات بوت هنا ليظهر فوق الصفحات */}
+          <ChatBot />
+          
         </ClientProviders>
       </body>
     </html>
