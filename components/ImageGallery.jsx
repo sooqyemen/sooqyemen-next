@@ -1,26 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 
-// استيراد مكونات Swiper
-import { Swiper, SwiperSlide } from 'swiper/react';
-import { FreeMode, Navigation, Thumbs, Zoom, Pagination } from 'swiper/modules';
-
-// استيراد أنماط Swiper الضرورية
-import 'swiper/css';
-import 'swiper/css/free-mode';
-import 'swiper/css/navigation';
-import 'swiper/css/thumbs';
-import 'swiper/css/zoom';
-import 'swiper/css/pagination';
-
 export default function ImageGallery({ images = [], alt = 'صورة الإعلان' }) {
-  const [thumbsSwiper, setThumbsSwiper] = useState(null);
+  const [activeIndex, setActiveIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [fullScreenIndex, setFullScreenIndex] = useState(0);
+  const scrollContainerRef = useRef(null);
 
-  // التعامل مع حالة عدم وجود صور
+  // إذا لم توجد صور
   if (!images || images.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 bg-slate-100 rounded-lg text-slate-400">
@@ -30,152 +18,160 @@ export default function ImageGallery({ images = [], alt = 'صورة الإعلا
     );
   }
 
-  // فتح وضع ملء الشاشة عند النقر
-  const handleImageClick = (index) => {
-    setFullScreenIndex(index);
-    setIsFullscreen(true);
+  // دالة للتعامل مع السكرول وتحديث العداد
+  const handleScroll = () => {
+    if (scrollContainerRef.current) {
+      const scrollLeft = scrollContainerRef.current.scrollLeft;
+      const width = scrollContainerRef.current.offsetWidth;
+      // حساب رقم الصورة الحالية بناءً على الموقع
+      const newIndex = Math.round(scrollLeft / width);
+      setActiveIndex(newIndex);
+    }
+  };
+
+  // دالة للانتقال لصورة معينة عند الضغط على المصغرات
+  const scrollToImage = (index) => {
+    if (scrollContainerRef.current) {
+      const width = scrollContainerRef.current.offsetWidth;
+      scrollContainerRef.current.scrollTo({
+        left: width * index,
+        behavior: 'smooth'
+      });
+      setActiveIndex(index);
+    }
+  };
+
+  // دالة للانتقال للصورة التالية/السابقة
+  const scrollNav = (direction) => {
+    if (scrollContainerRef.current) {
+      const width = scrollContainerRef.current.offsetWidth;
+      const newIndex = direction === 'next' ? activeIndex + 1 : activeIndex - 1;
+      
+      if (newIndex >= 0 && newIndex < images.length) {
+        scrollToImage(newIndex);
+      }
+    }
   };
 
   return (
-    <div className="gallery-container">
+    <div className="w-full select-none" style={{ direction: 'ltr' }}>
       
       {/* 1. السلايدر الرئيسي */}
-      <div className="main-slider-wrapper">
-        <Swiper
-          style={{
-            '--swiper-navigation-color': '#fff',
-            '--swiper-pagination-color': '#fff',
-          }}
-          spaceBetween={10}
-          navigation={true}
-          thumbs={{ swiper: thumbsSwiper && !thumbsSwiper.destroyed ? thumbsSwiper : null }}
-          modules={[FreeMode, Navigation, Thumbs]}
-          className="mySwiper2 rounded-xl overflow-hidden bg-black"
+      <div className="relative group rounded-xl overflow-hidden bg-black border border-slate-200">
+        
+        {/* الحاوية القابلة للسحب (Scroll Container) */}
+        <div 
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide"
+          style={{ scrollBehavior: 'smooth', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
           {images.map((img, index) => (
-            <SwiperSlide key={index}>
-              <div 
-                className="relative w-full h-[300px] md:h-[400px] cursor-pointer group"
-                onClick={() => handleImageClick(index)}
-              >
-                <Image
-                  src={img}
-                  alt={`${alt} - ${index + 1}`}
-                  fill
-                  className="object-contain"
-                  priority={index === 0}
-                />
-                {/* أيقونة التكبير تظهر عند التحويم */}
-                <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <span className="text-white text-4xl drop-shadow-lg">⛶</span>
-                </div>
-              </div>
-            </SwiperSlide>
+            <div 
+              key={index} 
+              className="w-full flex-shrink-0 snap-center relative h-[300px] md:h-[400px] flex items-center justify-center bg-black cursor-pointer"
+              onClick={() => setIsFullscreen(true)}
+            >
+              <Image
+                src={img}
+                alt={`${alt} - ${index + 1}`}
+                fill
+                className="object-contain"
+                priority={index === 0}
+                draggable={false}
+              />
+            </div>
           ))}
-        </Swiper>
+        </div>
+
+        {/* عداد الصور */}
+        <div className="absolute top-3 left-3 bg-black/60 text-white text-xs px-3 py-1 rounded-full z-10 backdrop-blur-sm">
+          {activeIndex + 1} / {images.length}
+        </div>
+
+        {/* أزرار التنقل (تظهر في الشاشات الكبيرة) */}
+        {images.length > 1 && (
+          <>
+            <button 
+              onClick={(e) => { e.stopPropagation(); scrollNav('prev'); }}
+              className={`absolute left-2 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white w-9 h-9 rounded-full flex items-center justify-center transition backdrop-blur-sm z-10 ${activeIndex === 0 ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+            >
+              ❮
+            </button>
+            <button 
+              onClick={(e) => { e.stopPropagation(); scrollNav('next'); }}
+              className={`absolute right-2 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white w-9 h-9 rounded-full flex items-center justify-center transition backdrop-blur-sm z-10 ${activeIndex === images.length - 1 ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+            >
+              ❯
+            </button>
+          </>
+        )}
       </div>
 
-      {/* 2. شريط المصغرات (يظهر فقط إذا كان هناك أكثر من صورة) */}
+      {/* 2. شريط المصغرات (Thumbnails) */}
       {images.length > 1 && (
-        <Swiper
-          onSwiper={setThumbsSwiper}
-          spaceBetween={10}
-          slidesPerView={4}
-          freeMode={true}
-          watchSlidesProgress={true}
-          modules={[FreeMode, Navigation, Thumbs]}
-          className="thumbs-slider mt-2"
-          breakpoints={{
-            320: { slidesPerView: 3, spaceBetween: 5 },
-            640: { slidesPerView: 4, spaceBetween: 10 },
-            1024: { slidesPerView: 5, spaceBetween: 10 },
-          }}
-        >
+        <div className="flex gap-2 mt-3 overflow-x-auto pb-2 scrollbar-hide px-1">
           {images.map((img, index) => (
-            <SwiperSlide key={index} className="cursor-pointer rounded-md overflow-hidden opacity-60 hover:opacity-100 transition-opacity thumb-slide">
-              <div className="relative w-full h-20 bg-slate-100">
-                <Image
-                  src={img}
-                  alt={`مصغرة ${index + 1}`}
-                  fill
-                  className="object-cover"
-                />
-              </div>
-            </SwiperSlide>
+            <button
+              key={index}
+              onClick={() => scrollToImage(index)}
+              className={`relative flex-shrink-0 w-16 h-16 md:w-20 md:h-20 rounded-lg overflow-hidden border-2 transition-all ${
+                activeIndex === index ? 'border-blue-600 opacity-100 scale-105' : 'border-transparent opacity-60 hover:opacity-100'
+              }`}
+            >
+              <Image
+                src={img}
+                alt={`مصغرة ${index + 1}`}
+                fill
+                className="object-cover"
+              />
+            </button>
           ))}
-        </Swiper>
+        </div>
       )}
 
-      {/* 3. نافذة ملء الشاشة (Modal) */}
+      {/* 3. نافذة ملء الشاشة (Lightbox) */}
       {isFullscreen && (
-        <div className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-[9999] bg-black/95 flex flex-col animate-fade-in">
           {/* زر الإغلاق */}
           <button 
             onClick={() => setIsFullscreen(false)}
-            className="absolute top-4 right-4 z-[10000] text-white bg-white/10 hover:bg-white/20 rounded-full w-10 h-10 flex items-center justify-center transition-all"
+            className="absolute top-4 right-4 z-50 bg-white/10 hover:bg-white/20 text-white w-10 h-10 rounded-full flex items-center justify-center"
           >
             ✕
           </button>
 
-          <div className="w-full h-full max-w-7xl mx-auto p-4 flex items-center">
-            <Swiper
-              initialSlide={fullScreenIndex}
-              spaceBetween={30}
-              navigation={true}
-              pagination={{
-                type: 'fraction',
-              }}
-              zoom={true} // تفعيل التكبير
-              modules={[Navigation, Zoom, Pagination]}
-              className="w-full h-full fullscreen-swiper"
-              style={{
-                '--swiper-navigation-color': '#fff',
-                '--swiper-pagination-color': '#fff',
-              }}
-            >
-              {images.map((img, index) => (
-                <SwiperSlide key={index} className="flex items-center justify-center">
-                  <div className="swiper-zoom-container">
-                    <Image
-                      src={img}
-                      alt={`Full ${index}`}
-                      width={1920}
-                      height={1080}
-                      className="max-h-screen w-auto object-contain"
-                    />
-                  </div>
-                </SwiperSlide>
-              ))}
-            </Swiper>
+          {/* الصورة الكبيرة */}
+          <div className="flex-1 flex items-center justify-center p-2 relative w-full h-full">
+            <div className="relative w-full h-full max-w-5xl max-h-[85vh]">
+              <Image
+                src={images[activeIndex]}
+                alt="Full View"
+                fill
+                className="object-contain"
+              />
+            </div>
+          </div>
+
+          {/* شريط تنقل سفلي في وضع ملء الشاشة */}
+          <div className="h-20 bg-black/50 flex items-center justify-center gap-4 pb-4">
+             <button onClick={() => scrollNav('prev')} className="text-white text-3xl p-4 disabled:opacity-30" disabled={activeIndex === 0}>❮</button>
+             <span className="text-white font-bold">{activeIndex + 1} / {images.length}</span>
+             <button onClick={() => scrollNav('next')} className="text-white text-3xl p-4 disabled:opacity-30" disabled={activeIndex === images.length - 1}>❯</button>
           </div>
         </div>
       )}
 
-      {/* تنسيقات إضافية مخصصة لـ Swiper */}
-      <style jsx global>{`
-        .thumb-slide.swiper-slide-thumb-active {
-          opacity: 1;
-          border: 2px solid #3b82f6; /* لون أزرق للإطار النشط */
+      <style jsx>{`
+        /* إخفاء شريط التمرير للمتصفحات المختلفة */
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }
         
-        /* تحسين شكل أسهم التنقل */
-        .swiper-button-next, .swiper-button-prev {
-          background-color: rgba(0,0,0,0.3);
-          width: 40px;
-          height: 40px;
-          border-radius: 50%;
-          color: white !important;
-        }
-        .swiper-button-next:after, .swiper-button-prev:after {
-          font-size: 18px !important;
-          font-weight: bold;
-        }
-        
-        .gallery-container {
-          direction: ltr; /* Swiper يعمل بشكل أفضل LTR، ولكن يمكن تعديله */
-        }
-
-        /* أنيميشن بسيط للظهور */
         @keyframes fadeIn {
           from { opacity: 0; }
           to { opacity: 1; }
