@@ -1,4 +1,3 @@
-// components/ListingCard.jsx
 'use client';
 
 import Link from 'next/link';
@@ -181,7 +180,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
             alt={listing?.title || 'إعلان'}
             className="lc-img"
             width={300}
-            height={180}
+            height={200}
             style={{ objectFit: 'cover' }}
             loading="lazy"
           />
@@ -235,20 +234,24 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           flex-direction: column;
         }
 
+        /* ✅ تم تعديل هذا الجزء لتوحيد الارتفاع */
         .lc-imgWrap{
           overflow: hidden;
           border-radius: 12px;
           border: 1px solid #e2e8f0;
           background: #ffffff;
+          height: 200px; /* ارتفاع ثابت للحاوية */
+          width: 100%;
+          position: relative;
         }
         .lc-img{
           width: 100%;
-          height: 170px;
+          height: 100%; /* تملأ الحاوية بالكامل */
           object-fit: cover;
           display: block;
         }
         .lc-imgEmpty{
-          height: 170px;
+          height: 200px; /* نفس ارتفاع الصورة */
           border-radius: 12px;
           border: 1px solid #e2e8f0;
           background: #f8fafc;
@@ -259,11 +262,12 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           font-weight:900;
           font-size:13px;
         }
+
         .lc-title{
           font-weight: 900;
           margin-bottom: 4px;
           line-height: 1.4;
-            min-height: 42px;
+          min-height: 42px;
           font-size: 15px;
           display: -webkit-box;
           -webkit-line-clamp: 2;
@@ -273,7 +277,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
         .lc-desc{
           font-size: 13px;
           line-height: 1.5;
-            min-height: 40px;
+          min-height: 40px;
           display: -webkit-box;
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
@@ -281,12 +285,12 @@ export default function ListingCard({ listing, variant = 'grid' }) {
         }
 
         @media (max-width: 768px) {
-          .lc-img { height: 155px; }
-          .lc-imgEmpty { height: 155px; }
+          /* تصغير الارتفاع قليلاً في التابلت */
+          .lc-imgWrap, .lc-imgEmpty { height: 170px; }
         }
         @media (max-width: 480px) {
-          .lc-img { height: 145px; }
-          .lc-imgEmpty { height: 145px; }
+          /* تصغير الارتفاع في الجوال */
+          .lc-imgWrap, .lc-imgEmpty { height: 155px; }
           .lc-title { font-size: 14px; min-height: 39px; }
         }
       `}</style>
