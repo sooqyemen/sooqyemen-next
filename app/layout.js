@@ -1,4 +1,5 @@
 // app/layout.js
+import ChatBot from '@/components/ChatBot';
 import './globals.css';
 import Header from '@/components/Header';
 import ClientProviders from '@/components/ClientProviders';
