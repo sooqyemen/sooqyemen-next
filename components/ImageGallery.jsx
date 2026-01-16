@@ -12,7 +12,7 @@ export default function ImageGallery({ images = [], alt = 'صورة الإعلا
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [zoom, setZoom] = useState(1);
 
-  // حافظ على index داخل النطاق عند تغير الصور
+  // Keep index within bounds when images change
   useEffect(() => {
     if (!imgs.length) return;
     setIndex((prev) => Math.max(0, Math.min(prev, imgs.length - 1)));
@@ -40,7 +40,7 @@ export default function ImageGallery({ images = [], alt = 'صورة الإعلا
   const zoomIn = () => setZoom((z) => Math.min(3, Math.round((z + 0.25) * 100) / 100));
   const zoomOut = () => setZoom((z) => Math.max(1, Math.round((z - 0.25) * 100) / 100));
 
-  // تحكم بالكيبورد في وضع ملء الشاشة
+  // Keyboard controls in fullscreen
   useEffect(() => {
     if (!isFullscreen) return;
 
@@ -90,7 +90,7 @@ export default function ImageGallery({ images = [], alt = 'صورة الإعلا
 
   return (
     <div className="gallery">
-      {/* الصورة الرئيسية */}
+      {/* Main image */}
       <div className="mainWrap">
         <button
           type="button"
@@ -137,7 +137,7 @@ export default function ImageGallery({ images = [], alt = 'صورة الإعلا
         </div>
       </div>
 
-      {/* المصغرات */}
+      {/* Thumbnails */}
       {imgs.length > 1 && (
         <div className="thumbs" role="list">
           {imgs.map((src, i) => (
@@ -148,20 +148,25 @@ export default function ImageGallery({ images = [], alt = 'صورة الإعلا
               onClick={() => setIndex(i)}
               aria-label={`عرض الصورة ${i + 1}`}
             >
-              <img src={src} alt={`مصغرة ${i + 1}`} className="thumbImg" loading="lazy" decoding="async" />
+              <img
+                src={src}
+                alt={`مصغرة ${i + 1}`}
+                className="thumbImg"
+                loading="lazy"
+                decoding="async"
+              />
             </button>
           ))}
         </div>
       )}
 
-      {/* ملء الشاشة */}
+      {/* Fullscreen modal */}
       {isFullscreen && (
         <div
           className="modal"
           role="dialog"
           aria-modal="true"
           onMouseDown={(e) => {
-            // إغلاق عند الضغط على الخلفية فقط
             if (e.target === e.currentTarget) closeFullscreen();
           }}
         >
@@ -221,7 +226,7 @@ export default function ImageGallery({ images = [], alt = 'صورة الإعلا
           position: relative;
         }
 
-        /* إطار ثابت للصورة الرئيسية (مهم للتساوي) */
+        /* Fixed frame prevents tall images from breaking layout */
         .mainFrame {
           position: relative;
           width: 100%;
@@ -242,7 +247,7 @@ export default function ImageGallery({ images = [], alt = 'صورة الإعلا
         .mainImg {
           width: 100%;
           height: 100%;
-          object-fit: cover; /* مهم: يمنع الطول/العرض يكسّر التصميم */
+          object-fit: cover;
           display: block;
         }
 
@@ -293,7 +298,6 @@ export default function ImageGallery({ images = [], alt = 'صورة الإعلا
           opacity: 0.35;
           cursor: not-allowed;
         }
-
         .navBtn.prev {
           left: 10px;
         }
@@ -301,7 +305,7 @@ export default function ImageGallery({ images = [], alt = 'صورة الإعلا
           right: 10px;
         }
 
-        /* المصغرات */
+        /* Thumbnails */
         .thumbs {
           margin-top: 10px;
           display: flex;
