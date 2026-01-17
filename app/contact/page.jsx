@@ -145,7 +145,7 @@ export default function ContactPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div className="row" style={{ gap: 8 }}>
                 <span style={{ fontSize: 20 }}>📧</span>
-                <span><strong>البريد الإلكتروني:</strong> info@sooqyemen.com</span>
+                <span><strong>البريد الإلكتروني:</strong> at8888w@gmail.com</span>
               </div>
               <div className="row" style={{ gap: 8 }}>
                 <span style={{ fontSize: 20 }}>📞</span>
