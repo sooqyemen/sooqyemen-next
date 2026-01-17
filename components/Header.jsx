@@ -174,6 +174,10 @@ export default function Header() {
                 الإعلانات
               </Link>
 
+              <Link href="/notifications" className="nav-link">
+                🔔 الإشعارات
+              </Link>
+
               <Link href={AFFILIATE_CREATE_PATH} className="nav-link">
                 💸 برنامج العمولة
               </Link>
@@ -200,6 +204,10 @@ export default function Header() {
                     <div className="dropdown">
                       <Link href="/my-listings" className="dropdown-item">
                         📋 إعلاناتي
+                      </Link>
+
+                      <Link href="/notifications" className="dropdown-item">
+                        🔔 الإشعارات
                       </Link>
 
                       <Link href="/my-chats" className="dropdown-item">
@@ -317,6 +325,11 @@ export default function Header() {
                     <Link href="/my-listings" className="menu-item" onClick={() => closeMenu(true)}>
                       <span className="item-icon">📋</span>
                       <span className="item-text">إعلاناتي</span>
+                    </Link>
+
+                    <Link href="/notifications" className="menu-item" onClick={() => closeMenu(true)}>
+                      <span className="item-icon">🔔</span>
+                      <span className="item-text">الإشعارات</span>
                     </Link>
 
                     <Link href="/my-chats" className="menu-item" onClick={() => closeMenu(true)}>
