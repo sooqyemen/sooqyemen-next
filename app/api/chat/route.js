@@ -240,7 +240,7 @@ async function tryCountListings(categorySlug) {
 // =========================
 
 function isStartCreateListing(messageRaw) {
-  const t = normalizeText(messageRaw);
+  const t = normalizeText(String(messageRaw || '').trim().replace(/^\/+\s*/, ''));
   return (
     t.includes('اضف اعلان') ||
     t.includes('اضافه اعلان') ||
@@ -252,13 +252,34 @@ function isStartCreateListing(messageRaw) {
 }
 
 function isCancel(messageRaw) {
-  const t = normalizeText(messageRaw);
+  const t = normalizeText(String(messageRaw || '').trim().replace(/^\/+\s*/, ''));
   return t === 'الغاء' || t === 'إلغاء' || t.includes('الغاء') || t.includes('كنسل') || t.includes('cancel') || t.includes('حذف المسوده');
 }
 
 function isConfirmPublish(messageRaw) {
-  const t = normalizeText(messageRaw);
+  const t = normalizeText(String(messageRaw || '').trim().replace(/^\/+\s*/, ''));
   return t === 'نشر' || t === 'انشر' || t.includes('تاكيد') || t.includes('تأكيد') || t.includes('اعتماد') || t.includes('نشر الاعلان');
+}
+
+function normalizeImagesMeta(metaImages) {
+  if (!metaImages) return [];
+  const arr = Array.isArray(metaImages) ? metaImages : [metaImages];
+  const urls = arr
+    .map((it) => {
+      if (!it) return null;
+      if (typeof it === 'string') return it;
+      if (typeof it === 'object') return it.url || it.downloadURL || it.href || null;
+      return null;
+    })
+    .filter((u) => typeof u === 'string' && u.trim().startsWith('http'))
+    .map((u) => u.trim());
+
+  // unique
+  const out = [];
+  for (const u of urls) {
+    if (!out.includes(u)) out.push(u);
+  }
+  return out;
 }
 
 function extractNumber(messageRaw) {
@@ -389,6 +410,9 @@ function draftSummary(d) {
   if (data.originalPrice) {
     parts.push(`السعر: ${data.originalPrice} ${data.originalCurrency || 'YER'}`);
   }
+  if (Array.isArray(data.images) && data.images.length) {
+    parts.push(`الصور: ${data.images.length}`);
+  }
   return parts.join('\n');
 }
 
@@ -434,7 +458,7 @@ function listingNextPrompt(step, draft) {
   return (
     'هذه مسودة الإعلان الحالية:\n\n' +
     draftSummary(draft) +
-    '\n\nإذا كل شيء تمام اكتب: نشر\nأو اكتب: إلغاء لإلغاء المسودة.'
+    '\n\nيمكنك إضافة صور الآن عبر زر 📷 صور داخل الشات.\n\nإذا كل شيء تمام اكتب: نشر\nأو اكتب: إلغاء لإلغاء المسودة.'
   );
 }
 
@@ -461,6 +485,319 @@ function safeJsonParse(text) {
   } catch (error) {
     return null;
   }
+}
+
+// =========================
+// Auto extraction (تحويل كلام المستخدم إلى مسودة إعلان كاملة)
+// =========================
+
+function extractFirstPhone(messageRaw) {
+  const t = String(messageRaw || '');
+  // Grab likely phone sequences: +digits or long digit groups
+  const candidates = t.match(/\+?\d[\d\s\-()]{6,}\d/g) || [];
+  for (const c of candidates) {
+    const normalized = normalizePhone(c);
+    if (normalized && isValidPhone(normalized)) return normalized;
+  }
+  // fallback: any 7-15 digits
+  const digitsOnly = t.replace(/[^0-9\s]/g, ' ');
+  const groups = digitsOnly.split(/\s+/).filter(Boolean);
+  for (const g of groups) {
+    if (g.length >= 7 && g.length <= 15) {
+      const normalized = normalizePhone(g);
+      if (normalized && isValidPhone(normalized)) return normalized;
+    }
+  }
+  return null;
+}
+
+function looksLikeListingDetails(messageRaw, meta) {
+  const t = normalizeText(messageRaw);
+  const hasDigits = /\d/.test(t);
+  const hasPriceHints = hasDigits && (t.includes('سعر') || t.includes('ريال') || t.includes('دولار') || t.includes('sar') || t.includes('usd') || t.includes('$'));
+  const hasSellingWords = t.includes('للبيع') || t.includes('معروض') || t.includes('مطلوب') || t.includes('عرض');
+  const hasCategory = Boolean(detectCategorySlug(t));
+  const phone = extractFirstPhone(messageRaw);
+  const hasPhone = Boolean(phone);
+  const hasLocation =
+    meta?.location?.lat != null ||
+    meta?.location?.lng != null ||
+    Boolean(extractLatLngFromText(messageRaw)) ||
+    Boolean(extractMapsLink(messageRaw));
+  const hasImages = Array.isArray(meta?.images) && meta.images.length > 0;
+
+  return (
+    (hasPhone && (hasPriceHints || hasCategory || hasSellingWords)) ||
+    (hasPriceHints && hasCategory && (hasSellingWords || hasLocation)) ||
+    (hasImages && (hasCategory || hasSellingWords))
+  );
+}
+
+function shouldAutoExtractInWizard(messageRaw) {
+  const raw = String(messageRaw || '').trim();
+  const t = normalizeText(raw);
+  if (!t) return false;
+  if (t.length >= 20) return true;
+  if (/\n/.test(raw)) return true;
+  if (extractFirstPhone(raw)) return true;
+  if (/\d/.test(t) && (t.includes('سعر') || t.includes('ريال') || t.includes('دولار') || t.includes('sar') || t.includes('usd') || t.includes('$'))) return true;
+  if (t.includes('للبيع') || t.includes('معروض') || t.includes('مطلوب')) return true;
+  if (t.includes('عنوان') || t.includes('وصف') || t.includes('مدينة') || t.includes('المدينة')) return true;
+  if (Boolean(extractLatLngFromText(raw)) || Boolean(extractMapsLink(raw))) return true;
+  return false;
+}
+
+function computeDraftStep(data) {
+  const d = data || {};
+  const hasLocation = (d.lat != null && d.lng != null) || (d.locationLabel && String(d.locationLabel).trim().length >= 2);
+  if (!d.category) return 'category';
+  if (!d.title) return 'title';
+  if (!d.description) return 'description';
+  if (!d.city) return 'city';
+  if (!d.phone) return 'phone';
+  if (!hasLocation) return 'location';
+  if (!d.originalPrice) return 'price';
+  return 'confirm';
+}
+
+function mergeExtractedListingIntoDraftData(oldData, listing) {
+  const prev = oldData || {};
+  const next = { ...prev };
+  const changed = [];
+
+  const catRaw = listing?.category || listing?.categorySlug || null;
+  const cat = catRaw ? detectCategorySlug(String(catRaw)) : null;
+  if (cat && next.category !== cat) {
+    next.category = cat;
+    changed.push('category');
+  }
+
+  const title = listing?.title ? String(listing.title).trim() : null;
+  if (title && title.length >= 3 && next.title !== title) {
+    next.title = title;
+    changed.push('title');
+  }
+
+  const description = listing?.description ? String(listing.description).trim() : null;
+  if (description && description.length >= 5 && next.description !== description) {
+    next.description = description;
+    changed.push('description');
+  }
+
+  const city = listing?.city ? String(listing.city).trim() : null;
+  if (city && city.length >= 2 && next.city !== city) {
+    next.city = city;
+    changed.push('city');
+  }
+
+  const phone = listing?.phone ? normalizePhone(listing.phone) : null;
+  if (phone && isValidPhone(phone) && next.phone !== phone) {
+    next.phone = phone;
+    changed.push('phone');
+  }
+
+  const locationLabel = listing?.locationLabel ? String(listing.locationLabel).trim() : null;
+  if (locationLabel && locationLabel.length >= 2 && next.locationLabel !== locationLabel) {
+    next.locationLabel = locationLabel;
+    changed.push('locationLabel');
+  }
+
+  if (listing?.lat != null && listing?.lng != null) {
+    const lat = Number(listing.lat);
+    const lng = Number(listing.lng);
+    if (isFinite(lat) && isFinite(lng)) {
+      if (next.lat !== lat || next.lng !== lng) {
+        next.lat = lat;
+        next.lng = lng;
+        changed.push('coords');
+      }
+    }
+  }
+
+  if (listing?.price != null) {
+    const price = Number(listing.price);
+    if (isFinite(price) && price > 0 && next.originalPrice !== price) {
+      next.originalPrice = price;
+      changed.push('price');
+    }
+  }
+
+  if (listing?.currency) {
+    const cur = sanitizeCurrency(String(listing.currency).toUpperCase());
+    if (cur && next.originalCurrency !== cur) {
+      next.originalCurrency = cur;
+      changed.push('currency');
+    }
+  }
+
+  // Keep images as-is (they are handled separately)
+
+  return { next, changed };
+}
+
+async function runListingExtractorGemini(message) {
+  if (!GEMINI_API_KEY) return { ok: false };
+
+  const categoriesGuide = CATEGORIES.map((c) => `${c.slug}: ${c.name}`).join('\n');
+
+  const schema = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      categorySlug: { type: ['string', 'null'] },
+      title: { type: ['string', 'null'] },
+      description: { type: ['string', 'null'] },
+      city: { type: ['string', 'null'] },
+      phone: { type: ['string', 'null'] },
+      locationLabel: { type: ['string', 'null'] },
+      lat: { type: ['number', 'null'] },
+      lng: { type: ['number', 'null'] },
+      price: { type: ['number', 'null'] },
+      currency: { type: ['string', 'null'] },
+    },
+    required: [],
+  };
+
+  const systemPrompt =
+    'أنت مستخرج بيانات لإعلانات في موقع سوق اليمن.\n' +
+    'مهمتك: اقرأ نص المستخدم واستخرج (فقط مما ذُكر) بيانات الإعلان في JSON.\n' +
+    'لا تخترع معلومات غير موجودة. إذا غير مذكور ضع null.\n' +
+    'حوّل الأرقام العربية مثل "100 الف" إلى رقم 100000 إن أمكن.\n' +
+    'العملة: استخدم واحداً من YER أو SAR أو USD إن أمكن، وإلا null.\n' +
+    'categorySlug: اختر أقرب تصنيف من القائمة التالية (اكتب الـ slug فقط) أو null.\n' +
+    'إذا لم يوجد عنوان صريح، اصنع عنواناً قصيراً (مستند على النص) بدون اختراع مواصفات.\n' +
+    '\n' +
+    'التصنيفات المتاحة (slug: الاسم):\n' +
+    categoriesGuide;
+
+  try {
+    const response = await fetchWithTimeout(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { role: 'system', parts: [{ text: systemPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: String(message || '') }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: schema,
+          },
+        }),
+      },
+      OPENAI_TIMEOUT_MS
+    );
+
+    if (!response.ok) return { ok: false };
+    const data = await response.json();
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!rawText) return { ok: false };
+    const parsed = safeJsonParse(rawText);
+    if (!parsed || typeof parsed !== 'object') return { ok: false };
+    return { ok: true, listing: parsed };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function tryExtractPriceHeuristic(messageRaw) {
+  const raw = String(messageRaw || '');
+  const t = normalizeText(raw);
+  // Prefer patterns like: سعر 100000 or 100 SAR
+  const m1 = raw.match(/(?:سعر|السعر)\s*[:\-]?\s*(\d+(?:\.\d+)?)/i);
+  if (m1) return Number(m1[1]);
+  // currency nearby
+  const m2 = raw.match(/(\d+(?:\.\d+)?)\s*(sar|usd|\$|ريال سعودي|ريال|ر\.ي|دولار)/i);
+  if (m2) return Number(m2[1]);
+  // fallback: any number but avoid phone-like
+  const n = extractNumber(raw);
+  if (!n) return null;
+  const phone = extractFirstPhone(raw);
+  if (phone) {
+    const digits = normalizePhone(phone).replace(/[^0-9]/g, '');
+    if (String(n).replace(/\D/g, '') === digits) return null;
+  }
+  return n;
+}
+
+async function extractListingDetailsFromMessage(messageRaw, meta) {
+  const raw = String(messageRaw || '').trim();
+  const out = {
+    category: null,
+    title: null,
+    description: null,
+    city: null,
+    phone: null,
+    locationLabel: null,
+    lat: null,
+    lng: null,
+    price: null,
+    currency: null,
+  };
+
+  // 1) Gemini extractor (best for title/description/city)
+  const ai = await runListingExtractorGemini(raw);
+  if (ai.ok && ai.listing) {
+    const l = ai.listing;
+    if (l.categorySlug) out.category = String(l.categorySlug);
+    if (l.title) out.title = String(l.title);
+    if (l.description) out.description = String(l.description);
+    if (l.city) out.city = String(l.city);
+    if (l.phone) out.phone = String(l.phone);
+    if (l.locationLabel) out.locationLabel = String(l.locationLabel);
+    if (l.lat != null && l.lng != null) {
+      out.lat = Number(l.lat);
+      out.lng = Number(l.lng);
+    }
+    if (l.price != null) out.price = Number(l.price);
+    if (l.currency) out.currency = String(l.currency);
+  }
+
+  // 2) Heuristics fill missing fields safely
+  if (!out.category) {
+    const c = detectCategorySlug(raw);
+    if (c) out.category = c;
+  }
+
+  if (!out.phone) {
+    const p = extractFirstPhone(raw);
+    if (p) out.phone = p;
+  }
+
+  // location from meta first
+  if (meta?.location?.lat != null && meta?.location?.lng != null) {
+    const lat = Number(meta.location.lat);
+    const lng = Number(meta.location.lng);
+    if (isFinite(lat) && isFinite(lng)) {
+      out.lat = lat;
+      out.lng = lng;
+    }
+  }
+
+  if (out.lat == null || out.lng == null) {
+    const coords = extractLatLngFromText(raw);
+    if (coords) {
+      out.lat = coords.lat;
+      out.lng = coords.lng;
+    }
+  }
+
+  if (!out.locationLabel) {
+    const link = extractMapsLink(raw);
+    if (link) out.locationLabel = `رابط الموقع: ${link}`;
+  }
+
+  if (!out.price) {
+    const p = tryExtractPriceHeuristic(raw);
+    if (p && isFinite(p) && p > 0) out.price = p;
+  }
+
+  if (!out.currency) {
+    const cur = detectCurrency(raw);
+    if (cur) out.currency = cur;
+  }
+
+  return out;
 }
 
 async function fetchWithTimeout(url, options, timeoutMs) {
@@ -512,9 +849,9 @@ async function runAiFallback({ message, history }) {
       reply:
         'ما فهمت سؤالك تماماً 🤔\n\n' +
         'أمثلة سريعة:\n' +
-        '• كم إعلان سيارات في الموقع؟\n' +
         '• كيف أضيف إعلان؟\n' +
-        '• أضف إعلان (لبدء إضافة إعلان من الشات)\n\n' +
+        '• أضف إعلان (لبدء إضافة إعلان من الشات)\n' +
+        '• كيف أبحث عن سيارات؟\n\n' +
         'حاول تكتب سؤالك بصياغة أبسط وسأساعدك.',
     };
   }
@@ -717,14 +1054,7 @@ async function startDraftFromAi(user, listing) {
   if (listing?.currency) data.originalCurrency = sanitizeCurrency(String(listing.currency).toUpperCase());
   if (listing?.phone) data.phone = String(listing.phone).trim();
 
-  let step = 'category';
-  if (data.category) step = 'title';
-  if (data.title) step = 'description';
-  if (data.description) step = 'city';
-  if (data.city) step = 'phone';
-  if (data.phone) step = 'location';
-  if (data.lat != null && data.lng != null) step = 'price';
-  if (data.originalPrice) step = 'confirm';
+  const step = computeDraftStep(data);
 
   await saveDraft(user.uid, { step, data });
   return { step, data };
@@ -742,13 +1072,47 @@ async function handleListingWizard({ user, message, meta }) {
   }
 
   let draft = await loadDraft(user.uid);
+  const incomingImages = normalizeImagesMeta(meta?.images);
 
   // بدء المسار
   if (!draft) {
-    await saveDraft(user.uid, { step: 'category', data: {} });
+    const baseData = { images: incomingImages.slice(0, 8) };
+    const rawMsg = String(message || '').trim();
+    const canAuto = shouldAutoExtractInWizard(rawMsg) && !isStartCreateListing(rawMsg);
+
+    if (canAuto) {
+      const extracted = await extractListingDetailsFromMessage(rawMsg, meta);
+      const merged = mergeExtractedListingIntoDraftData(baseData, extracted);
+      const nextData = merged.next;
+      const step = computeDraftStep(nextData);
+
+      // إذا ما استخرجنا شيء مفيد، نكمل المعالج التقليدي
+      if (merged.changed.length) {
+        await saveDraft(user.uid, { step, data: nextData });
+        const draftObj = { step, data: nextData };
+        const summary = draftSummary(draftObj);
+        const tail =
+          step === 'confirm'
+            ? 'إذا كل شيء تمام اكتب: /نشر\nأو اكتب: /إلغاء لإلغاء المسودة.\n\nيمكنك إضافة صور عبر زر 📷.'
+            : listingNextPrompt(step, draftObj);
+
+        return {
+          reply:
+            'تمام ✅ استخرجت تفاصيل الإعلان من كلامك وجهزت مسودة.\n\n' +
+            (incomingImages.length ? `تم حفظ ${incomingImages.slice(0, 8).length} صورة للمسودة ✅\n\n` : '') +
+            'مسودة إعلانك الحالية:\n\n' +
+            (summary || '(لا تزال بعض التفاصيل ناقصة)') +
+            '\n\n' +
+            tail,
+        };
+      }
+    }
+
+    await saveDraft(user.uid, { step: 'category', data: baseData });
     return {
       reply:
         'تمام! بنضيف إعلان من داخل الشات ✅\n\n' +
+        (incomingImages.length ? `تم حفظ ${incomingImages.slice(0, 8).length} صورة للمسودة ✅\n\n` : '') +
         'الخطوة 1/7: اختر القسم (اكتب اسم القسم):\n' +
         categoriesHint() +
         '\n\n(تقدر تلغي بأي وقت بكتابة: إلغاء)',
@@ -758,6 +1122,65 @@ async function handleListingWizard({ user, message, meta }) {
   const step = String(draft.step || 'category');
   const data = draft.data || {};
   const msg = String(message || '').trim();
+
+  // ✅ تحديث/تعبئة تلقائية: إذا كتب المستخدم كل التفاصيل مرة واحدة أو طلب تعديل
+  if (shouldAutoExtractInWizard(msg) && !isCancel(msg) && !isConfirmPublish(msg) && !isStartCreateListing(msg)) {
+    const extracted = await extractListingDetailsFromMessage(msg, meta);
+    const merged = mergeExtractedListingIntoDraftData(data, extracted);
+    const nextData = merged.next;
+
+    // دعم تحديث الموقع حتى لو المستخدم في خطوة أخرى
+    if (meta?.location?.lat != null && meta?.location?.lng != null) {
+      const lat = Number(meta.location.lat);
+      const lng = Number(meta.location.lng);
+      if (isFinite(lat) && isFinite(lng)) {
+        if (nextData.lat !== lat || nextData.lng !== lng) {
+          nextData.lat = lat;
+          nextData.lng = lng;
+          merged.changed.push('coords');
+        }
+      }
+    }
+
+    if (merged.changed.length) {
+      const newStep = computeDraftStep(nextData);
+      await saveDraft(user.uid, { step: newStep, data: nextData });
+      const draftObj = { step: newStep, data: nextData };
+      const summary = draftSummary(draftObj);
+      const tail =
+        newStep === 'confirm'
+          ? 'إذا كل شيء تمام اكتب: /نشر\nأو اكتب: /إلغاء لإلغاء المسودة.\n\nيمكنك إضافة صور عبر زر 📷.'
+          : listingNextPrompt(newStep, draftObj);
+
+      return {
+        reply:
+          'تم تحديث مسودة الإعلان بناءً على كلامك ✅\n\n' +
+          (summary || '(لا تزال بعض التفاصيل ناقصة)') +
+          '\n\n' +
+          tail,
+      };
+    }
+  }
+
+  // ✅ إذا وصلت صور من الشات: نحفظها للمسودة بدون تغيير الخطوة
+  if (incomingImages.length) {
+    const current = Array.isArray(data.images) ? data.images : [];
+    const merged = [];
+    for (const u of [...current, ...incomingImages]) {
+      if (typeof u !== 'string' || !u.trim()) continue;
+      const v = u.trim();
+      if (!merged.includes(v)) merged.push(v);
+      if (merged.length >= 8) break;
+    }
+
+    await saveDraft(user.uid, { step, data: { ...data, images: merged } });
+    const updatedDraft = { step, data: { ...data, images: merged } };
+    return {
+      reply:
+        `تم إضافة ${Math.min(incomingImages.length, 8)} صورة للمسودة ✅\n\n` +
+        listingNextPrompt(step, updatedDraft),
+    };
+  }
 
   // لو المستخدم كتب "أضف إعلان" وهو داخل المسار بالفعل
   if (isStartCreateListing(msg)) {
@@ -806,7 +1229,7 @@ async function handleListingWizard({ user, message, meta }) {
       lat: hasCoords ? Number(data.lat) : null,
       lng: hasCoords ? Number(data.lng) : null,
       locationLabel: data.locationLabel ? String(data.locationLabel).trim() : null,
-      images: [],
+      images: Array.isArray(data.images) ? data.images.slice(0, 8) : [],
 
       userId: user.uid,
       userEmail: user.email || null,
@@ -831,7 +1254,9 @@ async function handleListingWizard({ user, message, meta }) {
       reply:
         'تم نشر الإعلان ✅\n\n' +
         `رابط الإعلان: /listing/${ref.id}\n\n` +
-        'ملاحظة: رفع الصور عبر الشات غير مفعّل حالياً. لإضافة صور افتح الإعلان ثم عدّل عليه أو استخدم صفحة /add.',
+        (Array.isArray(listing.images) && listing.images.length
+          ? `تم ربط ${listing.images.length} صورة بالإعلان ✅`
+          : 'إذا حبيت تضيف صور: استخدم زر 📷 داخل الشات قبل النشر أو من صفحة /add.'),
     };
   }
 
@@ -999,9 +1424,24 @@ export async function POST(request) {
     const normalized = normalizeText(trimmedMessage);
     const user = await getUserFromRequest(request);
 
+    // ✅ إذا وصلت صور من الواجهة: نتعامل معها كجزء من مسار إضافة الإعلان
+    const metaImages = normalizeImagesMeta(meta?.images);
+    if (metaImages.length) {
+      if (!user || user.error) {
+        return NextResponse.json({
+          reply:
+            'لرفع الصور وربطها بمسودة الإعلان لازم تسجل دخول أولاً ✅\n\n' +
+            'اذهب إلى: /login',
+        });
+      }
+
+      const res = await handleListingWizard({ user, message: trimmedMessage, meta });
+      return NextResponse.json({ reply: res.reply });
+    }
+
     // 1) إلغاء مسودة (لو مسجل دخول)
     if (user && !user.error && isCancel(normalized)) {
-      const res = await handleListingWizard({ user, message: normalized, meta });
+      const res = await handleListingWizard({ user, message: trimmedMessage, meta });
       return NextResponse.json({ reply: res.reply });
     }
 
@@ -1020,12 +1460,15 @@ export async function POST(request) {
       return NextResponse.json({
         reply:
           `عدد الإعلانات (المتاحة) في ${label}: ${numberText}\n` +
-          (category ? '' : '\nتقدر تسأل مثلاً: كم إعلان سيارات؟'),
+          (category ? '' : '\nتقدر تحدد القسم مثل: سيارات أو عقارات.'),
       });
     }
 
     // 3) إضافة إعلان عبر الشات (يتطلب تسجيل الدخول)
-    if (isStartCreateListing(normalized) || (user && !user.error && (await loadDraft(user.uid)))) {
+    const existingDraft = user && !user.error ? await loadDraft(user.uid) : null;
+    const autoCreateFromDetails = user && !user.error ? looksLikeListingDetails(trimmedMessage, meta) : false;
+
+    if (isStartCreateListing(normalized) || existingDraft || autoCreateFromDetails) {
       if (!user || user.error) {
         return NextResponse.json({
           reply:
@@ -1035,7 +1478,7 @@ export async function POST(request) {
         });
       }
 
-      const res = await handleListingWizard({ user, message: normalized, meta });
+      const res = await handleListingWizard({ user, message: trimmedMessage, meta });
       return NextResponse.json({ reply: res.reply });
     }
 
@@ -1047,8 +1490,9 @@ export async function POST(request) {
           'أقدر أساعدك في:\n' +
           '• معرفة معلومات عن الموقع\n' +
           '• كيفية إضافة إعلان\n' +
-          '• حساب عدد الإعلانات (مثلاً: كم إعلان سيارات؟)\n' +
-          '• إضافة إعلان من داخل الشات (اكتب: أضف إعلان)\n\n' +
+          '• إضافة إعلان من داخل الشات (اكتب: أضف إعلان)\n' +
+          '• رفع صور للإعلان من داخل الشات (زر 📷)\n' +
+          '• تسجيل صوت وتحويله إلى نص (زر 🎙️)\n\n' +
           'كيف أساعدك؟',
       });
     }
@@ -1079,8 +1523,8 @@ export async function POST(request) {
         const numberText = result.approximate ? `${result.publicCount}+` : String(result.publicCount);
         return NextResponse.json({
           reply:
-            `عدد الإعلانات (المتاحة) في ${label}: ${numberText}\n` +
-            (category ? '' : '\nتقدر تسأل مثلاً: كم إعلان سيارات؟'),
+          `عدد الإعلانات (المتاحة) في ${label}: ${numberText}\n` +
+          (category ? '' : '\nتقدر تحدد القسم مثل: سيارات أو عقارات.'),
         });
       }
 
@@ -1111,9 +1555,9 @@ export async function POST(request) {
       reply:
         'ما فهمت سؤالك تماماً 🤔\n\n' +
         'أمثلة سريعة:\n' +
-        '• كم إعلان سيارات في الموقع؟\n' +
         '• كيف أضيف إعلان؟\n' +
-        '• أضف إعلان (لبدء إضافة إعلان من الشات)\n\n' +
+        '• أضف إعلان (لبدء إضافة إعلان من الشات)\n' +
+        '• كيف أبحث عن سيارات؟\n\n' +
         'حاول تكتب سؤالك بصياغة أبسط وسأساعدك.',
     });
   } catch (error) {
