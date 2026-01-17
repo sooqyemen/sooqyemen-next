@@ -5,6 +5,37 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { auth, googleProvider } from '@/lib/firebaseClient';
 
+function GoogleIcon() {
+  // Google "G" mark (official colors) as inline SVG (no extra libraries)
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 48 48"
+      aria-hidden="true"
+      focusable="false"
+      style={{ display: 'block' }}
+    >
+      <path
+        fill="#EA4335"
+        d="M24 9.5c3.54 0 6.7 1.22 9.2 3.6l6.9-6.9C35.9 2.4 30.4 0 24 0 14.6 0 6.5 5.4 2.6 13.2l8 6.2C12.4 13.0 17.7 9.5 24 9.5z"
+      />
+      <path
+        fill="#4285F4"
+        d="M46.1 24.5c0-1.6-.14-3.1-.4-4.5H24v9.1h12.4c-.54 2.9-2.17 5.3-4.63 6.9l7.5 5.8c4.4-4.1 6.9-10.1 6.9-17.3z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M10.6 28.4c-.5-1.5-.8-3.1-.8-4.9s.3-3.4.8-4.9l-8-6.2C.9 15.8 0 19.8 0 24s.9 8.2 2.6 11.8l8-6.2z"
+      />
+      <path
+        fill="#34A853"
+        d="M24 48c6.5 0 12-2.1 16-5.7l-7.5-5.8c-2.1 1.4-4.8 2.2-8.5 2.2-6.3 0-11.6-4.2-13.5-9.9l-8 6.2C6.5 42.6 14.6 48 24 48z"
+      />
+    </svg>
+  );
+}
+
 function LoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -152,7 +183,9 @@ function LoginInner() {
         </div>
 
         <button type="button" className="btnGoogle" onClick={handleGoogleLogin} disabled={loading}>
-          <span className="gIcon">G</span>
+          <span className="gIcon" aria-hidden="true">
+            <GoogleIcon />
+          </span>
           الدخول بواسطة Google
         </button>
 
@@ -271,9 +304,9 @@ function LoginInner() {
         .btnGoogle:disabled{ opacity:.7; cursor:not-allowed; transform:none; box-shadow:none; }
         .gIcon{
           width:26px;height:26px;border-radius: 10px;
-          background: #f1f5f9;
+          background: #fff;
           display:flex;align-items:center;justify-content:center;
-          font-weight: 900;
+          border: 1px solid rgba(0,0,0,.08);
         }
 
         .foot{ margin-top: 14px; display:flex; flex-direction: column; gap: 10px; align-items:center; }
