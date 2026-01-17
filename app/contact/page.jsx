@@ -149,7 +149,7 @@ export default function ContactPage() {
               </div>
               <div className="row" style={{ gap: 8 }}>
                 <span style={{ fontSize: 20 }}>📞</span>
-                <span><strong>للدعم الفني:</strong> support@sooqyemen.com</span>
+                <span><strong>للدعم الفني:</strong> 735263681</span>
               </div>
               <div className="row" style={{ gap: 8 }}>
                 <span style={{ fontSize: 20 }}>⏰</span>
