@@ -1,12 +1,11 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { auth, googleProvider } from '@/lib/firebaseClient';
 
 function GoogleIcon() {
-  // Google "G" mark (official colors) as inline SVG (no extra libraries)
   return (
     <svg
       width="18"
@@ -42,17 +41,34 @@ function LoginInner() {
 
   const nextPath = (() => {
     const n = searchParams?.get('next') || '/';
-    // حماية بسيطة: لا نسمح بروابط خارجية
     return n.startsWith('/') ? n : '/';
   })();
+
+  const verifiedFlag = searchParams?.get('verified') === 'true';
+  const registeredFlag = searchParams?.get('registered') === 'true';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
+  const [user, setUser] = useState(null);
+
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [debug, setDebug] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
+
+  useEffect(() => {
+    // مراقبة حالة المستخدم (عشان زر إرسال التفعيل يظهر بشكل صحيح)
+    const unsub = auth.onAuthStateChanged((u) => setUser(u || null));
+    return () => unsub && unsub();
+  }, []);
+
+  useEffect(() => {
+    if (verifiedFlag) setSuccess('تم تفعيل حسابك بنجاح ✅ يمكنك الآن تسجيل الدخول.');
+    else if (registeredFlag) setSuccess('تم إنشاء الحساب ✅ تم إرسال رابط التفعيل إلى بريدك.');
+    else setSuccess('');
+  }, [verifiedFlag, registeredFlag]);
 
   const normalizeEmail = (v) => String(v || '').trim().toLowerCase();
 
@@ -69,14 +85,19 @@ function LoginInner() {
   };
 
   const goNext = () => {
-    // replace أفضل عشان ما يرجع للّوجن بزر الرجوع
     router.replace(nextPath);
+  };
+
+  const redirectToVerify = (emailValue) => {
+    const em = normalizeEmail(emailValue || '');
+    router.replace(`/verify-email?email=${encodeURIComponent(em)}&next=${encodeURIComponent(nextPath)}`);
   };
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     setDebug('');
+    setSuccess('');
 
     const em = normalizeEmail(email);
     if (!em) return setError('اكتب البريد الإلكتروني');
@@ -84,7 +105,15 @@ function LoginInner() {
 
     setLoading(true);
     try {
-      await auth.signInWithEmailAndPassword(em, password);
+      const cred = await auth.signInWithEmailAndPassword(em, password);
+      const u = cred?.user;
+
+      // ✅ لا ندخل المستخدم إذا حسابه غير مُفعّل (إلا لو تبغى تسمح)
+      if (u && !u.emailVerified) {
+        redirectToVerify(em);
+        return;
+      }
+
       goNext();
     } catch (err) {
       console.error('LOGIN_ERROR', err);
@@ -98,9 +127,18 @@ function LoginInner() {
   const handleGoogleLogin = async () => {
     setError('');
     setDebug('');
+    setSuccess('');
     setLoading(true);
     try {
-      await auth.signInWithPopup(googleProvider);
+      const cred = await auth.signInWithPopup(googleProvider);
+      const u = cred?.user;
+
+      // أغلب حسابات Google تكون verified، بس نخليها حماية
+      if (u && !u.emailVerified) {
+        redirectToVerify(u.email || '');
+        return;
+      }
+
       goNext();
     } catch (err) {
       console.error('GOOGLE_LOGIN_ERROR', err);
@@ -111,17 +149,50 @@ function LoginInner() {
     }
   };
 
+  const resendVerificationFromLogin = async () => {
+    setError('');
+    setDebug('');
+
+    const u = auth.currentUser;
+    if (!u) {
+      setError('سجّل دخولك أولاً ثم أعد إرسال رابط التفعيل.');
+      return;
+    }
+
+    try {
+      await u.sendEmailVerification({
+        url: `${window.location.origin}/verify-email?email=${encodeURIComponent(u.email || '')}&next=${encodeURIComponent(nextPath)}`,
+        handleCodeInApp: true,
+      });
+      setSuccess('تم إرسال رابط التفعيل إلى بريدك الإلكتروني ✅');
+    } catch (err) {
+      console.error('RESEND_VERIFICATION_ERROR', err);
+      setError('حدث خطأ أثناء إرسال رابط التفعيل');
+      setDebug(`${err?.code || 'no-code'}: ${err?.message || ''}`);
+    }
+  };
+
   return (
     <div className="wrap" dir="rtl">
       <div className="card">
         <div className="head">
-          <div className="logo">🛒</div>
+          {/* لو عندك شعار: خله صورة من public بدل الايموجي */}
+          <div className="logo">
+            <img src="/zon_200.png" alt="سوق اليمن" />
+          </div>
           <h1>تسجيل الدخول</h1>
           <p className="sub">أهلاً بك مجدداً في سوق اليمن</p>
         </div>
 
+        {success ? (
+          <div className="alert success">
+            <span className="alertIcon">✅</span>
+            <div className="alertText">{success}</div>
+          </div>
+        ) : null}
+
         {error ? (
-          <div className="alert">
+          <div className="alert error">
             <span className="alertIcon">⚠️</span>
             <div className="alertText">{error}</div>
           </div>
@@ -130,6 +201,21 @@ function LoginInner() {
         {debug ? (
           <div className="debug">
             <span>Debug:</span> {debug}
+          </div>
+        ) : null}
+
+        {/* لو المستخدم مسجّل دخول وحسابه غير مُفعّل، اعرض زر إرسال رابط التفعيل */}
+        {user && !user.emailVerified ? (
+          <div className="verifyBox">
+            <div className="verifyText">
+              حسابك غير مُفعّل بعد. افتح رابط التفعيل في بريدك.
+            </div>
+            <button type="button" className="btnSecondary" onClick={resendVerificationFromLogin} disabled={loading}>
+              إرسال رابط التفعيل مرة أخرى
+            </button>
+            <Link className="linkSmall" href={`/verify-email?email=${encodeURIComponent(user.email || '')}&next=${encodeURIComponent(nextPath)}`}>
+              فتح صفحة التفعيل
+            </Link>
           </div>
         ) : null}
 
@@ -174,6 +260,12 @@ function LoginInner() {
           <button className="btnPrimary" type="submit" disabled={loading}>
             {loading ? 'جاري التحقق…' : 'دخول'}
           </button>
+
+          <div className="helperRow">
+            <Link className="linkSmall" href="/reset-password">
+              نسيت كلمة المرور؟
+            </Link>
+          </div>
         </form>
 
         <div className="sep">
@@ -228,7 +320,14 @@ function LoginInner() {
           margin: 0 auto 10px;
           background: linear-gradient(135deg, rgba(255,107,53,.15), rgba(26,26,46,.08));
           border:1px solid rgba(0,0,0,.06);
-          font-size: 26px;
+          overflow:hidden;
+        }
+        .logo img{
+          width:100%;
+          height:100%;
+          object-fit:contain;
+          padding:8px;
+          display:block;
         }
         h1{ margin:0; font-size: 1.35rem; font-weight: 900; color:#0f172a; }
         .sub{ margin: 6px 0 0; color:#64748b; font-size: .92rem; line-height:1.6; }
@@ -238,15 +337,41 @@ function LoginInner() {
           display:flex; gap:10px; align-items:flex-start;
           padding: 10px 12px;
           border-radius: 12px;
-          border: 1px solid rgba(220,38,38,.25);
-          background: rgba(220,38,38,.08);
-          color:#991b1b;
+          font-size: .92rem; line-height:1.6;
         }
         .alertIcon{ margin-top:2px; }
         .alertText{ font-size: .92rem; line-height:1.6; }
 
+        .alert.error{
+          border: 1px solid rgba(220,38,38,.25);
+          background: rgba(220,38,38,.08);
+          color:#991b1b;
+        }
+        .alert.success{
+          border: 1px solid rgba(34,197,94,.25);
+          background: rgba(34,197,94,.08);
+          color:#166534;
+        }
+
         .debug{ margin-top: 8px; font-size: 11px; color:#64748b; word-break: break-word; }
         .debug span{ font-weight: 800; color:#475569; }
+
+        .verifyBox{
+          margin-top: 10px;
+          padding: 12px;
+          border-radius: 12px;
+          border: 1px solid rgba(245,158,11,.25);
+          background: rgba(245,158,11,.10);
+          display:flex;
+          flex-direction:column;
+          gap:10px;
+        }
+        .verifyText{
+          color:#92400e;
+          font-weight:800;
+          font-size:.92rem;
+          line-height:1.6;
+        }
 
         .form{ margin-top: 14px; display:flex; flex-direction: column; gap: 10px; }
         .lbl{ font-size: .9rem; font-weight: 800; color:#0f172a; margin-top: 4px; }
@@ -277,6 +402,26 @@ function LoginInner() {
         }
         .btnPrimary:hover{ transform: translateY(-1px); box-shadow: 0 10px 22px rgba(15,52,96,.22); }
         .btnPrimary:disabled{ opacity: .7; cursor:not-allowed; transform:none; box-shadow:none; }
+
+        .btnSecondary{
+          width:100%;
+          border-radius: 12px;
+          padding: 11px 12px;
+          border:1px solid rgba(0,0,0,.10);
+          background:#fff;
+          color:#0f172a;
+          font-weight: 900;
+          cursor:pointer;
+          transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease;
+        }
+        .btnSecondary:hover{ transform: translateY(-1px); box-shadow: 0 10px 20px rgba(0,0,0,.06); }
+        .btnSecondary:disabled{ opacity:.7; cursor:not-allowed; transform:none; box-shadow:none; }
+
+        .helperRow{
+          display:flex;
+          justify-content:flex-start;
+          margin-top: 2px;
+        }
 
         .sep{
           display:flex; align-items:center; gap:10px;
@@ -316,6 +461,14 @@ function LoginInner() {
         .link2{ color:#94a3b8; text-decoration:none; font-weight: 800; font-size: .9rem; }
         .link2:hover{ color:#64748b; }
 
+        .linkSmall{
+          color:#0F3460;
+          font-weight:900;
+          text-decoration:none;
+          font-size:.9rem;
+        }
+        .linkSmall:hover{ text-decoration: underline; }
+
         @media (min-width: 768px) {
           .card { max-width: 460px; padding: 24px; }
           .head { padding: 12px 12px 18px; }
@@ -328,7 +481,7 @@ function LoginInner() {
           .wrap { padding: 16px 10px; }
           .card { padding: 16px; }
           .head { padding: 6px 6px 12px; }
-          .logo { width: 50px; height: 50px; font-size: 22px; }
+          .logo { width: 50px; height: 50px; }
           h1 { font-size: 1.25rem; }
           .field { padding: 8px 10px; }
           .btnPrimary, .btnGoogle { padding: 10px 12px; font-size: 14px; }
@@ -339,7 +492,6 @@ function LoginInner() {
 }
 
 export default function LoginPage() {
-  // ✅ هذا هو الإصلاح: useSearchParams داخل كومبوننت ملفوف بـ Suspense
   return (
     <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: '#64748b' }} dir="rtl">جارٍ التحميل…</div>}>
       <LoginInner />
