@@ -128,8 +128,14 @@ self.addEventListener('fetch', (event) => {
     fetch(event.request)
       .then(response => {
         if (response.ok) {
-          const cache = caches.open(DYNAMIC_CACHE);
-          cache.then(c => c.put(event.request, response.clone()));
+					// IMPORTANT: clone immediately before the response body is streamed to the page.
+					// If we wait for caches.open() first, the body may be "used" and clone() will throw.
+					const responseClone = response.clone();
+					caches.open(DYNAMIC_CACHE).then((c) => {
+						c.put(event.request, responseClone).catch(() => {
+							// ignore cache errors
+						});
+					});
         }
         return response;
       })
