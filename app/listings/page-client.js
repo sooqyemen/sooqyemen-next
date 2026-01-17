@@ -397,10 +397,6 @@ export default function ListingsPageClient({ initialListings = [] }) {
               placeholder="ابحث في الإعلانات…"
             />
 
-            <Link className="btn btnPrimary" href="/add">
-              ➕ أضف إعلان
-            </Link>
-
             {/* ✅ تم حذف عدّاد {filtered.length} إعلان */}
           </div>
         </div>
@@ -419,11 +415,6 @@ export default function ListingsPageClient({ initialListings = [] }) {
             <div style={{ fontWeight: 900 }}>لا توجد نتائج مطابقة</div>
             <div className="muted" style={{ marginTop: 6 }}>
               جرّب كلمة بحث أخرى أو أضف إعلان جديد.
-            </div>
-            <div style={{ marginTop: 12 }}>
-              <Link className="btn btnPrimary" href="/add">
-                ➕ أضف إعلان
-              </Link>
             </div>
           </div>
         ) : view === 'map' ? (
