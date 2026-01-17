@@ -4,6 +4,8 @@
 import { useAuth } from '@/lib/useAuth';
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { signOut, reauthenticateWithCredential, EmailAuthProvider, updatePassword } from 'firebase/auth';
+import { auth } from '@/lib/firebaseClient';
 
 import {
   doc,
@@ -17,6 +19,7 @@ import {
   getDocs,
   addDoc,
   limit,
+  orderBy,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebaseClient';
 
@@ -44,7 +47,6 @@ function generateReferralCode(len = 8) {
   let out = '';
   try {
     const bytes = new Uint8Array(len);
-    // eslint-disable-next-line no-undef
     crypto.getRandomValues(bytes);
     for (let i = 0; i < len; i++) out += alphabet[bytes[i] % alphabet.length];
     return out;
@@ -52,6 +54,69 @@ function generateReferralCode(len = 8) {
     for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
     return out;
   }
+}
+
+// مكون عرض النشاط
+function ActivityItem({ activity }) {
+  const getActivityIcon = (type) => {
+    const icons = {
+      listing_created: '📋',
+      listing_updated: '✏️',
+      listing_sold: '💰',
+      profile_updated: '👤',
+      login: '🔐',
+      password_changed: '🔒',
+      referral_signup: '🤝',
+      rating_given: '⭐',
+      chat_started: '💬',
+    };
+    return icons[type] || '📝';
+  };
+
+  const getActivityText = (activity) => {
+    const texts = {
+      listing_created: 'قمت بإنشاء إعلان جديد',
+      listing_updated: 'قمت بتحديث إعلان',
+      listing_sold: 'قمت ببيع إعلان',
+      profile_updated: 'قمت بتحديث ملفك الشخصي',
+      login: 'تسجيل دخول جديد',
+      password_changed: 'قمت بتغيير كلمة المرور',
+      referral_signup: 'تسجيل جديد عبر رابطك',
+      rating_given: 'قمت بتقييم مستخدم',
+      chat_started: 'بدأت محادثة جديدة',
+    };
+    
+    const base = texts[activity.type] || 'نشاط جديد';
+    if (activity.metadata?.listingTitle) {
+      return `${base}: "${activity.metadata.listingTitle}"`;
+    }
+    if (activity.metadata?.referralCode) {
+      return `${base} باستخدام الكود: ${activity.metadata.referralCode}`;
+    }
+    return base;
+  };
+
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleString('ar-YE', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  return (
+    <div className="activity-item">
+      <div className="activity-icon">{getActivityIcon(activity.type)}</div>
+      <div className="activity-content">
+        <div className="activity-text">{getActivityText(activity)}</div>
+        <div className="activity-time">{formatTime(activity.createdAt)}</div>
+      </div>
+    </div>
+  );
 }
 
 export default function ProfilePage() {
@@ -63,6 +128,7 @@ export default function ProfilePage() {
   const [busySave, setBusySave] = useState(false);
   const [busyStats, setBusyStats] = useState(false);
   const [err, setErr] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
   const [userDocData, setUserDocData] = useState(null);
 
@@ -82,10 +148,38 @@ export default function ProfilePage() {
     joinedDate: null,
   });
 
+  // ===== الإعدادات =====
+  const [settings, setSettings] = useState({
+    language: 'ar',
+    emailNotifications: true,
+    appNotifications: true,
+    showPhone: false,
+    theme: 'light',
+  });
+
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  // ===== الأمان =====
+  const [securityData, setSecurityData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [activeSessions, setActiveSessions] = useState([]);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+
+  // ===== النشاط =====
+  const [activities, setActivities] = useState([]);
+  const [loadingActivities, setLoadingActivities] = useState(false);
+  const [hasMoreActivities, setHasMoreActivities] = useState(true);
+  const [activitiesPage, setActivitiesPage] = useState(1);
+  const ACTIVITIES_PER_PAGE = 10;
+
   // ===== Referral (برنامج العمولة) =====
   const [refBusy, setRefBusy] = useState(false);
   const [refErr, setRefErr] = useState('');
-  const [refData, setRefData] = useState(null); // { id, code, clicks, signups, createdAt }
+  const [refData, setRefData] = useState(null);
   const [origin, setOrigin] = useState('');
 
   useEffect(() => {
@@ -107,17 +201,31 @@ export default function ProfilePage() {
   const canWithdraw = useMemo(() => earningsSAR >= MIN_PAYOUT_SAR, [earningsSAR]);
 
   const requiredSignupsForMin = useMemo(() => {
-    return Math.ceil(MIN_PAYOUT_SAR / COMMISSION_PER_SIGNUP_SAR); // 200
+    return Math.ceil(MIN_PAYOUT_SAR / COMMISSION_PER_SIGNUP_SAR);
   }, []);
 
-  // ✅ دالة تجيب الرابط من Firestore وتُرجع البيانات (وتحدث state)
-  // ✅ تدعم userId (قديم) + ownerUid (جديد)
+  // دالة تسجيل النشاط
+  const logActivity = async (type, metadata = {}) => {
+    if (!user) return;
+
+    try {
+      await addDoc(collection(db, 'user_activities'), {
+        userId: user.uid,
+        type,
+        metadata,
+        createdAt: serverTimestamp(),
+        userEmail: user.email || '',
+        userName: formData.name || user.email?.split('@')[0] || '',
+      });
+    } catch (error) {
+      console.error('فشل تسجيل النشاط:', error);
+    }
+  };
+
   const fetchReferral = async (uid) => {
-    // 1) محاولة بالصيغة القديمة userId
     let qRef = query(collection(db, 'referral_links'), where('userId', '==', uid), limit(1));
     let snap = await getDocs(qRef);
 
-    // 2) لو ما لقى.. جرّب الصيغة الجديدة ownerUid
     if (snap.empty) {
       qRef = query(collection(db, 'referral_links'), where('ownerUid', '==', uid), limit(1));
       snap = await getDocs(qRef);
@@ -157,16 +265,14 @@ export default function ProfilePage() {
     setRefErr('');
 
     try {
-      // ✅ لو موجود مسبقاً: لا نعيد الإنشاء (تحقق مباشر من Firestore)
       const existing = await fetchReferral(user.uid);
       if (existing?.code) return;
 
-      // ✅ إنشاء رابط جديد مرة واحدة
       const code = generateReferralCode(8);
 
       await addDoc(collection(db, 'referral_links'), {
-        userId: user.uid, // نخليه موجود للتوافق
-        ownerUid: user.uid, // نخليه موجود للتوافق
+        userId: user.uid,
+        ownerUid: user.uid,
         userEmail: user.email || '',
         ownerEmail: user.email || '',
         code,
@@ -178,8 +284,8 @@ export default function ProfilePage() {
         updatedAt: serverTimestamp(),
       });
 
-      // reload to get doc id/code safely
       await fetchReferral(user.uid);
+      await logActivity('referral_link_created', { code });
     } catch (e) {
       console.error(e);
       setRefErr('تعذر إنشاء الرابط. تأكد من الصلاحيات (Firestore Rules).');
@@ -204,7 +310,7 @@ export default function ProfilePage() {
     } catch {}
   };
 
-  // تحميل بيانات المستخدم من Firestore (users/{uid})
+  // تحميل بيانات المستخدم من Firestore
   useEffect(() => {
     if (!user) return;
 
@@ -230,6 +336,11 @@ export default function ProfilePage() {
             bio: data?.bio || '',
           });
 
+          // تحميل الإعدادات
+          if (data.settings) {
+            setSettings(prev => ({ ...prev, ...data.settings }));
+          }
+
           setStats((s) => ({
             ...s,
             rating: typeof data?.ratingAvg === 'number' ? data.ratingAvg : null,
@@ -245,6 +356,13 @@ export default function ProfilePage() {
             ratingAvg: null,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
+            settings: {
+              language: 'ar',
+              emailNotifications: true,
+              appNotifications: true,
+              showPhone: false,
+              theme: 'light',
+            },
           };
 
           await setDoc(ref, initial, { merge: true });
@@ -279,7 +397,7 @@ export default function ProfilePage() {
     };
   }, [user]);
 
-  // تحميل الإحصائيات الحقيقية من Firestore
+  // تحميل الإحصائيات
   useEffect(() => {
     if (!user) return;
 
@@ -350,7 +468,7 @@ export default function ProfilePage() {
       } catch (e) {
         console.error(e);
         if (!mounted) return;
-        setErr('تعذر تحميل الإحصائيات (تأكد من حقول الإعلانات/الصلاحيات).');
+        setErr('تعذر تحميل الإحصائيات.');
       } finally {
         if (mounted) setBusyStats(false);
       }
@@ -362,11 +480,42 @@ export default function ProfilePage() {
     };
   }, [user]);
 
+  // تحميل النشاطات
+  useEffect(() => {
+    if (!user || activeTab !== 'activity') return;
+
+    const loadActivities = async () => {
+      setLoadingActivities(true);
+      try {
+        const q = query(
+          collection(db, 'user_activities'),
+          where('userId', '==', user.uid),
+          orderBy('createdAt', 'desc'),
+          limit(ACTIVITIES_PER_PAGE * activitiesPage)
+        );
+
+        const snapshot = await getDocs(q);
+        const activitiesList = [];
+        snapshot.forEach((doc) => {
+          activitiesList.push({ id: doc.id, ...doc.data() });
+        });
+
+        setActivities(activitiesList);
+        setHasMoreActivities(activitiesList.length >= ACTIVITIES_PER_PAGE * activitiesPage);
+      } catch (error) {
+        console.error('خطأ في تحميل النشاطات:', error);
+      } finally {
+        setLoadingActivities(false);
+      }
+    };
+
+    loadActivities();
+  }, [user, activeTab, activitiesPage]);
+
   // تحميل بيانات برنامج العمولة
   useEffect(() => {
     if (!user) return;
     loadReferral(user.uid);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
 
   const joinedDate = useMemo(() => {
@@ -384,6 +533,7 @@ export default function ProfilePage() {
 
     setBusySave(true);
     setErr('');
+    setSuccessMsg('');
 
     try {
       const ref = doc(db, 'users', user.uid);
@@ -401,7 +551,14 @@ export default function ProfilePage() {
         { merge: true }
       );
 
+      await logActivity('profile_updated', {
+        name: formData.name,
+        city: formData.city,
+      });
+
       setEditMode(false);
+      setSuccessMsg('✅ تم حفظ التغييرات بنجاح');
+      setTimeout(() => setSuccessMsg(''), 3000);
     } catch (e) {
       console.error(e);
       setErr('تعذر حفظ البيانات. حاول مرة أخرى.');
@@ -410,12 +567,121 @@ export default function ProfilePage() {
     }
   };
 
+  // حفظ الإعدادات
+  const handleSaveSettings = async () => {
+    if (!user) return;
+
+    setSavingSettings(true);
+    try {
+      const ref = doc(db, 'users', user.uid);
+      await setDoc(
+        ref,
+        {
+          settings,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      await logActivity('settings_updated');
+      setSuccessMsg('✅ تم حفظ الإعدادات بنجاح');
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (error) {
+      console.error('خطأ في حفظ الإعدادات:', error);
+      setErr('تعذر حفظ الإعدادات');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  // تغيير كلمة المرور
+  const handleChangePassword = async () => {
+    if (!user) return;
+
+    const { currentPassword, newPassword, confirmPassword } = securityData;
+
+    if (newPassword !== confirmPassword) {
+      setErr('كلمات المرور الجديدة غير متطابقة');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setErr('كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل');
+      return;
+    }
+
+    setChangingPassword(true);
+    setErr('');
+    setSuccessMsg('');
+
+    try {
+      // إعادة المصادقة
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+      await reauthenticateWithCredential(user, credential);
+
+      // تغيير كلمة المرور
+      await updatePassword(user, newPassword);
+
+      await logActivity('password_changed');
+      
+      setSecurityData({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      });
+      
+      setSuccessMsg('✅ تم تغيير كلمة المرور بنجاح');
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (error) {
+      console.error('خطأ في تغيير كلمة المرور:', error);
+      switch (error.code) {
+        case 'auth/wrong-password':
+          setErr('كلمة المرور الحالية غير صحيحة');
+          break;
+        case 'auth/weak-password':
+          setErr('كلمة المرور الجديدة ضعيفة جداً');
+          break;
+        default:
+          setErr('حدث خطأ أثناء تغيير كلمة المرور');
+      }
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
+  // تسجيل الخروج من جميع الأجهزة
+  const handleLogoutAllDevices = async () => {
+    if (!user) return;
+
+    if (confirm('هل أنت متأكد من تسجيل الخروج من جميع الأجهزة؟')) {
+      try {
+        // هذا مثال مبسط - في التطبيق الحقيقي ستحتاج إلى إدارة جلسات يدوياً في Firestore
+        alert('هذه الميزة قيد التطوير. حالياً، سجل الخروج يدوياً من كل جهاز.');
+      } catch (error) {
+        console.error('خطأ في تسجيل الخروج:', error);
+      }
+    }
+  };
+
+  // تحميل المزيد من النشاطات
+  const loadMoreActivities = () => {
+    setActivitiesPage(prev => prev + 1);
+  };
+
+  // دالة تسجيل الخروج
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error('خطأ في تسجيل الخروج:', error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="profile-loading">
         <div className="loading-spinner" />
         <p>جاري تحميل بيانات الملف الشخصي...</p>
-
         <style jsx>{`
           .profile-loading{
             display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -443,7 +709,6 @@ export default function ProfilePage() {
             <Link href="/register" className="register-btn">إنشاء حساب جديد</Link>
           </div>
         </div>
-
         <style jsx>{`
           .profile-not-signed-in{display:flex;align-items:center;justify-content:center;min-height:70vh;padding:20px;text-align:center;}
           .not-signed-in-content{max-width:420px;background:#fff;padding:38px;border-radius:18px;box-shadow:0 10px 28px rgba(0,0,0,.08);}
@@ -461,6 +726,10 @@ export default function ProfilePage() {
 
   return (
     <div className="profile-page">
+      {/* الرسائل */}
+      {successMsg && <div className="success-message">{successMsg}</div>}
+      {err && <div className="error-message">{err}</div>}
+
       <div className="profile-header">
         <div className="profile-banner">
           <div className="banner-overlay">
@@ -474,7 +743,6 @@ export default function ProfilePage() {
             <div className="profile-avatar">
               {formData.name?.charAt(0) || publicUserId?.charAt(0) || '👤'}
             </div>
-
             <div className="avatar-actions">
               <button className="remove-avatar-btn" type="button" disabled>
                 تغيير الصورة (قريباً)
@@ -498,9 +766,9 @@ export default function ProfilePage() {
               )}
 
               <div className="profile-badges">
-                <span className="badge verified">✓ حساب</span>
+                <span className="badge verified">✓ حساب موثق</span>
                 <span className="badge member">عضو منذ {joinedDate}</span>
-                {busyStats ? <span className="badge member">⏳ تحديث الإحصائيات…</span> : null}
+                {busyStats && <span className="badge member">⏳ تحديث الإحصائيات…</span>}
               </div>
             </div>
 
@@ -527,13 +795,11 @@ export default function ProfilePage() {
                 </>
               )}
             </div>
-
-            {err ? <div className="err">{err}</div> : null}
           </div>
         </div>
       </div>
 
-      {/* إحصائيات حقيقية */}
+      {/* الإحصائيات */}
       <div className="profile-stats">
         <div className="stat-card">
           <div className="stat-icon">📋</div>
@@ -570,7 +836,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* ===== برنامج العمولة ===== */}
+      {/* برنامج العمولة */}
       <div id="referral-box" className="referral-box">
         <div className="referral-head">
           <div>
@@ -596,7 +862,7 @@ export default function ProfilePage() {
           )}
         </div>
 
-        {refErr ? <div className="referral-err">{refErr}</div> : null}
+        {refErr && <div className="referral-err">{refErr}</div>}
 
         {refData?.code ? (
           <>
@@ -642,7 +908,6 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* ✅ حالة السحب */}
             <div className={`payout-status ${canWithdraw ? 'ok' : 'wait'}`}>
               <div className="payout-title">
                 {canWithdraw ? '✅ مؤهل للسحب' : '⏳ غير مؤهل للسحب بعد'}
@@ -656,17 +921,15 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              {/* ✅ زر طلب السحب يظهر فقط إذا مؤهل */}
-              {canWithdraw ? (
+              {canWithdraw && (
                 <div style={{ marginTop: 10 }}>
                   <Link href="/payout/request" className="payout-btn">
                     💸 طلب سحب الأرباح
                   </Link>
                 </div>
-              ) : null}
+              )}
             </div>
 
-            {/* ✅ سياسة التحويل */}
             <div className="payout-policy">
               <div className="policy-title">سياسة السحب والتحويل (بنك الكريمي)</div>
               <ul className="policy-list">
@@ -686,7 +949,7 @@ export default function ProfilePage() {
           </>
         ) : (
           <div className="referral-empty">
-            لم تقم بإنشاء رابط عمولة بعد. اضغط <b>“إنشاء رابط العمولة”</b> وسيتم حفظه لك بشكل دائم.
+            لم تقم بإنشاء رابط عمولة بعد. اضغط <b>"إنشاء رابط العمولة"</b> وسيتم حفظه لك بشكل دائم.
           </div>
         )}
       </div>
@@ -708,6 +971,7 @@ export default function ProfilePage() {
       </div>
 
       <div className="tab-content">
+        {/* المعلومات الشخصية */}
         {activeTab === 'info' && (
           <div className="info-tab">
             <h3>المعلومات الشخصية</h3>
@@ -723,8 +987,8 @@ export default function ProfilePage() {
 
               <div className="info-field">
                 <label>البريد الإلكتروني</label>
-                <p>رقم المستخدم: {publicUserId || '...'}</p>
-                <span className="email-note">(رقم تعريفي ثابت)</span>
+                <p>{user.email}</p>
+                <span className="email-note">(رقم المستخدم: {publicUserId || '...'})</span>
               </div>
 
               <div className="info-field">
@@ -766,11 +1030,254 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {activeTab === 'settings' && <div className="settings-tab"><h3>إعدادات الحساب</h3><p className="muted">قريباً…</p></div>}
-        {activeTab === 'security' && <div className="security-tab"><h3>أمان الحساب</h3><p className="muted">قريباً…</p></div>}
-        {activeTab === 'activity' && <div className="activity-tab"><h3>نشاطاتك الأخيرة</h3><p className="muted">قريباً…</p></div>}
+        {/* الإعدادات */}
+        {activeTab === 'settings' && (
+          <div className="settings-tab">
+            <h3>إعدادات الحساب</h3>
+            <div className="settings-grid">
+              <div className="setting-group">
+                <h4>🌐 اللغة والمنطقة</h4>
+                <div className="setting-item">
+                  <label>اللغة</label>
+                  <select 
+                    value={settings.language}
+                    onChange={(e) => setSettings(prev => ({ ...prev, language: e.target.value }))}
+                  >
+                    <option value="ar">العربية</option>
+                    <option value="en">English</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="setting-group">
+                <h4>🔔 الإشعارات</h4>
+                <div className="setting-item toggle">
+                  <label>إشعارات البريد الإلكتروني</label>
+                  <div className="toggle-switch">
+                    <input
+                      type="checkbox"
+                      id="emailNotifications"
+                      checked={settings.emailNotifications}
+                      onChange={(e) => setSettings(prev => ({ ...prev, emailNotifications: e.target.checked }))}
+                    />
+                    <label htmlFor="emailNotifications" className="toggle-label"></label>
+                  </div>
+                </div>
+                <div className="setting-item toggle">
+                  <label>إشعارات التطبيق</label>
+                  <div className="toggle-switch">
+                    <input
+                      type="checkbox"
+                      id="appNotifications"
+                      checked={settings.appNotifications}
+                      onChange={(e) => setSettings(prev => ({ ...prev, appNotifications: e.target.checked }))}
+                    />
+                    <label htmlFor="appNotifications" className="toggle-label"></label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="setting-group">
+                <h4>👁️ الخصوصية</h4>
+                <div className="setting-item toggle">
+                  <label>إظهار رقم الهاتف في الإعلانات</label>
+                  <div className="toggle-switch">
+                    <input
+                      type="checkbox"
+                      id="showPhone"
+                      checked={settings.showPhone}
+                      onChange={(e) => setSettings(prev => ({ ...prev, showPhone: e.target.checked }))}
+                    />
+                    <label htmlFor="showPhone" className="toggle-label"></label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="setting-group">
+                <h4>🎨 المظهر</h4>
+                <div className="setting-item">
+                  <label>المظهر</label>
+                  <select 
+                    value={settings.theme}
+                    onChange={(e) => setSettings(prev => ({ ...prev, theme: e.target.value }))}
+                  >
+                    <option value="light">فاتح</option>
+                    <option value="dark">غامق</option>
+                    <option value="auto">تلقائي</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="settings-actions">
+              <button 
+                onClick={handleSaveSettings} 
+                className="save-settings-btn"
+                disabled={savingSettings}
+              >
+                {savingSettings ? '⏳ جاري الحفظ...' : '💾 حفظ الإعدادات'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* الأمان */}
+        {activeTab === 'security' && (
+          <div className="security-tab">
+            <h3>أمان الحساب</h3>
+            
+            <div className="security-sections">
+              {/* تغيير كلمة المرور */}
+              <div className="security-section">
+                <h4>🔐 تغيير كلمة المرور</h4>
+                <div className="password-form">
+                  <div className="form-group">
+                    <label>كلمة المرور الحالية</label>
+                    <input
+                      type="password"
+                      value={securityData.currentPassword}
+                      onChange={(e) => setSecurityData(prev => ({ ...prev, currentPassword: e.target.value }))}
+                      placeholder="أدخل كلمة المرور الحالية"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>كلمة المرور الجديدة</label>
+                    <input
+                      type="password"
+                      value={securityData.newPassword}
+                      onChange={(e) => setSecurityData(prev => ({ ...prev, newPassword: e.target.value }))}
+                      placeholder="أدخل كلمة المرور الجديدة"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>تأكيد كلمة المرور الجديدة</label>
+                    <input
+                      type="password"
+                      value={securityData.confirmPassword}
+                      onChange={(e) => setSecurityData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                      placeholder="أعد إدخال كلمة المرور الجديدة"
+                    />
+                  </div>
+                  <button 
+                    onClick={handleChangePassword}
+                    className="change-password-btn"
+                    disabled={changingPassword || !securityData.currentPassword || !securityData.newPassword}
+                  >
+                    {changingPassword ? '⏳ جاري التغيير...' : '🔑 تغيير كلمة المرور'}
+                  </button>
+                </div>
+              </div>
+
+              {/* المصادقة الثنائية */}
+              <div className="security-section">
+                <h4>🔒 المصادقة الثنائية (2FA)</h4>
+                <div className="two-factor-section">
+                  <div className="two-factor-status">
+                    <span className={`status-indicator ${twoFactorEnabled ? 'active' : 'inactive'}`}>
+                      {twoFactorEnabled ? '✅ مفعل' : '❌ غير مفعل'}
+                    </span>
+                  </div>
+                  <p className="two-factor-description">
+                    تضيف المصادقة الثنائية طبقة أمان إضافية لحسابك. عند تفعيلها، ستحتاج إلى كود إضافي عند تسجيل الدخول.
+                  </p>
+                  <button className="setup-2fa-btn" disabled>
+                    ⚙️ إعداد المصادقة الثنائية (قريباً)
+                  </button>
+                </div>
+              </div>
+
+              {/* الجلسات النشطة */}
+              <div className="security-section">
+                <h4>📱 الجلسات النشطة</h4>
+                <div className="sessions-section">
+                  <div className="current-session">
+                    <div className="session-info">
+                      <span className="session-icon">📱</span>
+                      <div>
+                        <div className="session-device">هذا الجهاز</div>
+                        <div className="session-time">متصل منذ: {new Date(user.metadata.lastSignInTime).toLocaleString('ar-YE')}</div>
+                      </div>
+                    </div>
+                    <span className="session-active">نشطة الآن</span>
+                  </div>
+                  
+                  <div className="sessions-actions">
+                    <button onClick={handleLogoutAllDevices} className="logout-all-btn">
+                      🚪 تسجيل الخروج من جميع الأجهزة
+                    </button>
+                    <button onClick={handleLogout} className="logout-btn">
+                      تسجيل الخروج
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* النشاطات */}
+        {activeTab === 'activity' && (
+          <div className="activity-tab">
+            <h3>نشاطاتك الأخيرة</h3>
+            
+            <div className="activity-filters">
+              <select className="filter-select">
+                <option value="all">جميع النشاطات</option>
+                <option value="listings">الإعلانات</option>
+                <option value="profile">الملف الشخصي</option>
+                <option value="security">الأمان</option>
+              </select>
+              <div className="activity-period">
+                <span className="period-label">آخر 30 يوم</span>
+              </div>
+            </div>
+
+            <div className="activities-list">
+              {loadingActivities ? (
+                <div className="loading-activities">⏳ جاري تحميل النشاطات...</div>
+              ) : activities.length > 0 ? (
+                <>
+                  {activities.map((activity) => (
+                    <ActivityItem key={activity.id} activity={activity} />
+                  ))}
+                  
+                  {hasMoreActivities && (
+                    <div className="load-more-container">
+                      <button onClick={loadMoreActivities} className="load-more-btn">
+                        📄 تحميل المزيد
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="no-activities">
+                  <div className="no-activities-icon">📝</div>
+                  <p>لا توجد نشاطات مسجلة بعد</p>
+                  <p className="no-activities-sub">ستظهر نشاطاتك هنا عندما تبدأ باستخدام التطبيق</p>
+                </div>
+              )}
+            </div>
+
+            <div className="activity-summary">
+              <div className="summary-item">
+                <span className="summary-label">مجموع النشاطات:</span>
+                <span className="summary-value">{activities.length}</span>
+              </div>
+              <div className="summary-item">
+                <span className="summary-label">آخر نشاط:</span>
+                <span className="summary-value">
+                  {activities.length > 0 
+                    ? new Date(activities[0].createdAt?.toDate?.() || activities[0].createdAt).toLocaleDateString('ar-YE')
+                    : 'لا يوجد'
+                  }
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* الروابط السريعة */}
       <div className="quick-links">
         <h3>روابط سريعة</h3>
         <div className="links-grid">
@@ -782,7 +1289,20 @@ export default function ProfilePage() {
       </div>
 
       <style jsx>{`
-        .profile-page{max-width:1200px;margin:0 auto;padding:20px;}
+        .profile-page{max-width:1200px;margin:0 auto;padding:20px;position:relative;}
+        
+        /* الرسائل */
+        .success-message{
+          position:fixed;top:20px;right:20px;left:20px;max-width:400px;margin:0 auto;
+          background:#10b981;color:#fff;padding:12px 16px;border-radius:12px;
+          text-align:center;font-weight:800;z-index:1000;box-shadow:0 4px 12px rgba(16,185,129,.3);
+        }
+        .error-message{
+          position:fixed;top:20px;right:20px;left:20px;max-width:400px;margin:0 auto;
+          background:#ef4444;color:#fff;padding:12px 16px;border-radius:12px;
+          text-align:center;font-weight:800;z-index:1000;box-shadow:0 4px 12px rgba(239,68,68,.3);
+        }
+        
         .profile-banner{background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:20px 20px 0 0;height:200px;position:relative;overflow:hidden;}
         .banner-overlay{position:absolute;inset:0;background:rgba(0,0,0,.2);display:flex;flex-direction:column;justify-content:center;padding:40px;color:#fff;}
         .banner-overlay h1{font-size:32px;margin:0 0 8px;font-weight:900;}
@@ -806,7 +1326,6 @@ export default function ProfilePage() {
         .my-listings-btn{background:#f8fafc;color:#4f46e5;border:2px solid #e2e8f0}
         .my-chats-btn{background:#fef3c7;color:#92400e;border:2px solid #fde68a}
         .ref-btn{background:#ecfeff;color:#155e75;border:2px solid #a5f3fc}
-        .err{margin-top:12px;padding:10px 12px;border-radius:12px;background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.25);color:#991b1b;font-weight:800}
 
         .profile-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin:24px 0 18px;}
         .stat-card{background:#fff;padding:22px;border-radius:15px;display:flex;align-items:center;gap:18px;box-shadow:0 4px 15px rgba(0,0,0,.05);}
@@ -907,6 +1426,7 @@ export default function ProfilePage() {
         .tab-content{background:#fff;border-radius:20px;padding:30px;margin-bottom:30px;box-shadow:0 4px 20px rgba(0,0,0,.08);}
         .tab-content h3{margin:0 0 20px;color:#1e293b;font-size:22px;padding-bottom:12px;border-bottom:2px solid #f1f5f9;}
 
+        /* المعلومات الشخصية */
         .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px}
         .info-field{display:flex;flex-direction:column;gap:8px}
         .info-field label{font-weight:900;color:#475569;font-size:14px}
@@ -915,13 +1435,147 @@ export default function ProfilePage() {
         .info-field.full-width{grid-column:1/-1}
         .email-note{font-size:12px;color:#94a3b8}
 
+        /* الإعدادات */
+        .settings-grid{display:grid;gap:30px;margin-bottom:30px;}
+        .setting-group{border:1px solid #e2e8f0;border-radius:15px;padding:20px;}
+        .setting-group h4{margin:0 0 15px;color:#1e293b;font-size:16px;display:flex;align-items:center;gap:8px;}
+        .setting-item{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #f1f5f9;}
+        .setting-item:last-child{border-bottom:none;}
+        .setting-item label{font-weight:800;color:#475569;}
+        .setting-item select{padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;background:#f8fafc;min-width:150px;}
+        
+        /* Toggle Switch */
+        .toggle-switch{position:relative;}
+        .toggle-switch input{display:none;}
+        .toggle-label{
+          display:block;width:50px;height:28px;background:#cbd5e1;border-radius:14px;
+          position:relative;cursor:pointer;transition:background .3s;
+        }
+        .toggle-label:after{
+          content:'';position:absolute;left:4px;top:4px;
+          width:20px;height:20px;background:#fff;border-radius:50%;
+          transition:transform .3s;
+        }
+        .toggle-switch input:checked + .toggle-label{background:#10b981;}
+        .toggle-switch input:checked + .toggle-label:after{transform:translateX(22px);}
+        
+        .settings-actions{text-align:left;}
+        .save-settings-btn{
+          padding:12px 24px;background:linear-gradient(135deg,#4f46e5,#7c3aed);
+          color:#fff;border:none;border-radius:12px;font-weight:900;cursor:pointer;
+        }
+        .save-settings-btn:disabled{opacity:.6;cursor:not-allowed;}
+
+        /* الأمان */
+        .security-sections{display:grid;gap:30px;}
+        .security-section{border:1px solid #e2e8f0;border-radius:15px;padding:20px;}
+        .security-section h4{margin:0 0 15px;color:#1e293b;font-size:16px;display:flex;align-items:center;gap:8px;}
+        
+        .password-form{display:grid;gap:15px;max-width:400px;}
+        .form-group{display:flex;flex-direction:column;gap:8px;}
+        .form-group label{font-weight:800;color:#475569;font-size:14px;}
+        .form-group input{
+          padding:12px;border:2px solid #e2e8f0;border-radius:10px;background:#f8fafc;
+        }
+        .change-password-btn{
+          padding:12px 24px;background:linear-gradient(135deg,#ef4444,#dc2626);
+          color:#fff;border:none;border-radius:12px;font-weight:900;cursor:pointer;margin-top:10px;
+        }
+        .change-password-btn:disabled{opacity:.6;cursor:not-allowed;}
+        
+        .two-factor-section{display:grid;gap:12px;}
+        .two-factor-status{margin-bottom:10px;}
+        .status-indicator{
+          display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:20px;
+          font-weight:900;font-size:14px;
+        }
+        .status-indicator.active{background:#d1fae5;color:#065f46;}
+        .status-indicator.inactive{background:#fef3c7;color:#92400e;}
+        .two-factor-description{color:#64748b;line-height:1.6;margin:0 0 15px;}
+        .setup-2fa-btn{
+          padding:12px 24px;background:#f8fafc;color:#4f46e5;border:2px solid #e2e8f0;
+          border-radius:12px;font-weight:900;cursor:pointer;width:fit-content;
+        }
+        .setup-2fa-btn:disabled{opacity:.6;cursor:not-allowed;}
+        
+        .sessions-section{display:grid;gap:15px;}
+        .current-session{
+          display:flex;justify-content:space-between;align-items:center;
+          padding:15px;background:#f8fafc;border-radius:12px;
+        }
+        .session-info{display:flex;align-items:center;gap:12px;}
+        .session-icon{font-size:24px;}
+        .session-device{font-weight:900;color:#1e293b;}
+        .session-time{font-size:12px;color:#64748b;}
+        .session-active{
+          padding:6px 12px;background:#d1fae5;color:#065f46;
+          border-radius:20px;font-size:12px;font-weight:900;
+        }
+        .sessions-actions{display:flex;gap:12px;}
+        .logout-all-btn,.logout-btn{
+          padding:10px 16px;border-radius:10px;font-weight:900;cursor:pointer;
+        }
+        .logout-all-btn{background:#fef3c7;color:#92400e;border:2px solid #fde68a;}
+        .logout-btn{background:#f8fafc;color:#4f46e5;border:2px solid #e2e8f0;}
+
+        /* النشاطات */
+        .activity-filters{
+          display:flex;justify-content:space-between;align-items:center;
+          margin-bottom:20px;padding-bottom:15px;border-bottom:2px solid #f1f5f9;
+        }
+        .filter-select{
+          padding:8px 16px;border:2px solid #e2e8f0;border-radius:8px;
+          background:#f8fafc;font-weight:800;
+        }
+        .activity-period{display:flex;align-items:center;gap:8px;}
+        .period-label{
+          padding:6px 12px;background:#f1f5f9;border-radius:20px;
+          font-size:12px;font-weight:900;color:#64748b;
+        }
+        
+        .activities-list{min-height:200px;}
+        .activity-item{
+          display:flex;gap:15px;padding:15px;border-bottom:1px solid #f1f5f9;
+          transition:background .2s;
+        }
+        .activity-item:hover{background:#f8fafc;}
+        .activity-icon{
+          width:40px;height:40px;background:#f1f5f9;border-radius:10px;
+          display:flex;align-items:center;justify-content:center;font-size:18px;
+        }
+        .activity-content{flex:1;}
+        .activity-text{font-weight:800;color:#1e293b;margin-bottom:4px;}
+        .activity-time{font-size:12px;color:#64748b;}
+        
+        .loading-activities{
+          text-align:center;padding:40px;color:#64748b;font-weight:800;
+        }
+        .no-activities{
+          text-align:center;padding:40px;color:#64748b;
+        }
+        .no-activities-icon{font-size:48px;margin-bottom:15px;opacity:.5;}
+        .no-activities-sub{font-size:14px;margin-top:8px;}
+        
+        .load-more-container{text-align:center;margin:20px 0;}
+        .load-more-btn{
+          padding:10px 24px;background:#f8fafc;color:#4f46e5;
+          border:2px solid #e2e8f0;border-radius:10px;font-weight:900;cursor:pointer;
+        }
+        
+        .activity-summary{
+          display:flex;gap:30px;padding-top:20px;margin-top:20px;
+          border-top:2px solid #f1f5f9;
+        }
+        .summary-item{display:flex;flex-direction:column;gap:4px;}
+        .summary-label{font-size:12px;color:#64748b;font-weight:900;}
+        .summary-value{font-size:18px;font-weight:950;color:#1e293b;}
+
+        /* الروابط السريعة */
         .quick-links{background:#fff;border-radius:20px;padding:30px;box-shadow:0 4px 20px rgba(0,0,0,.08);}
         .quick-links h3{margin:0 0 20px;color:#1e293b;font-size:22px}
         .links-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px}
-        .quick-link{display:flex;align-items:center;gap:14px;padding:18px;background:#f8fafc;border-radius:12px;text-decoration:none;color:#1e293b;font-weight:900}
-        .quick-link:hover{background:#4f46e5;color:#fff}
-
-        .muted{color:#64748b;font-weight:800}
+        .quick-link{display:flex;align-items:center;gap:14px;padding:18px;background:#f8fafc;border-radius:12px;text-decoration:none;color:#1e293b;font-weight:900;transition:all .2s;}
+        .quick-link:hover{background:#4f46e5;color:#fff;transform:translateY(-2px);}
 
         @media (max-width:768px){
           .profile-page{padding:10px}
@@ -930,6 +1584,10 @@ export default function ProfilePage() {
           .referral-link-row{grid-template-columns: 1fr;}
           .referral-head{align-items:stretch}
           .referral-create,.referral-copy{width:100%}
+          .activity-filters{flex-direction:column;gap:10px;align-items:stretch;}
+          .sessions-actions{flex-direction:column;}
+          .activity-summary{flex-direction:column;gap:15px;}
+          .tab-btn{padding:10px 14px;font-size:12px;}
         }
       `}</style>
     </div>
