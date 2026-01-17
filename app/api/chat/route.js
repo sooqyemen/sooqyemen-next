@@ -68,6 +68,8 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS || 15000);
+// افتراضيًا: إذا كان Gemini متاح نستخدمه أولاً (لأنه غالباً أرخص/مجاني)
+const ASSISTANT_PREFER_GEMINI = String(process.env.ASSISTANT_PREFER_GEMINI || '1') !== '0';
 
 const CATEGORIES = [
   { slug: 'cars', name: 'سيارات', keywords: ['سيارة', 'سيارات', 'car', 'cars'] },
@@ -272,6 +274,55 @@ function detectCurrency(messageRaw) {
   return 'YER';
 }
 
+function normalizePhone(raw) {
+  const s = String(raw || '')
+    .trim()
+    .replace(/[\s\-()]/g, '')
+    .replace(/[^0-9+]/g, '');
+
+  // +9677xxxxxxxx
+  if (s.startsWith('+')) {
+    const digits = s.replace(/[^0-9]/g, '');
+    // keep leading +
+    return `+${digits}`;
+  }
+  return s;
+}
+
+function isValidPhone(phone) {
+  const p = normalizePhone(phone);
+  const digits = p.replace(/[^0-9]/g, '');
+
+  // Accept Yemen-like numbers (very lenient):
+  // - 9 digits starting with 7 (e.g., 777123456)
+  // - or 12 digits starting with 9677 (e.g., 967777123456)
+  if (digits.length === 9 && digits.startsWith('7')) return true;
+  if (digits.length === 12 && digits.startsWith('9677')) return true;
+  return digits.length >= 7 && digits.length <= 15;
+}
+
+function extractLatLngFromText(messageRaw) {
+  const t = String(messageRaw || '');
+  // match: 15.3694, 44.1910 OR 15.3694 44.1910
+  const m = t.match(/(-?\d{1,2}(?:\.\d+)?)[,\s]+(-?\d{1,3}(?:\.\d+)?)/);
+  if (!m) return null;
+  const lat = Number(m[1]);
+  const lng = Number(m[2]);
+  if (!isFinite(lat) || !isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return { lat, lng };
+}
+
+function extractMapsLink(messageRaw) {
+  const t = String(messageRaw || '');
+  const m = t.match(/https?:\/\/\S+/i);
+  if (!m) return null;
+  const url = m[0];
+  // accept most map links (google maps / goo.gl / openstreetmap)
+  if (/google\.[^/]+\/maps|goo\.gl\/maps|maps\.app\.goo\.gl|openstreetmap\.org/i.test(url)) return url;
+  return url;
+}
+
 async function getRatesServer() {
   if (!adminDb) return { sar: DEFAULT_SAR, usd: DEFAULT_USD };
   try {
@@ -332,36 +383,52 @@ function draftSummary(d) {
   if (data.title) parts.push(`العنوان: ${data.title}`);
   if (data.description) parts.push(`الوصف: ${data.description}`);
   if (data.city) parts.push(`المدينة: ${data.city}`);
+  if (data.phone) parts.push(`الجوال: ${data.phone}`);
+  if (data.locationLabel) parts.push(`الموقع: ${data.locationLabel}`);
+  if (data.lat != null && data.lng != null) parts.push(`الإحداثيات: ${data.lat}, ${data.lng}`);
   if (data.originalPrice) {
     parts.push(`السعر: ${data.originalPrice} ${data.originalCurrency || 'YER'}`);
   }
-  if (data.phone) parts.push(`الهاتف: ${data.phone}`);
   return parts.join('\n');
 }
 
 function listingNextPrompt(step, draft) {
   if (step === 'category') {
     return (
-      'الخطوة 1/5: اختر القسم (اكتب اسم القسم):\n' +
+      'الخطوة 1/7: اختر القسم (اكتب اسم القسم):\n' +
       categoriesHint() +
       '\n\n(تقدر تلغي بأي وقت بكتابة: إلغاء)'
     );
   }
 
   if (step === 'title') {
-    return 'الخطوة 2/5: اكتب عنوان الإعلان.';
+    return 'الخطوة 2/7: اكتب عنوان الإعلان.';
   }
 
   if (step === 'description') {
-    return 'الخطوة 3/5: اكتب وصف الإعلان (على الأقل 10 أحرف).';
+    return 'الخطوة 3/7: اكتب وصف الإعلان (على الأقل 10 أحرف).';
   }
 
   if (step === 'city') {
-    return 'الخطوة 4/5: اكتب اسم المدينة.';
+    return 'الخطوة 4/7: اكتب اسم المدينة.';
+  }
+
+  if (step === 'phone') {
+    return 'الخطوة 5/7: اكتب رقم الجوال للتواصل (مثال: 777123456 أو +967777123456).';
+  }
+
+  if (step === 'location') {
+    return (
+      'الخطوة 6/7: حدّد موقع الإعلان.\n' +
+      '• اضغط زر "📍 موقعي" داخل الشات لإرسال الإحداثيات تلقائياً\n' +
+      '• أو اكتب الإحداثيات بهذا الشكل: 15.3694, 44.1910\n' +
+      '• أو أرسل رابط خرائط جوجل\n\n' +
+      'تقدر أيضاً تكتب اسم الحي/المنطقة (مثال: صنعاء - حدة).'
+    );
   }
 
   if (step === 'price') {
-    return 'الخطوة 5/5: اكتب السعر (مثال: 100000) ويمكن تكتب العملة معها مثل: 100 USD أو 100 SAR.';
+    return 'الخطوة 7/7: اكتب السعر (مثال: 100000) ويمكن تكتب العملة معها مثل: 100 USD أو 100 SAR.';
   }
 
   return (
@@ -472,6 +539,9 @@ async function runAiFallback({ message, history }) {
             title: { type: ['string', 'null'] },
             description: { type: ['string', 'null'] },
             city: { type: ['string', 'null'] },
+            locationLabel: { type: ['string', 'null'] },
+            lat: { type: ['number', 'null'] },
+            lng: { type: ['number', 'null'] },
             price: { type: ['number', 'null'] },
             currency: { type: ['string', 'null'] },
             phone: { type: ['string', 'null'] },
@@ -483,15 +553,81 @@ async function runAiFallback({ message, history }) {
   };
 
   const categoriesGuide = CATEGORIES.map((c) => `${c.slug}: ${c.name}`).join('\n');
+  const siteRoutes =
+    'روابط مهمة داخل الموقع (استخدمها عند اللزوم):\n' +
+    '• إضافة إعلان: /add\n' +
+    '• الفئات: /categories\n' +
+    '• تسجيل الدخول: /login\n' +
+    '• إنشاء حساب: /register\n' +
+    '• المساعدة: /help\n' +
+    '• تواصل معنا: /contact\n' +
+    '• الشروط: /terms\n' +
+    '• الخصوصية: /privacy\n';
+
   const systemPrompt =
-    'أنت مساعد ذكي لموقع سوق اليمن. ردودك قصيرة وواضحة وباللهجة العربية الفصحى.\n' +
-    'إذا كانت نية المستخدم بيع/عرض/إضافة إعلان اختر action=create_listing وحاول استخراج البيانات المتاحة.\n' +
-    'إذا كان السؤال عن "كم/عدد" للإعلانات اختر action=count_listings وحدد category إن وجدت.\n' +
-    'خلاف ذلك اختر action=none مع رد عام.\n' +
+    'أنت مساعد ذكي لموقع سوق اليمن.\n' +
+    'هدفك: الإجابة على استفسارات المستخدم عن الموقع (إعلانات/مزادات/تسجيل/تواصل/فئات).\n' +
+    'التزم بالمعلومات العامة، وإذا ما عندك معلومة مؤكدة لا تخترع—اطلب توضيح أو وجّه المستخدم إلى /help أو /contact.\n' +
+    'حاول دائماً إضافة رابط مناسب داخل الموقع عند إعطاء إرشادات.\n' +
+    '\n' +
+    siteRoutes +
+    '\n' +
+    'قواعد اختيار action:\n' +
+    '• إذا كانت نية المستخدم بيع/عرض/إضافة إعلان اختر action=create_listing وحاول استخراج البيانات المتاحة.\n' +
+    '• إذا كان السؤال عن "كم/عدد" للإعلانات اختر action=count_listings وحدد category إن وجدت.\n' +
+    '• خلاف ذلك اختر action=none مع رد مباشر وواضح.\n' +
+    '\n' +
     'التصنيفات المتاحة (slug: الاسم):\n' +
     categoriesGuide;
 
   try {
+    // ✅ افتراضيًا: استخدم Gemini أولاً إن كان متاحاً
+    if (hasGemini && ASSISTANT_PREFER_GEMINI) {
+      const normalizedHistory = normalizeHistory(history);
+      const contents = [
+        ...normalizedHistory.map((entry) => ({
+          role: entry.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: entry.content }],
+        })),
+        { role: 'user', parts: [{ text: message }] },
+      ];
+
+      const response = await fetchWithTimeout(
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            systemInstruction: {
+              role: 'system',
+              parts: [{ text: systemPrompt }],
+            },
+            contents,
+            generationConfig: {
+              responseMimeType: 'application/json',
+              responseSchema: schema.schema,
+            },
+          }),
+        },
+        OPENAI_TIMEOUT_MS
+      );
+
+      if (!response.ok) {
+        // لو Gemini فشل، نجرب OpenAI إذا متاح
+        if (!hasOpenAi) return { ok: false };
+      } else {
+        const data = await response.json();
+        const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (!rawText) return { ok: false };
+        const parsed = safeJsonParse(rawText);
+        if (!parsed) return { ok: false };
+        return { ok: true, ...parsed };
+      }
+    }
+
+    // OpenAI كخيار احتياطي
     if (hasOpenAi) {
       const moderation = await runModeration(message);
       if (!moderation.ok) {
@@ -553,47 +689,8 @@ async function runAiFallback({ message, history }) {
       return { ok: true, ...parsed };
     }
 
-    const normalizedHistory = normalizeHistory(history);
-    const contents = [
-      ...normalizedHistory.map((entry) => ({
-        role: entry.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: entry.content }],
-      })),
-      { role: 'user', parts: [{ text: message }] },
-    ];
-
-    const response = await fetchWithTimeout(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          systemInstruction: {
-            role: 'system',
-            parts: [{ text: systemPrompt }],
-          },
-          contents,
-          generationConfig: {
-            responseMimeType: 'application/json',
-            responseSchema: schema.schema,
-          },
-        }),
-      },
-      OPENAI_TIMEOUT_MS
-    );
-
-    if (!response.ok) {
-      return { ok: false };
-    }
-
-    const data = await response.json();
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    if (!rawText) return { ok: false };
-    const parsed = safeJsonParse(rawText);
-    if (!parsed) return { ok: false };
-    return { ok: true, ...parsed };
+    // لو ما توفر أي مزود
+    return { ok: false };
   } catch (error) {
     return { ok: false };
   }
@@ -607,6 +704,15 @@ async function startDraftFromAi(user, listing) {
   if (listing?.title) data.title = String(listing.title).trim();
   if (listing?.description) data.description = String(listing.description).trim();
   if (listing?.city) data.city = String(listing.city).trim();
+  if (listing?.locationLabel) data.locationLabel = String(listing.locationLabel).trim();
+  if (listing?.lat != null && listing?.lng != null) {
+    const lat = Number(listing.lat);
+    const lng = Number(listing.lng);
+    if (isFinite(lat) && isFinite(lng)) {
+      data.lat = lat;
+      data.lng = lng;
+    }
+  }
   if (listing?.price) data.originalPrice = Number(listing.price);
   if (listing?.currency) data.originalCurrency = sanitizeCurrency(String(listing.currency).toUpperCase());
   if (listing?.phone) data.phone = String(listing.phone).trim();
@@ -615,14 +721,16 @@ async function startDraftFromAi(user, listing) {
   if (data.category) step = 'title';
   if (data.title) step = 'description';
   if (data.description) step = 'city';
-  if (data.city) step = 'price';
+  if (data.city) step = 'phone';
+  if (data.phone) step = 'location';
+  if (data.lat != null && data.lng != null) step = 'price';
   if (data.originalPrice) step = 'confirm';
 
   await saveDraft(user.uid, { step, data });
   return { step, data };
 }
 
-async function handleListingWizard({ user, message }) {
+async function handleListingWizard({ user, message, meta }) {
   // هذه الميزة تتطلب Admin SDK حتى نتحقق من التوكن ونكتب على Firestore
   if (!adminDb || !adminAuth) {
     return { reply: adminNotReadyMessage() };
@@ -641,7 +749,7 @@ async function handleListingWizard({ user, message }) {
     return {
       reply:
         'تمام! بنضيف إعلان من داخل الشات ✅\n\n' +
-        'الخطوة 1/5: اختر القسم (اكتب اسم القسم):\n' +
+        'الخطوة 1/7: اختر القسم (اكتب اسم القسم):\n' +
         categoriesHint() +
         '\n\n(تقدر تلغي بأي وقت بكتابة: إلغاء)',
     };
@@ -657,7 +765,7 @@ async function handleListingWizard({ user, message }) {
     return {
       reply:
         'بدأنا من جديد ✅\n\n' +
-        'الخطوة 1/5: اختر القسم (اكتب اسم القسم):\n' +
+        'الخطوة 1/7: اختر القسم (اكتب اسم القسم):\n' +
         categoriesHint() +
         '\n\n(تقدر تلغي بأي وقت بكتابة: إلغاء)',
     };
@@ -679,6 +787,7 @@ async function handleListingWizard({ user, message }) {
     const originalPrice = Number(data.originalPrice || 0);
     const priceYER = toYERServer(originalPrice, originalCurrency, rates);
 
+    const hasCoords = data.lat != null && data.lng != null;
     const listing = {
       title: String(data.title || '').trim(),
       description: String(data.description || '').trim(),
@@ -693,10 +802,10 @@ async function handleListingWizard({ user, message }) {
       originalCurrency,
       currencyBase: 'YER',
 
-      coords: null,
-      lat: null,
-      lng: null,
-      locationLabel: null,
+      coords: hasCoords ? [Number(data.lat), Number(data.lng)] : null,
+      lat: hasCoords ? Number(data.lat) : null,
+      lng: hasCoords ? Number(data.lng) : null,
+      locationLabel: data.locationLabel ? String(data.locationLabel).trim() : null,
       images: [],
 
       userId: user.uid,
@@ -738,7 +847,7 @@ async function handleListingWizard({ user, message }) {
       };
     }
     await saveDraft(user.uid, { step: 'title', data: { ...data, category: cat } });
-    return { reply: `تمام ✅ القسم: ${categoryNameFromSlug(cat)}\n\nالخطوة 2/5: اكتب عنوان الإعلان.` };
+    return { reply: `تمام ✅ القسم: ${categoryNameFromSlug(cat)}\n\nالخطوة 2/7: اكتب عنوان الإعلان.` };
   }
 
   if (step === 'title') {
@@ -747,7 +856,7 @@ async function handleListingWizard({ user, message }) {
       return { reply: 'العنوان لازم يكون واضح (5 أحرف على الأقل). اكتب عنوان الإعلان الآن.' };
     }
     await saveDraft(user.uid, { step: 'description', data: { ...data, title } });
-    return { reply: 'تمام ✅\n\nالخطوة 3/5: اكتب وصف الإعلان (على الأقل 10 أحرف).' };
+    return { reply: 'تمام ✅\n\nالخطوة 3/7: اكتب وصف الإعلان (على الأقل 10 أحرف).' };
   }
 
   if (step === 'description') {
@@ -756,7 +865,7 @@ async function handleListingWizard({ user, message }) {
       return { reply: 'الوصف قصير. اكتب وصف أوضح (10 أحرف على الأقل).' };
     }
     await saveDraft(user.uid, { step: 'city', data: { ...data, description } });
-    return { reply: 'تمام ✅\n\nالخطوة 4/5: اكتب اسم المدينة.' };
+    return { reply: 'تمام ✅\n\nالخطوة 4/7: اكتب اسم المدينة.' };
   }
 
   if (step === 'city') {
@@ -764,8 +873,77 @@ async function handleListingWizard({ user, message }) {
     if (!city || city.length < 2) {
       return { reply: 'اكتب اسم المدينة بشكل صحيح (مثلاً: صنعاء).' };
     }
-    await saveDraft(user.uid, { step: 'price', data: { ...data, city } });
-    return { reply: 'تمام ✅\n\nالخطوة 5/5: اكتب السعر (مثال: 100000) ويمكن تكتب العملة معها مثل: 100 USD أو 100 SAR.' };
+    await saveDraft(user.uid, { step: 'phone', data: { ...data, city } });
+    return { reply: 'تمام ✅\n\nالخطوة 5/7: اكتب رقم الجوال للتواصل (مثال: 777123456 أو +967777123456).' };
+  }
+
+  if (step === 'phone') {
+    const phone = normalizePhone(msg);
+    if (!phone || !isValidPhone(phone)) {
+      return { reply: 'اكتب رقم جوال صحيح (مثال: 777123456 أو +967777123456).' };
+    }
+    await saveDraft(user.uid, { step: 'location', data: { ...data, phone } });
+    return {
+      reply:
+        'تمام ✅\n\n' +
+        'الخطوة 6/7: حدّد موقع الإعلان.\n' +
+        '• اضغط زر "📍 موقعي" داخل الشات لإرسال الإحداثيات تلقائياً\n' +
+        '• أو اكتب الإحداثيات بهذا الشكل: 15.3694, 44.1910\n' +
+        '• أو أرسل رابط خرائط\n\n' +
+        'تقدر أيضاً تكتب اسم الحي/المنطقة (مثال: صنعاء - حدة).',
+    };
+  }
+
+  if (step === 'location') {
+    // 1) meta location from client
+    const metaLat = meta?.location?.lat;
+    const metaLng = meta?.location?.lng;
+    if (metaLat != null && metaLng != null) {
+      const lat = Number(metaLat);
+      const lng = Number(metaLng);
+      if (isFinite(lat) && isFinite(lng)) {
+        const locationLabel = msg && msg !== '📍 هذا موقعي' ? String(msg).trim() : data.locationLabel || null;
+        await saveDraft(user.uid, { step: 'price', data: { ...data, lat, lng, locationLabel } });
+        return {
+          reply:
+            'تم حفظ موقعك ✅\n\n' +
+            'الخطوة 7/7: اكتب السعر (مثال: 100000) ويمكن تكتب العملة معها مثل: 100 USD أو 100 SAR.',
+        };
+      }
+    }
+
+    // 2) parse lat,lng from text
+    const parsed = extractLatLngFromText(msg);
+    if (parsed) {
+      await saveDraft(user.uid, { step: 'price', data: { ...data, lat: parsed.lat, lng: parsed.lng, locationLabel: data.locationLabel || null } });
+      return {
+        reply:
+          'تمام ✅ تم حفظ الإحداثيات.\n\n' +
+          'الخطوة 7/7: اكتب السعر (مثال: 100000) ويمكن تكتب العملة معها مثل: 100 USD أو 100 SAR.',
+      };
+    }
+
+    // 3) accept maps link or label
+    if (msg && msg.length >= 2) {
+      const link = extractMapsLink(msg);
+      const locationLabel = link ? `رابط الموقع: ${link}` : msg;
+      await saveDraft(user.uid, { step: 'price', data: { ...data, locationLabel } });
+      return {
+        reply:
+          'تمام ✅ تم حفظ الموقع.\n\n' +
+          'الخطوة 7/7: اكتب السعر (مثال: 100000) ويمكن تكتب العملة معها مثل: 100 USD أو 100 SAR.',
+      };
+    }
+
+    return {
+      reply:
+        'ما قدرت أحدد موقع واضح 🤔\n' +
+        'جرّب أحد الخيارات:\n' +
+        '• اضغط زر "📍 موقعي" داخل الشات\n' +
+        '• اكتب الإحداثيات: 15.3694, 44.1910\n' +
+        '• أرسل رابط خرائط\n' +
+        '• أو اكتب اسم الحي/المنطقة',
+    };
   }
 
   if (step === 'price') {
@@ -774,13 +952,12 @@ async function handleListingWizard({ user, message }) {
       return { reply: 'ما فهمت السعر. اكتب رقم فقط (مثال: 100000) أو (100 USD).' };
     }
     const originalCurrency = detectCurrency(msg);
-    const phone = null;
     await saveDraft(user.uid, {
       step: 'confirm',
-      data: { ...data, originalPrice: n, originalCurrency, phone },
+      data: { ...data, originalPrice: n, originalCurrency },
     });
 
-    const fakeDraft = { step: 'confirm', data: { ...data, originalPrice: n, originalCurrency, phone } };
+    const fakeDraft = { step: 'confirm', data: { ...data, originalPrice: n, originalCurrency } };
     return {
       reply:
         'وصلنا للنهاية ✅ هذه مسودة إعلانك:\n\n' +
@@ -794,7 +971,7 @@ async function handleListingWizard({ user, message }) {
   return {
     reply:
       'صار عندي لخبطة بسيطة 😅 خلّينا نبدأ من جديد.\n\n' +
-      'الخطوة 1/5: اختر القسم (اكتب اسم القسم):\n' +
+      'الخطوة 1/7: اختر القسم (اكتب اسم القسم):\n' +
       categoriesHint(),
   };
 }
@@ -808,6 +985,7 @@ export async function POST(request) {
     const body = await request.json().catch(() => ({}));
     const message = body?.message;
     const history = body?.history;
+    const meta = body?.meta || null;
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json({ error: 'الرسالة مطلوبة' }, { status: 400 });
@@ -823,7 +1001,7 @@ export async function POST(request) {
 
     // 1) إلغاء مسودة (لو مسجل دخول)
     if (user && !user.error && isCancel(normalized)) {
-      const res = await handleListingWizard({ user, message: normalized });
+      const res = await handleListingWizard({ user, message: normalized, meta });
       return NextResponse.json({ reply: res.reply });
     }
 
@@ -857,7 +1035,7 @@ export async function POST(request) {
         });
       }
 
-      const res = await handleListingWizard({ user, message: normalized });
+      const res = await handleListingWizard({ user, message: normalized, meta });
       return NextResponse.json({ reply: res.reply });
     }
 
