@@ -11,6 +11,7 @@ export default function ChatBot() {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [locationBusy, setLocationBusy] = useState(false);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -21,15 +22,12 @@ export default function ChatBot() {
     scrollToBottom();
   }, [messages, isOpen]);
 
-  const sendMessage = async (e) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
+  const sendText = async (messageText, meta) => {
+    if (!String(messageText || '').trim() || isLoading) return;
 
-    const messageText = input;
     const userMessage = { role: 'user', text: messageText };
     const history = messages.slice(-10).map((msg) => ({ role: msg.role, content: msg.text }));
     setMessages((prev) => [...prev, userMessage]);
-    setInput('');
     setIsLoading(true);
 
     try {
@@ -50,7 +48,7 @@ export default function ChatBot() {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ message: messageText, history }),
+        body: JSON.stringify({ message: messageText, history, meta: meta || null }),
       });
 
       const data = await response.json();
@@ -64,6 +62,67 @@ export default function ChatBot() {
       setMessages((prev) => [...prev, { role: 'assistant', text: 'عذراً، لا يمكنني الرد حالياً.' }]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const sendMessage = async (e) => {
+    e.preventDefault();
+    const messageText = input;
+    if (!messageText.trim() || isLoading) return;
+    setInput('');
+    await sendText(messageText);
+  };
+
+  const quickAsk = async (text) => {
+    if (isLoading) return;
+    await sendText(text);
+  };
+
+  const goTo = (path) => {
+    try {
+      window.location.href = path;
+    } catch {
+      // ignore
+    }
+  };
+
+  const shareMyLocation = async () => {
+    if (isLoading || locationBusy) return;
+    if (typeof window === 'undefined' || !navigator?.geolocation) {
+      await sendText('لا أستطيع إرسال موقعي من هذا الجهاز. اكتب الإحداثيات (lat, lng) أو أرسل رابط خرائط جوجل.');
+      return;
+    }
+
+    setLocationBusy(true);
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 12000,
+          maximumAge: 0,
+        });
+      });
+
+      const lat = Number(position?.coords?.latitude);
+      const lng = Number(position?.coords?.longitude);
+      const accuracy = Number(position?.coords?.accuracy);
+
+      if (!isFinite(lat) || !isFinite(lng)) {
+        await sendText('ما قدرت أقرأ الإحداثيات. اكتب موقعك يدوياً أو أرسل رابط خرائط.');
+        return;
+      }
+
+      await sendText('📍 هذا موقعي', {
+        location: {
+          lat,
+          lng,
+          accuracy: isFinite(accuracy) ? accuracy : null,
+        },
+      });
+    } catch (e) {
+      await sendText('لم يتم السماح بالموقع. اكتب الإحداثيات (lat, lng) أو أرسل رابط خرائط.');
+    } finally {
+      setLocationBusy(false);
     }
   };
 
@@ -92,6 +151,31 @@ export default function ChatBot() {
               </div>
             </div>
             <button className="close-btn" onClick={() => setIsOpen(false)}>✕</button>
+          </div>
+
+          {/* أزرار سريعة */}
+          <div className="quick-actions">
+            <button type="button" className="chip" onClick={() => quickAsk('أضف إعلان')} disabled={isLoading}>
+              ➕ إضافة إعلان
+            </button>
+            <button type="button" className="chip" onClick={() => quickAsk('الفئات')} disabled={isLoading}>
+              📂 الفئات
+            </button>
+            <button type="button" className="chip" onClick={() => quickAsk('كم إعلان سيارات؟')} disabled={isLoading}>
+              📊 كم سيارات؟
+            </button>
+            <button type="button" className="chip" onClick={() => goTo('/login')}>
+              🔐 دخول
+            </button>
+            <button type="button" className="chip" onClick={() => goTo('/add')}>
+              📝 صفحة الإضافة
+            </button>
+            <button type="button" className="chip" onClick={() => goTo('/contact')}>
+              📞 تواصل
+            </button>
+            <button type="button" className="chip chip-location" onClick={shareMyLocation} disabled={isLoading || locationBusy}>
+              📍 {locationBusy ? 'جارٍ تحديد…' : 'موقعي'}
+            </button>
           </div>
 
           {/* الرسائل */}
@@ -187,6 +271,33 @@ export default function ChatBot() {
           overflow-y: auto;
           background: #f8fafc;
         }
+
+        .quick-actions {
+          padding: 10px 10px 8px;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          background: #ffffff;
+          border-bottom: 1px solid #e2e8f0;
+        }
+
+        .chip {
+          border: 1px solid #e2e8f0;
+          background: #f8fafc;
+          color: #0f172a;
+          padding: 8px 10px;
+          border-radius: 999px;
+          font-size: 12px;
+          cursor: pointer;
+          font-weight: 700;
+          transition: transform 0.05s ease;
+        }
+        .chip:active { transform: scale(0.98); }
+        .chip:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+        .chip-location { background: #0f172a; color: #fff; border-color: #0f172a; }
         .message-row { display: flex; margin: 8px 0; }
         .user-row { justify-content: flex-end; }
         .bot-row { justify-content: flex-start; }
