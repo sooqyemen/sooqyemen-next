@@ -197,10 +197,11 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            if (entry.target === commentsRef.current && !showComments) {
+            // Add null checks to prevent crashes when refs are temporarily null
+            if (commentsRef.current && entry.target === commentsRef.current && !showComments) {
               setShowComments(true);
             }
-            if (entry.target === auctionRef.current && !showAuction && listing?.auctionEnabled) {
+            if (auctionRef.current && entry.target === auctionRef.current && !showAuction && listing?.auctionEnabled) {
               setShowAuction(true);
             }
           }
@@ -212,8 +213,13 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
       }
     );
 
-    if (commentsRef.current) observer.observe(commentsRef.current);
-    if (auctionRef.current) observer.observe(auctionRef.current);
+    // Add defensive checks before observing
+    if (commentsRef.current) {
+      observer.observe(commentsRef.current);
+    }
+    if (auctionRef.current && listing?.auctionEnabled) {
+      observer.observe(auctionRef.current);
+    }
 
     return () => {
       observer.disconnect();
