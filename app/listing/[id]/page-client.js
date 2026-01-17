@@ -329,7 +329,16 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
     );
   }
 
-  const chatId = user && sellerUid ? makeChatId(user.uid, sellerUid, listing.id) : null;
+	// IMPORTANT: do NOT create a chat id if the viewer is the owner.
+	// makeChatId throws on same-user and that would crash the listing page.
+	let chatId = null;
+	if (user && sellerUid && user.uid !== sellerUid) {
+		try {
+			chatId = makeChatId(user.uid, sellerUid, listing.id);
+		} catch (e) {
+			chatId = null;
+		}
+	}
 
   const handleStartChat = useCallback(async () => {
     setChatErr('');
@@ -441,13 +450,15 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                       </a>
                     )}
 
-                    {chatId ? (
-                      <button onClick={handleStartChat} disabled={startingChat} className="contact-button chat">
-                        {startingChat ? '⏳' : '💬'} محادثة
-                      </button>
-                    ) : (
-                      <div className="contact-button login">🔒 سجل دخول للمحادثة</div>
-                    )}
+						{isOwner ? (
+							<div className="contact-button login">👤 أنت صاحب الإعلان</div>
+						) : chatId ? (
+							<button onClick={handleStartChat} disabled={startingChat} className="contact-button chat">
+								{startingChat ? '⏳' : '💬'} محادثة
+							</button>
+						) : (
+							<div className="contact-button login">🔒 سجل دخول للمحادثة</div>
+						)}
                   </div>
                 </div>
 
