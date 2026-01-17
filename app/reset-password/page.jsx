@@ -1,18 +1,33 @@
 'use client';
 
 import { Suspense, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/lib/firebaseClient';
 
 function ResetPasswordInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const nextPath = (() => {
+    const n = searchParams?.get('next') || '/';
+    return n.startsWith('/') ? n : '/';
+  })();
+
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
   const normalizeEmail = (v) => String(v || '').trim().toLowerCase();
+
+  const mapAuthError = (err) => {
+    const code = err?.code || '';
+    if (code === 'auth/user-not-found') return 'لا يوجد حساب مرتبط بهذا البريد الإلكتروني';
+    if (code === 'auth/invalid-email') return 'البريد الإلكتروني غير صحيح';
+    if (code === 'auth/too-many-requests') return 'تم تعطيل المحاولة مؤقتاً بسبب كثرة الطلبات';
+    return 'حدث خطأ أثناء إرسال رابط إعادة التعيين';
+  };
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
@@ -24,26 +39,21 @@ function ResetPasswordInner() {
 
     setLoading(true);
     try {
-      const { sendPasswordResetEmail } = await import('firebase/auth');
-      await sendPasswordResetEmail(auth, em);
-      
+      // ✅ Compat (بدون import من firebase/auth)
+      await auth.sendPasswordResetEmail(em, {
+        // يرجع المستخدم للموقع بعد ما يغير كلمة المرور (اختياري، لكنه ممتاز)
+        url: `${window.location.origin}/login?next=${encodeURIComponent(nextPath)}&reset=sent`,
+        handleCodeInApp: false,
+      });
+
       setSuccess('تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني. تحقق من بريدك واتبع التعليمات.');
-      
-      // إعادة توجيه بعد 5 ثواني
+
       setTimeout(() => {
-        router.push('/login');
-      }, 5000);
-      
+        router.push(`/login?next=${encodeURIComponent(nextPath)}&reset=sent`);
+      }, 3500);
     } catch (err) {
       console.error('RESET_PASSWORD_ERROR', err);
-      
-      if (err.code === 'auth/user-not-found') {
-        setError('لا يوجد حساب مرتبط بهذا البريد الإلكتروني');
-      } else if (err.code === 'auth/invalid-email') {
-        setError('البريد الإلكتروني غير صحيح');
-      } else {
-        setError('حدث خطأ أثناء إرسال رابط إعادة التعيين');
-      }
+      setError(mapAuthError(err));
     } finally {
       setLoading(false);
     }
@@ -106,13 +116,13 @@ function ResetPasswordInner() {
         </div>
 
         <div className="foot">
-          <Link href="/login" className="link">
+          <Link href={`/login?next=${encodeURIComponent(nextPath)}`} className="link">
             ← العودة لتسجيل الدخول
           </Link>
-          
+
           <div className="muted">
             لا تملك حسابًا؟{' '}
-            <Link href="/register" className="link">
+            <Link href={`/register?next=${encodeURIComponent(nextPath)}`} className="link">
               إنشاء حساب جديد
             </Link>
           </div>
@@ -225,11 +235,11 @@ function ResetPasswordInner() {
           margin-bottom: 8px;
         }
 
-        .foot{ 
-          margin-top: 20px; 
-          display:flex; 
-          flex-direction: column; 
-          gap: 15px; 
+        .foot{
+          margin-top: 20px;
+          display:flex;
+          flex-direction: column;
+          gap: 15px;
           align-items:center;
           text-align: center;
         }
