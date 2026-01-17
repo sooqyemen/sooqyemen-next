@@ -318,7 +318,7 @@ export default function ChatBot() {
             <button type="button" className="chip chip-location" onClick={shareMyLocation} disabled={isLoading || locationBusy}>
               📍 {locationBusy ? 'جارٍ تحديد…' : 'موقعي'}
             </button>
-            <button type="button" className="chip" onClick={() => goTo('/map')} disabled={isLoading}>
+            <button type="button" className="chip" onClick={() => goTo('/listings?view=map')} disabled={isLoading}>
               🗺️ عرض الإعلانات على الخريطة
             </button>
           </div>
