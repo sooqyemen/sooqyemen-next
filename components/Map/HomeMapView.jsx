@@ -41,17 +41,80 @@ function writeSeen(set) {
   } catch {}
 }
 
+// ✅ توحيد ID (يدعم اختلافات Firestore / API)
+function getListingId(listing) {
+  return (
+    listing?.id ??
+    listing?._id ??
+    listing?.docId ??
+    listing?.uid ??
+    listing?.slug ??
+    listing?.listingId ??
+    null
+  );
+}
+
+// ✅ توحيد القسم (يقرأ من أكثر من حقل)
+function getListingCategoryValue(listing) {
+  return (
+    listing?.category ??
+    listing?.section ??
+    listing?.cat ??
+    listing?.categoryKey ??
+    listing?.category_id ??
+    listing?.categoryId ??
+    listing?.type ??
+    'other'
+  );
+}
+
+// ✅ توحيد الإحداثيات (يدعم صيغ كثيرة)
 function normalizeCoords(listing) {
+  const toNum = (v) => {
+    const n = typeof v === 'string' ? parseFloat(v) : v;
+    return Number.isFinite(n) ? n : null;
+  };
+
+  // 1) coords: [lat,lng]
   if (Array.isArray(listing?.coords) && listing.coords.length === 2) {
-    const lat = Number(listing.coords[0]);
-    const lng = Number(listing.coords[1]);
-    if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
+    const lat = toNum(listing.coords[0]);
+    const lng = toNum(listing.coords[1]);
+    if (lat != null && lng != null) return [lat, lng];
   }
+
+  // 2) coords: {lat,lng}
   if (listing?.coords?.lat != null && listing?.coords?.lng != null) {
-    const lat = Number(listing.coords.lat);
-    const lng = Number(listing.coords.lng);
-    if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
+    const lat = toNum(listing.coords.lat);
+    const lng = toNum(listing.coords.lng);
+    if (lat != null && lng != null) return [lat, lng];
   }
+
+  // 3) lat/lng مباشرة
+  if (listing?.lat != null && (listing?.lng != null || listing?.lon != null)) {
+    const lat = toNum(listing.lat);
+    const lng = toNum(listing.lng ?? listing.lon);
+    if (lat != null && lng != null) return [lat, lng];
+  }
+
+  // 4) latitude/longitude
+  if (listing?.latitude != null && listing?.longitude != null) {
+    const lat = toNum(listing.latitude);
+    const lng = toNum(listing.longitude);
+    if (lat != null && lng != null) return [lat, lng];
+  }
+
+  // 5) location / geo
+  if (listing?.location?.lat != null && listing?.location?.lng != null) {
+    const lat = toNum(listing.location.lat);
+    const lng = toNum(listing.location.lng);
+    if (lat != null && lng != null) return [lat, lng];
+  }
+  if (listing?.geo?.lat != null && (listing?.geo?.lng != null || listing?.geo?.lon != null)) {
+    const lat = toNum(listing.geo.lat);
+    const lng = toNum(listing.geo.lng ?? listing.geo.lon);
+    if (lat != null && lng != null) return [lat, lng];
+  }
+
   return null;
 }
 
@@ -178,9 +241,30 @@ function fmtYER(v) {
   return new Intl.NumberFormat('ar-YE').format(Math.round(n)) + ' ريال';
 }
 
+// ✅ صورة الإعلان (يدعم صور بصيغ مختلفة)
+function pickImage(listing) {
+  const imgs = listing?.images;
+  if (Array.isArray(imgs) && imgs.length > 0) {
+    const first = imgs[0];
+    if (typeof first === 'string') return first;
+    if (first && typeof first === 'object') return first.url || first.src || first.path || null;
+  }
+  return (
+    listing?.image ||
+    listing?.cover ||
+    listing?.thumbnail ||
+    listing?.mainImage ||
+    listing?.imageUrl ||
+    null
+  );
+}
+
 export default function HomeMapView({ listings = [] }) {
   const [seen, setSeen] = useState(() => new Set());
   const [map, setMap] = useState(null);
+
+  // فلتر الأقسام (Chips)
+  const [activeCat, setActiveCat] = useState('all');
 
   useEffect(() => {
     setSeen(readSeen());
@@ -209,12 +293,25 @@ export default function HomeMapView({ listings = [] }) {
   }, [map]);
 
   const points = useMemo(() => {
-    return listings
+    return (listings || [])
       .map((l) => {
+        const id = getListingId(l);
+        if (!id) return null;
+
         const c = normalizeCoords(l);
         if (!c) return null;
         if (!inYemen(c)) return null;
-        return { ...l, _coords: c };
+
+        const categoryValue = getListingCategoryValue(l);
+        const catKey = normalizeCategoryKey(categoryValue);
+
+        return {
+          ...l,
+          _id: String(id),
+          _coords: c,
+          _categoryValue: categoryValue,
+          _catKey: catKey,
+        };
       })
       .filter(Boolean);
   }, [listings]);
@@ -244,14 +341,35 @@ export default function HomeMapView({ listings = [] }) {
     });
   };
 
+  // ✅ counts للأقسام المتاحة (للفلتر + الليجند)
+  const catCounts = useMemo(() => {
+    const m = new Map();
+    for (const p of points) {
+      const k = p._catKey || 'other';
+      m.set(k, (m.get(k) || 0) + 1);
+    }
+    return m;
+  }, [points]);
+
+  const availableCats = useMemo(() => {
+    // ترتيب ثابت حسب CAT_STYLE
+    const keys = Object.keys(CAT_STYLE);
+    return keys.filter((k) => (catCounts.get(k) || 0) > 0);
+  }, [catCounts]);
+
   // ✅ Legend بسيط (يعرض فقط الأقسام الموجودة فعليًا في البيانات)
   const legendItems = useMemo(() => {
-    const keys = new Set(points.map((p) => normalizeCategoryKey(p.category)));
-    const arr = Array.from(keys).slice(0, 12); // حد أعلى بسيط
+    const arr = availableCats.slice(0, 12);
     return arr
-      .map((k) => ({ key: k, ...(CAT_STYLE[k] || CAT_STYLE.other) }))
+      .map((k) => ({ key: k, ...(CAT_STYLE[k] || CAT_STYLE.other), count: catCounts.get(k) || 0 }))
       .sort((a, b) => String(a.label).localeCompare(String(b.label), 'ar'));
-  }, [points]);
+  }, [availableCats, catCounts]);
+
+  // ✅ فلترة الـ markers
+  const filteredPoints = useMemo(() => {
+    if (activeCat === 'all') return points;
+    return points.filter((p) => p._catKey === activeCat);
+  }, [points, activeCat]);
 
   return (
     <div className="card" style={{ padding: 12 }}>
@@ -273,6 +391,7 @@ export default function HomeMapView({ listings = [] }) {
       </div>
 
       <div
+        className="sooq-mapWrap"
         style={{
           width: '100%',
           height: 'min(520px, 70vh)',
@@ -282,6 +401,39 @@ export default function HomeMapView({ listings = [] }) {
           border: '1px solid #e2e8f0',
         }}
       >
+        {/* ✅ Chips Filter Overlay */}
+        {availableCats.length > 0 ? (
+          <div className="sooq-mapOverlay">
+            <div className="sooq-chips" role="tablist" aria-label="فلترة الأقسام">
+              <button
+                type="button"
+                className={`sooq-chip ${activeCat === 'all' ? 'isActive' : ''}`}
+                onClick={() => setActiveCat('all')}
+              >
+                الكل <span className="sooq-chipCount">{points.length}</span>
+              </button>
+
+              {availableCats.map((k) => {
+                const s = CAT_STYLE[k] || CAT_STYLE.other;
+                const c = catCounts.get(k) || 0;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    className={`sooq-chip ${activeCat === k ? 'isActive' : ''}`}
+                    onClick={() => setActiveCat(k)}
+                    title={s.label}
+                  >
+                    <span className="sooq-chipDot" style={{ background: s.color }} />
+                    <span className="sooq-chipText">{s.label}</span>
+                    <span className="sooq-chipCount">{c}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
         <MapContainer
           whenCreated={setMap}
           center={DEFAULT_CENTER}
@@ -298,14 +450,15 @@ export default function HomeMapView({ listings = [] }) {
             attribution="&copy; OpenStreetMap contributors"
           />
 
-          {points.map((l) => {
-            const img = (Array.isArray(l.images) && l.images[0]) || l.image || null;
-            const isSeen = seen.has(String(l.id));
-            const price = l.currentBidYER || l.priceYER || 0;
-            const cat = getCatStyle(l.category);
+          {filteredPoints.map((l) => {
+            const img = pickImage(l);
+            const isSeen = seen.has(String(l._id));
+            const price = l.currentBidYER || l.priceYER || l.price || l.currentBid || 0;
+
+            const cat = getCatStyle(l._categoryValue || l._catKey);
 
             return (
-              <Marker key={l.id} position={l._coords} icon={getMarkerIcon(l.category, isSeen)}>
+              <Marker key={l._id} position={l._coords} icon={getMarkerIcon(l._categoryValue || l._catKey, isSeen)}>
                 <Popup>
                   <div style={{ width: 230 }}>
                     {img ? (
@@ -344,14 +497,14 @@ export default function HomeMapView({ listings = [] }) {
                     </div>
 
                     <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, marginTop: 6 }}>
-                      📍 {l.city || l.locationLabel || 'غير محدد'}
+                      📍 {l.city || l.locationLabel || l.area || 'غير محدد'}
                     </div>
 
                     <div style={{ fontWeight: 900, marginBottom: 10 }}>💰 {fmtYER(price)}</div>
 
                     <Link
-                      href={`/listing/${l.id}`}
-                      onClick={() => markSeen(l.id)}
+                      href={`/listing/${l._id}`}
+                      onClick={() => markSeen(l._id)}
                       style={{
                         display: 'inline-flex',
                         width: '100%',
@@ -380,12 +533,94 @@ export default function HomeMapView({ listings = [] }) {
       </div>
 
       <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-        {points.length
-          ? `✅ الظاهر على الخريطة: ${points.length} إعلان (فقط اللي له موقع داخل اليمن)`
-          : 'لا توجد إعلانات لها موقع الآن—أضف موقع أثناء نشر الإعلان ليظهر هنا.'}
+        {filteredPoints.length
+          ? `✅ الظاهر على الخريطة: ${filteredPoints.length} إعلان (داخل اليمن)`
+          : 'لا توجد إعلانات مطابقة للفلتر/أو لا توجد إعلانات لها موقع داخل اليمن.'}
       </div>
 
       <style jsx global>{`
+        /* Overlay */
+        .sooq-mapWrap {
+          position: relative;
+        }
+
+        .sooq-mapOverlay {
+          position: absolute;
+          top: 10px;
+          left: 10px;
+          right: 10px;
+          z-index: 999;
+          pointer-events: none;
+        }
+
+        .sooq-chips {
+          pointer-events: auto;
+          display: flex;
+          gap: 8px;
+          overflow-x: auto;
+          padding: 8px;
+          border-radius: 14px;
+          background: rgba(255, 255, 255, 0.86);
+          backdrop-filter: blur(8px);
+          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.12);
+        }
+
+        .sooq-chips::-webkit-scrollbar {
+          height: 6px;
+        }
+        .sooq-chips::-webkit-scrollbar-thumb {
+          background: rgba(0, 0, 0, 0.15);
+          border-radius: 999px;
+        }
+
+        .sooq-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 10px;
+          border-radius: 999px;
+          border: 1px solid rgba(0, 0, 0, 0.08);
+          background: #fff;
+          font-size: 13px;
+          line-height: 1;
+          cursor: pointer;
+          white-space: nowrap;
+          user-select: none;
+          transition: transform 0.08s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+        }
+
+        .sooq-chip:active {
+          transform: scale(0.98);
+        }
+
+        .sooq-chip.isActive {
+          border-color: rgba(0, 0, 0, 0.18);
+          box-shadow: 0 8px 14px rgba(0, 0, 0, 0.12);
+        }
+
+        .sooq-chipDot {
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+        }
+
+        .sooq-chipText {
+          font-weight: 800;
+        }
+
+        .sooq-chipCount {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 22px;
+          height: 18px;
+          padding: 0 6px;
+          border-radius: 999px;
+          background: rgba(0, 0, 0, 0.06);
+          font-size: 12px;
+          font-weight: 800;
+        }
+
         /* Marker */
         .sooq-marker {
           background: transparent !important;
@@ -409,7 +644,7 @@ export default function HomeMapView({ listings = [] }) {
           background: var(--pin);
           border-radius: 50% 50% 50% 0;
           transform: translateX(-50%) rotate(-45deg);
-          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.20);
+          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.2);
           border: 2px solid rgba(255, 255, 255, 0.92);
         }
 
@@ -459,8 +694,8 @@ export default function HomeMapView({ listings = [] }) {
           color: #fff;
           font-size: 12px;
           font-weight: 800;
-          box-shadow: 0 6px 16px rgba(0,0,0,0.12);
-          border: 1px solid rgba(255,255,255,0.25);
+          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+          border: 1px solid rgba(255, 255, 255, 0.25);
           white-space: nowrap;
         }
 
