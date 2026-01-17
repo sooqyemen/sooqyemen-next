@@ -52,10 +52,13 @@ export async function generateMetadata({ params }) {
     ? `${String(listing.description).slice(0, 150)}... | السعر: ${priceString} | الموقع: ${city}`
     : `${titleText} - ${priceString} في ${city} - سوق اليمن`;
 
-  const rawImages =
-    listing.images && listing.images.length > 0
-      ? listing.images.slice(0, 4)
-      : ['/icon-512.png'];
+  const imageList = Array.isArray(listing.images)
+    ? listing.images
+    : listing.image
+    ? [listing.image]
+    : [];
+
+  const rawImages = imageList.length > 0 ? imageList.slice(0, 4) : ['/icon-512.png'];
 
   const imagesAbs = rawImages.map(toAbsoluteUrl);
 

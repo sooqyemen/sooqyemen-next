@@ -63,6 +63,11 @@ const knowledgeBase = {
 const DEFAULT_SAR = 425; // 1 SAR = 425 YER
 const DEFAULT_USD = 1632; // 1 USD = 1632 YER
 const DRAFTS_COLLECTION = 'assistant_drafts';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS || 15000);
 
 const CATEGORIES = [
   { slug: 'cars', name: 'سيارات', keywords: ['سيارة', 'سيارات', 'car', 'cars'] },
@@ -334,6 +339,289 @@ function draftSummary(d) {
   return parts.join('\n');
 }
 
+function listingNextPrompt(step, draft) {
+  if (step === 'category') {
+    return (
+      'الخطوة 1/5: اختر القسم (اكتب اسم القسم):\n' +
+      categoriesHint() +
+      '\n\n(تقدر تلغي بأي وقت بكتابة: إلغاء)'
+    );
+  }
+
+  if (step === 'title') {
+    return 'الخطوة 2/5: اكتب عنوان الإعلان.';
+  }
+
+  if (step === 'description') {
+    return 'الخطوة 3/5: اكتب وصف الإعلان (على الأقل 10 أحرف).';
+  }
+
+  if (step === 'city') {
+    return 'الخطوة 4/5: اكتب اسم المدينة.';
+  }
+
+  if (step === 'price') {
+    return 'الخطوة 5/5: اكتب السعر (مثال: 100000) ويمكن تكتب العملة معها مثل: 100 USD أو 100 SAR.';
+  }
+
+  return (
+    'هذه مسودة الإعلان الحالية:\n\n' +
+    draftSummary(draft) +
+    '\n\nإذا كل شيء تمام اكتب: نشر\nأو اكتب: إلغاء لإلغاء المسودة.'
+  );
+}
+
+function normalizeHistory(history) {
+  if (!Array.isArray(history)) return [];
+  return history
+    .filter((entry) => entry && typeof entry === 'object')
+    .map((entry) => ({
+      role: entry.role === 'assistant' ? 'assistant' : 'user',
+      content: String(entry.content || entry.text || '').trim(),
+    }))
+    .filter((entry) => entry.content);
+}
+
+function sanitizeCurrency(currency) {
+  if (currency === 'SAR' || currency === 'USD' || currency === 'YER') return currency;
+  return 'YER';
+}
+
+function safeJsonParse(text) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    return null;
+  }
+}
+
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function runModeration(text) {
+  if (!OPENAI_API_KEY) return { ok: true };
+  try {
+    const response = await fetchWithTimeout(
+      'https://api.openai.com/v1/moderations',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'omni-moderation-latest',
+          input: text,
+        }),
+      },
+      OPENAI_TIMEOUT_MS
+    );
+
+    if (!response.ok) return { ok: true };
+    const data = await response.json();
+    const flagged = Boolean(data?.results?.[0]?.flagged);
+    return { ok: !flagged };
+  } catch (error) {
+    return { ok: true };
+  }
+}
+
+async function runAiFallback({ message, history }) {
+  const hasOpenAi = Boolean(OPENAI_API_KEY);
+  const hasGemini = Boolean(GEMINI_API_KEY);
+
+  if (!hasOpenAi && !hasGemini) {
+    return {
+      ok: false,
+      reply:
+        'ما فهمت سؤالك تماماً 🤔\n\n' +
+        'أمثلة سريعة:\n' +
+        '• كم إعلان سيارات في الموقع؟\n' +
+        '• كيف أضيف إعلان؟\n' +
+        '• أضف إعلان (لبدء إضافة إعلان من الشات)\n\n' +
+        'حاول تكتب سؤالك بصياغة أبسط وسأساعدك.',
+    };
+  }
+
+  const schema = {
+    name: 'assistant_response',
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['none', 'create_listing', 'count_listings'],
+        },
+        reply: { type: 'string' },
+        category: { type: ['string', 'null'] },
+        listing: {
+          type: ['object', 'null'],
+          additionalProperties: false,
+          properties: {
+            category: { type: ['string', 'null'] },
+            title: { type: ['string', 'null'] },
+            description: { type: ['string', 'null'] },
+            city: { type: ['string', 'null'] },
+            price: { type: ['number', 'null'] },
+            currency: { type: ['string', 'null'] },
+            phone: { type: ['string', 'null'] },
+          },
+        },
+      },
+      required: ['action', 'reply'],
+    },
+  };
+
+  const categoriesGuide = CATEGORIES.map((c) => `${c.slug}: ${c.name}`).join('\n');
+  const systemPrompt =
+    'أنت مساعد ذكي لموقع سوق اليمن. ردودك قصيرة وواضحة وباللهجة العربية الفصحى.\n' +
+    'إذا كانت نية المستخدم بيع/عرض/إضافة إعلان اختر action=create_listing وحاول استخراج البيانات المتاحة.\n' +
+    'إذا كان السؤال عن "كم/عدد" للإعلانات اختر action=count_listings وحدد category إن وجدت.\n' +
+    'خلاف ذلك اختر action=none مع رد عام.\n' +
+    'التصنيفات المتاحة (slug: الاسم):\n' +
+    categoriesGuide;
+
+  try {
+    if (hasOpenAi) {
+      const moderation = await runModeration(message);
+      if (!moderation.ok) {
+        return {
+          ok: true,
+          action: 'none',
+          reply: 'عذراً، لا يمكنني المساعدة في هذا الطلب.',
+        };
+      }
+
+      const messages = [
+        { role: 'system', content: [{ type: 'text', text: systemPrompt }] },
+        ...normalizeHistory(history).map((entry) => ({
+          role: entry.role,
+          content: [{ type: 'text', text: entry.content }],
+        })),
+        { role: 'user', content: [{ type: 'text', text: message }] },
+      ];
+
+      const response = await fetchWithTimeout(
+        'https://api.openai.com/v1/responses',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: OPENAI_MODEL,
+            input: messages,
+            response_format: {
+              type: 'json_schema',
+              json_schema: schema,
+            },
+          }),
+        },
+        OPENAI_TIMEOUT_MS
+      );
+
+      if (!response.ok) {
+        return { ok: false };
+      }
+
+      const data = await response.json();
+      const rawText =
+        data?.output?.[0]?.content?.[0]?.text ||
+        data?.output_text ||
+        data?.output?.[0]?.content?.[0]?.input_text ||
+        '';
+      if (!rawText) return { ok: false };
+      const parsed = safeJsonParse(rawText);
+      if (!parsed) return { ok: false };
+
+      const outputModeration = await runModeration(parsed.reply || '');
+      if (!outputModeration.ok) {
+        return { ok: true, action: 'none', reply: 'عذراً، لا يمكنني المساعدة في هذا الطلب.' };
+      }
+
+      return { ok: true, ...parsed };
+    }
+
+    const normalizedHistory = normalizeHistory(history);
+    const contents = [
+      ...normalizedHistory.map((entry) => ({
+        role: entry.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: entry.content }],
+      })),
+      { role: 'user', parts: [{ text: message }] },
+    ];
+
+    const response = await fetchWithTimeout(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          systemInstruction: {
+            role: 'system',
+            parts: [{ text: systemPrompt }],
+          },
+          contents,
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: schema.schema,
+          },
+        }),
+      },
+      OPENAI_TIMEOUT_MS
+    );
+
+    if (!response.ok) {
+      return { ok: false };
+    }
+
+    const data = await response.json();
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!rawText) return { ok: false };
+    const parsed = safeJsonParse(rawText);
+    if (!parsed) return { ok: false };
+    return { ok: true, ...parsed };
+  } catch (error) {
+    return { ok: false };
+  }
+}
+
+async function startDraftFromAi(user, listing) {
+  const data = {};
+  const categoryRaw = listing?.category || '';
+  const category = categoryRaw ? detectCategorySlug(categoryRaw) : null;
+  if (category) data.category = category;
+  if (listing?.title) data.title = String(listing.title).trim();
+  if (listing?.description) data.description = String(listing.description).trim();
+  if (listing?.city) data.city = String(listing.city).trim();
+  if (listing?.price) data.originalPrice = Number(listing.price);
+  if (listing?.currency) data.originalCurrency = sanitizeCurrency(String(listing.currency).toUpperCase());
+  if (listing?.phone) data.phone = String(listing.phone).trim();
+
+  let step = 'category';
+  if (data.category) step = 'title';
+  if (data.title) step = 'description';
+  if (data.description) step = 'city';
+  if (data.city) step = 'price';
+  if (data.originalPrice) step = 'confirm';
+
+  await saveDraft(user.uid, { step, data });
+  return { step, data };
+}
+
 async function handleListingWizard({ user, message }) {
   // هذه الميزة تتطلب Admin SDK حتى نتحقق من التوكن ونكتب على Firestore
   if (!adminDb || !adminAuth) {
@@ -519,6 +807,7 @@ export async function POST(request) {
   try {
     const body = await request.json().catch(() => ({}));
     const message = body?.message;
+    const history = body?.history;
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json({ error: 'الرسالة مطلوبة' }, { status: 400 });
@@ -596,6 +885,47 @@ export async function POST(request) {
     const answer = findBestMatch(trimmedMessage);
     if (answer) {
       return NextResponse.json({ reply: answer });
+    }
+
+    // 6) AI fallback
+    const aiResult = await runAiFallback({ message: trimmedMessage, history });
+    if (aiResult?.ok) {
+      if (aiResult.action === 'count_listings') {
+        const category = aiResult.category ? detectCategorySlug(aiResult.category) : null;
+        const result = await tryCountListings(category);
+        if (!result.ok) {
+          return NextResponse.json({ reply: adminNotReadyMessage() });
+        }
+
+        const label = category ? categoryNameFromSlug(category) : 'كل الأقسام';
+        const numberText = result.approximate ? `${result.publicCount}+` : String(result.publicCount);
+        return NextResponse.json({
+          reply:
+            `عدد الإعلانات (المتاحة) في ${label}: ${numberText}\n` +
+            (category ? '' : '\nتقدر تسأل مثلاً: كم إعلان سيارات؟'),
+        });
+      }
+
+      if (aiResult.action === 'create_listing') {
+        if (!user || user.error) {
+          return NextResponse.json({
+            reply:
+              'لإضافة إعلان عبر المساعد لازم تسجل دخول أولاً ✅\n\n' +
+              'بعد تسجيل الدخول اكتب: أضف إعلان\n' +
+              'أو استخدم صفحة الإضافة مباشرة: /add',
+          });
+        }
+        if (!adminDb || !adminAuth) {
+          return NextResponse.json({ reply: adminNotReadyMessage() });
+        }
+
+        const draft = await startDraftFromAi(user, aiResult.listing || {});
+        const prompt = listingNextPrompt(draft.step, { step: draft.step, data: draft.data });
+        const replyText = [aiResult.reply, prompt].filter(Boolean).join('\n\n');
+        return NextResponse.json({ reply: replyText });
+      }
+
+      return NextResponse.json({ reply: aiResult.reply });
     }
 
     // رد افتراضي

@@ -25,7 +25,9 @@ export default function ChatBot() {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    const userMessage = { role: 'user', text: input };
+    const messageText = input;
+    const userMessage = { role: 'user', text: messageText };
+    const history = messages.slice(-10).map((msg) => ({ role: msg.role, content: msg.text }));
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
@@ -48,7 +50,7 @@ export default function ChatBot() {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ message: input }),
+        body: JSON.stringify({ message: messageText, history }),
       });
 
       const data = await response.json();
