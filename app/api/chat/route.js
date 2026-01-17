@@ -5,70 +5,127 @@ import admin, { adminAuth, adminDb } from '@/lib/firebaseAdmin';
 // مساعد ذكي (FAQ + إحصاءات + إنشاء إعلان عبر محادثة)
 // =========================
 
-// قاعدة معرفية بسيطة (FAQ)
+// نظام Rate Limiting
+const rateLimiter = new Map();
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1 دقيقة
+const MAX_REQUESTS_PER_WINDOW = 15; // 15 طلب لكل دقيقة
+
+// Cache للأسعار والإحصائيات
+const LRU_CACHE = new Map();
+const CACHE_TTL = 60000; // 1 دقيقة
+
+// =========================
+// قاعدة معرفية موسعة (FAQ)
+// =========================
+
 const knowledgeBase = {
   // أسئلة حول الموقع
-  'ما هو|ماهو|ايش هو|شنو هو':
+  'ما هو|ماهو|ايش هو|شنو هو|عن الموقع|عن سوق اليمن':
     'سوق اليمن هو أكبر منصة للإعلانات والمزادات في اليمن. نقدم خدمة بيع وشراء السيارات، العقارات، الجوالات، الإلكترونيات، والمزيد. يمكنك تصفح أكثر من 16 فئة مختلفة.',
 
   // كيفية إضافة إعلان
-  'كيف اضيف|كيف انشر|كيف اعلن|اضافة اعلان|نشر اعلان':
+  'كيف اضيف|كيف انشر|كيف اعلن|اضافة اعلان|نشر اعلان|انشاء اعلان|طريقة اضافة اعلان':
     'لإضافة إعلان، اتبع هذه الخطوات:\n1) سجل دخول أو أنشئ حساب جديد\n2) اضغط على زر "إضافة إعلان" من القائمة\n3) اختر الفئة المناسبة\n4) املأ تفاصيل الإعلان وأضف الصور\n5) اضغط نشر\n\nيمكنك الانتقال مباشرة لصفحة الإضافة من هنا: /add',
 
   // الفئات المتاحة
-  'فئات|اقسام|تصنيفات|categories':
+  'فئات|اقسام|تصنيفات|categories|الاقسام|الاصناف':
     'الفئات المتوفرة في سوق اليمن:\n🚗 سيارات\n🏠 عقارات\n📱 جوالات\n💻 إلكترونيات\n🏍️ دراجات نارية\n🚜 معدات ثقيلة\n☀️ طاقة شمسية\n🌐 نت وشبكات\n🔧 صيانة\n🛋️ أثاث\n🏡 أدوات منزلية\n👔 ملابس\n🐾 حيوانات وطيور\n💼 وظائف\n⚙️ خدمات\n📦 أخرى',
 
   // المحادثات
-  'محادثة|شات|تواصل مع البائع':
+  'محادثة|شات|تواصل مع البائع|كيف اكلم البائع|ارسل رسالة للبائع|التواصل مع البائع':
     'يمكنك التواصل مع البائع مباشرة من خلال:\n1) افتح صفحة الإعلان\n2) اضغط على زر "💬 محادثة"\n3) ابدأ المحادثة مع البائع\n\nيمكنك أيضاً مراجعة جميع محادثاتك من صفحة "محادثاتي".',
 
   // المزادات
-  'مزاد|مزادات|auction':
+  'مزاد|مزادات|auction|كيف اشارك في المزاد|المزادات كيف تعمل|كيف ابيع في المزاد':
     'المزادات في سوق اليمن تتيح لك:\n• المزايدة على المنتجات\n• متابعة المزادات المفتوحة\n• الحصول على أفضل الأسعار\n\nابحث عن الإعلانات التي تحتوي على علامة "مزاد" للمشاركة.',
 
   // التسجيل والحساب
-  'تسجيل|حساب|دخول|login|register':
-    'للتسجيل في سوق اليمن:\n1) اضغط على "تسجيل" من القائمة\n2) أدخل بريدك الإلكتروني وكلمة المرور\n3) أكمل البيانات الشخصية\n\nأو يمكنك استخدام التسجيل السريع عبر Google.',
+  'تسجيل|حساب|دخول|login|register|انشاء حساب|كيف اسجل|كيف اسجل دخول|نسيت كلمة المرور':
+    'للتسجيل في سوق اليمن:\n1) اضغط على "تسجيل" من القيمة\n2) أدخل بريدك الإلكتروني وكلمة المرور\n3) أكمل البيانات الشخصية\n\nأو يمكنك استخدام التسجيل السريع عبر Google.',
 
   // البحث
-  'بحث|search|ابحث':
+  'بحث|search|ابحث|كيف ابحث|طريقة البحث|بحث عن|البحث المتقدم':
     'للبحث عن إعلان:\n1) استخدم شريط البحث في الأعلى\n2) أو تصفح الفئات المختلفة\n3) استخدم الفلاتر لتضييق النتائج\n\nيمكنك أيضاً استخدام الخريطة للبحث حسب الموقع.',
 
   // معلومات الإعلان
-  'صور|اضافة صور|رفع صور':
+  'صور|اضافة صور|رفع صور|عدد الصور|نوع الصور|حجم الصور|جودة الصور':
     'يمكنك إضافة حتى 8 صور لكل إعلان. تأكد من:\n• جودة الصور عالية\n• الصور واضحة وتظهر المنتج بشكل جيد\n• تنوع الزوايا',
 
   // الأسعار
-  'سعر|اسعار|price|prices':
+  'سعر|اسعار|price|prices|كيف اضع السعر|العملات المتاحة|ريال يمني|دولار|ريال سعودي':
     'في سوق اليمن يمكنك عرض الأسعار بـ:\n• الريال اليمني (ر.ي)\n• الريال السعودي (SAR)\n• الدولار الأمريكي (USD)\n\nيمكنك أيضاً اختيار "قابل للتفاوض" إذا كنت مرناً في السعر.',
 
   // الموقع
-  'موقع|خريطة|location|map':
+  'موقع|خريطة|location|map|كيف اضيف موقع|تحديد الموقع|العنوان|المنطقة':
     'نستخدم الخرائط التفاعلية لمساعدتك في:\n• تحديد موقع المنتج\n• البحث حسب المنطقة\n• معرفة المسافة من موقعك\n\nيمكنك تفعيل الموقع للحصول على نتائج أدق.',
 
   // الدعم والمساعدة
-  'مساعدة|دعم|help|support|مشكلة':
+  'مساعدة|دعم|help|support|مشكلة|تواصل مع الدعم|الشكاوي|الاقتراحات':
     'إذا كنت تواجه أي مشكلة:\n• تفضل بزيارة صفحة المساعدة: /help\n• أو تواصل معنا: /contact\n\nنحن هنا لمساعدتك! 😊',
 
   // شروط الاستخدام
-  'شروط|سياسة|privacy|terms':
+  'شروط|سياسة|privacy|terms|الشروط والاحكام|سياسة الخصوصية|حقوق المستخدم':
     'للاطلاع على:\n• شروط الاستخدام: /terms\n• سياسة الخصوصية: /privacy\n\nنحن نحترم خصوصيتك ونحمي بياناتك.',
+
+  // ✅ أسئلة جديدة مضافة بناءً على الاستخدام المتوقع
+  'كيف احذف اعلان|حذف اعلان|ازالة اعلان|الغاء نشر اعلان':
+    'لحذف إعلان:\n1) انتقل إلى صفحة إعلاناتك\n2) اختر الإعلان الذي تريد حذفه\n3) اضغط على زر "🗑️ حذف"\n4) أكد الحذف\n\nملاحظة: يمكن استرجاع الإعلان خلال 24 ساعة من صفحة المحذوفات.',
+
+  'كيف اعدل اعلان|تعديل اعلان|تغيير سعر|تحديث اعلان':
+    'لتعديل إعلان:\n1) انتقل إلى صفحة إعلاناتك\n2) اختر الإعلان الذي تريد تعديله\n3) اضغط على زر "✏️ تعديل"\n4) عدل التفاصيل المطلوبة\n5) حفظ التعديلات',
+
+  'الاعلانات المميزة|تثبيت اعلان|تمييز اعلان|اعلان مميز':
+    'الخدمات المميزة:\n• تثبيت الإعلان: 50,000 ر.ي\n• تمييز الإعلان بلون خاص: 30,000 ر.ي\n• ظهور في الصدارة: 70,000 ر.ي\n\nلتفعيل الخدمات المميزة: /premium',
+
+  'كيف ابيع|نصائح للبيع|افضل طريقة للبيع|زيادة مبيعات':
+    'نصائح لبيع أسرع:\n1) أضف صور واضحة وجذابة\n2) اكتب وصف تفصيلي وشامل\n3) ضع سعر مناسب للسوق\n4) كن متاح للرد على الرسائل\n5) ضع إعلانك في القسم المناسب',
+
+  'كيف اشتري|نصائح للشراء|تأكيد الشراء|الدفع الامن':
+    'نصائح للشراء الآمن:\n1) تواصل مع البائع واطلب تفاصيل أكثر\n2) اطلب صور إضافية إذا لزم الأمر\n3) قابل البائع في مكان عام\n4) تأكد من المنتج قبل الدفع\n5) استخدم نظام التقييمات',
+
+  'التقييمات|كيف اقييم|شهادة مستخدم|تقيم البائع':
+    'نظام التقييمات:\n• يمكنك تقييم البائع بعد كل عملية\n• التقييم من 1 إلى 5 نجوم\n• يمكنك كتابة تعليق عن التجربة\n• التقييمات تساعد الآخرين في الاختيار',
+
+  'الابلاغ عن اعلان|ابلاغ|اعلان مخالف|احتيال|نصاب':
+    'للإبلاغ عن إعلان مخالف:\n1) افتح صفحة الإعلان\n2) اضغط على زر "⚠️ إبلاغ"\n3) اختر سبب الإبلاغ\n4) أضف تفاصيل إذا لزم\nسيتم مراجعة الإبلاغ خلال 24 ساعة.',
+
+  'كيف اتابع اعلان|المفضلة|حفظ اعلان|متابعة اعلان':
+    'لمتابعة الإعلانات:\n1) اضغط على زر "❤️" في أي إعلان\n2) ستظهر في صفحة "المفضلة"\n3) ستصل لك إشعارات بالتحديثات\n4) يمكنك تنظيم المفضلة حسب الفئة',
+
+  'الاشعارات|كيف اشغل الاشعارات|إعدادات الاشعارات|رسائل تنبيه':
+    'للتحكم في الإشعارات:\n1) انتقل إلى إعدادات الحساب\n2) اختر "الإشعارات"\n3) قم بتفعيل/تعطيل الإشعارات المطلوبة\n4) حفظ التعديلات',
+
+  'حسابي|صفحتي|معلومات الحساب|تعديل الملف الشخصي':
+    'لإدارة حسابك:\n1) اضغط على صورتك في الأعلى\n2) اختر "حسابي"\n3) يمكنك تعديل:\n   • المعلومات الشخصية\n   • كلمة المرور\n   • الإعدادات\n   • التفضيلات',
+
+  'رسائلي|المحادثات|الشات|المراسلات':
+    'لإدارة محادثاتك:\n1) اضغط على أيقونة "💬" في الأعلى\n2) اختر المحادثة المراد عرضها\n3) يمكنك حذف المحادثات القديمة\n4) البحث في المحادثات',
+
+  'الرسائل الواردة|طلبات الشراء|عروض السعر|المفاوضات':
+    'لإدارة عروض السعر:\n1) انتقل إلى صفحة إعلاناتك\n2) اختر إعلان\n3) اضغط على "العروض"\n4) يمكنك قبول/رفض/تفاوض على العروض',
+
+  'العمولة|الرسوم|تكلفة النشر|اسعار الخدمات':
+    'الرسوم الحالية:\n• النشر العادي: مجاني\n• التميز: حسب الخدمة\n• المزادات: 2% من سعر البيع النهائي\n• الإعلانات المثبتة: 50,000 ر.ي\n\nتفاصيل أكثر: /pricing',
+
+  'الضمان|كيف احصل على ضمان|الشراء المؤمن|حماية المشتري':
+    'خدمة الحماية:\n• متوفرة للمنتجات التي تحمل علامة "🛡️"\n• تحفظ المبلغ حتى استلام المنتج\n• في حالة النزاع، نتوسط لحله\n• تفاصيل الخدمة: /protection',
+
+  'الشحن|التوصيل|كيف اشحن|تكلفة الشحن|شركات الشحن':
+    'خيارات الشحن:\n• توصيل محلي (في نفس المدينة)\n• شحن بين المحافظات\n• شحن دولي (متوفر لبعض المنتجات)\n• يمكنك الاتفاق مع البائع على الشحن',
 };
 
 // =========================
 // إعدادات + أدوات مساعدة
 // =========================
 
-const DEFAULT_SAR = 425; // 1 SAR = 425 YER
-const DEFAULT_USD = 1632; // 1 USD = 1632 YER
+const DEFAULT_SAR = 425;
+const DEFAULT_USD = 1632;
 const DRAFTS_COLLECTION = 'assistant_drafts';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS || 15000);
-// افتراضيًا: إذا كان Gemini متاح نستخدمه أولاً (لأنه غالباً أرخص/مجاني)
 const ASSISTANT_PREFER_GEMINI = String(process.env.ASSISTANT_PREFER_GEMINI || '1') !== '0';
 
 const CATEGORIES = [
@@ -89,6 +146,10 @@ const CATEGORIES = [
   { slug: 'services', name: 'خدمات', keywords: ['خدمات', 'service', 'services'] },
   { slug: 'other', name: 'أخرى', keywords: ['اخرى', 'أخرى', 'other'] },
 ];
+
+// =========================
+// وظائف مساعدة محسنة
+// =========================
 
 function normalizeText(input) {
   return String(input || '')
@@ -149,7 +210,60 @@ function findBestMatch(message) {
 
 // ردود عامة
 const greetings = ['مرحبا', 'اهلا', 'السلام', 'صباح', 'مساء', 'هلا', 'هلو', 'hello', 'hi'];
-const thanks = ['شكرا', 'شكراً', 'يعطيك', 'thanks', 'thank you'];
+const thanks = ['شكرا', 'شكراً', 'يعطيك', 'thanks', 'thank you', 'مشكور', 'ممتاز', 'رائع'];
+
+// =========================
+// نظام Rate Limiting محسن
+// =========================
+
+function checkRateLimit(userId, action) {
+  const key = `${userId || 'anonymous'}_${action}`;
+  const now = Date.now();
+  
+  if (!rateLimiter.has(key)) {
+    rateLimiter.set(key, []);
+  }
+  
+  const timestamps = rateLimiter.get(key);
+  // احتفظ فقط بالتسجيلات في النافذة الزمنية
+  const validTimestamps = timestamps.filter(t => now - t < RATE_LIMIT_WINDOW);
+  
+  if (validTimestamps.length >= MAX_REQUESTS_PER_WINDOW) {
+    return false;
+  }
+  
+  validTimestamps.push(now);
+  rateLimiter.set(key, validTimestamps);
+  
+  // تنظيف الذاكرة القديمة تلقائياً
+  if (validTimestamps.length === 1) {
+    setTimeout(() => {
+      rateLimiter.delete(key);
+    }, RATE_LIMIT_WINDOW + 1000);
+  }
+  
+  return true;
+}
+
+// =========================
+// نظام Cache محسن
+// =========================
+
+async function cachedFetch(key, fetchFn, ttl = CACHE_TTL) {
+  const cached = LRU_CACHE.get(key);
+  if (cached && Date.now() - cached.timestamp < ttl) {
+    return cached.data;
+  }
+  const data = await fetchFn();
+  LRU_CACHE.set(key, { data, timestamp: Date.now() });
+  
+  // تنظيف الـ Cache تلقائياً بعد TTL
+  setTimeout(() => {
+    LRU_CACHE.delete(key);
+  }, ttl + 1000);
+  
+  return data;
+}
 
 // =========================
 // Auth helpers
@@ -186,15 +300,41 @@ function adminNotReadyMessage() {
 }
 
 // =========================
-// Counts (كم إعلان؟)
+// تحليل النية والمشاعر
+// =========================
+
+async function analyzeIntentAndSentiment(message) {
+  const text = normalizeText(message);
+  
+  const intents = {
+    isAskingForHelp: /مساعدة|مشكلة|سؤال|استفسار|كيف|طريقة/.test(text),
+    isLookingToBuy: /اشتري|اريد|مطلوب|ابحث عن|شراء/.test(text),
+    isLookingToSell: /للبع|معروض|بيع|اضيف|اعلان/.test(text),
+    isNegotiating: /سعر|كم|تفاوض|رخيص|غالي/.test(text),
+    isUrgent: /سريع|عاجل|ضروري|الان|فوري/.test(text),
+    isComplaining: /مشكلة|شكوى|غلط|خطأ|احتيال|نصاب/.test(text),
+    isThanking: /شكر|ممتاز|رائع|احسنت|يعطيك/.test(text),
+  };
+  
+  const sentiment = {
+    isPositive: /شكر|حلو|رائع|ممتاز|جميل|احسنت/.test(text),
+    isNegative: /مشكلة|غلط|خطأ|سيء|مافهمت|احتيال|نصاب/.test(text),
+    isNeutral: !/(شكر|مشكلة|احتيال|نصاب|رائع|ممتاز)/.test(text)
+  };
+  
+  return { intents, sentiment };
+}
+
+// =========================
+// Counts (كم إعلان؟) محسن
 // =========================
 
 function extractCountIntent(messageRaw) {
   const t = normalizeText(messageRaw);
-  const asksHowMany = t.startsWith('كم') || t.includes('كم ') || t.includes('عدد') || t.includes('احص');
+  const asksHowMany = t.startsWith('كم') || t.includes('كم ') || t.includes('عدد') || t.includes('احص') || t.includes('كمية');
   if (!asksHowMany) return null;
 
-  const mentionsAds = t.includes('اعلان') || t.includes('اعلانات') || t.includes('إعلان') || t.includes('إعلانات');
+  const mentionsAds = t.includes('اعلان') || t.includes('اعلانات') || t.includes('إعلان') || t.includes('إعلانات') || t.includes('منشور');
   const cat = detectCategorySlug(t);
 
   // أمثلة: "كم اعلان سيارات" أو "كم سيارات" أو "عدد عقارات"
@@ -208,35 +348,36 @@ function extractCountIntent(messageRaw) {
 async function tryCountListings(categorySlug) {
   if (!adminDb) return { ok: false, reason: 'admin_not_configured' };
 
-  const base = adminDb.collection('listings').where('isActive', '==', true);
-  const q = categorySlug ? base.where('category', '==', categorySlug) : base;
+  return cachedFetch(`count_${categorySlug || 'all'}`, async () => {
+    const base = adminDb.collection('listings').where('isActive', '==', true);
+    const q = categorySlug ? base.where('category', '==', categorySlug) : base;
 
-  // "hidden" قد يكون غير موجود في بعض الإعلانات؛ لذلك: public = totalActive - hiddenTrue
-  try {
-    const [totalAgg, hiddenAgg] = await Promise.all([
-      q.count().get(),
-      q.where('hidden', '==', true).count().get(),
-    ]);
-
-    const totalActive = Number(totalAgg?.data()?.count || 0);
-    const hiddenTrue = Number(hiddenAgg?.data()?.count || 0);
-    const publicCount = Math.max(0, totalActive - hiddenTrue);
-    return { ok: true, totalActive, hiddenTrue, publicCount };
-  } catch (e) {
-    // fallback: قراءة عدد محدود (غير مثالي، لكنه يمنع انهيار المساعد)
     try {
-      const limit = 5000;
-      const snap = await q.limit(limit).get();
-      const approx = snap.size;
-      return { ok: true, totalActive: approx, hiddenTrue: 0, publicCount: approx, approximate: snap.size >= limit };
-    } catch (e2) {
-      return { ok: false, reason: 'count_failed' };
+      const [totalAgg, hiddenAgg] = await Promise.all([
+        q.count().get(),
+        q.where('hidden', '==', true).count().get(),
+      ]);
+
+      const totalActive = Number(totalAgg?.data()?.count || 0);
+      const hiddenTrue = Number(hiddenAgg?.data()?.count || 0);
+      const publicCount = Math.max(0, totalActive - hiddenTrue);
+      return { ok: true, totalActive, hiddenTrue, publicCount, approximate: false };
+    } catch (e) {
+      // fallback: قراءة عدد محدود
+      try {
+        const limit = 5000;
+        const snap = await q.limit(limit).get();
+        const approx = snap.size;
+        return { ok: true, totalActive: approx, hiddenTrue: 0, publicCount: approx, approximate: snap.size >= limit };
+      } catch (e2) {
+        return { ok: false, reason: 'count_failed' };
+      }
     }
-  }
+  });
 }
 
 // =========================
-// Listing Wizard (إضافة إعلان عبر الشات)
+// Listing Wizard محسن
 // =========================
 
 function isStartCreateListing(messageRaw) {
@@ -247,7 +388,9 @@ function isStartCreateListing(messageRaw) {
     t.includes('انشئ اعلان') ||
     t.includes('سوي اعلان') ||
     t.includes('ابغى اعلان') ||
-    t.includes('ابغى اضيف اعلان')
+    t.includes('ابغى اضيف اعلان') ||
+    t.includes('بدء اعلان جديد') ||
+    t.includes('اعلان جديد')
   );
 }
 
@@ -258,7 +401,7 @@ function isCancel(messageRaw) {
 
 function isConfirmPublish(messageRaw) {
   const t = normalizeText(String(messageRaw || '').trim().replace(/^\/+\s*/, ''));
-  return t === 'نشر' || t === 'انشر' || t.includes('تاكيد') || t.includes('تأكيد') || t.includes('اعتماد') || t.includes('نشر الاعلان');
+  return t === 'نشر' || t === 'انشر' || t.includes('تاكيد') || t.includes('تأكيد') || t.includes('اعتماد') || t.includes('نشر الاعلان') || t.includes('انهاء');
 }
 
 function normalizeImagesMeta(metaImages) {
@@ -346,18 +489,21 @@ function extractMapsLink(messageRaw) {
 
 async function getRatesServer() {
   if (!adminDb) return { sar: DEFAULT_SAR, usd: DEFAULT_USD };
-  try {
-    const snap = await adminDb.collection('settings').doc('rates').get();
-    const raw = snap.exists ? snap.data() : null;
-    const sar = raw && raw.sar != null ? Number(raw.sar) : raw && raw.sarToYer != null ? Number(raw.sarToYer) : DEFAULT_SAR;
-    const usd = raw && raw.usd != null ? Number(raw.usd) : raw && raw.usdToYer != null ? Number(raw.usdToYer) : DEFAULT_USD;
-    return {
-      sar: sar > 0 ? sar : DEFAULT_SAR,
-      usd: usd > 0 ? usd : DEFAULT_USD,
-    };
-  } catch {
-    return { sar: DEFAULT_SAR, usd: DEFAULT_USD };
-  }
+  
+  return cachedFetch('exchange_rates', async () => {
+    try {
+      const snap = await adminDb.collection('settings').doc('rates').get();
+      const raw = snap.exists ? snap.data() : null;
+      const sar = raw && raw.sar != null ? Number(raw.sar) : raw && raw.sarToYer != null ? Number(raw.sarToYer) : DEFAULT_SAR;
+      const usd = raw && raw.usd != null ? Number(raw.usd) : raw && raw.usdToYer != null ? Number(raw.usdToYer) : DEFAULT_USD;
+      return {
+        sar: sar > 0 ? sar : DEFAULT_SAR,
+        usd: usd > 0 ? usd : DEFAULT_USD,
+      };
+    } catch {
+      return { sar: DEFAULT_SAR, usd: DEFAULT_USD };
+    }
+  });
 }
 
 function toYERServer(amount, currency, rates) {
@@ -488,7 +634,7 @@ function safeJsonParse(text) {
 }
 
 // =========================
-// Auto extraction (تحويل كلام المستخدم إلى مسودة إعلان كاملة)
+// Auto extraction محسن
 // =========================
 
 function extractFirstPhone(messageRaw) {
@@ -899,7 +1045,10 @@ async function runAiFallback({ message, history }) {
     '• المساعدة: /help\n' +
     '• تواصل معنا: /contact\n' +
     '• الشروط: /terms\n' +
-    '• الخصوصية: /privacy\n';
+    '• الخصوصية: /privacy\n' +
+    '• الأسعار: /pricing\n' +
+    '• الحماية: /protection\n' +
+    '• المفضلة: /favorites\n';
 
   const systemPrompt =
     'أنت مساعد ذكي لموقع سوق اليمن.\n' +
@@ -1064,6 +1213,23 @@ async function handleListingWizard({ user, message, meta }) {
   // هذه الميزة تتطلب Admin SDK حتى نتحقق من التوكن ونكتب على Firestore
   if (!adminDb || !adminAuth) {
     return { reply: adminNotReadyMessage() };
+  }
+
+  // تحليل النية والمشاعر
+  const analysis = await analyzeIntentAndSentiment(message);
+  
+  if (analysis.intents.isThanking) {
+    return { reply: 'العفو! 😊 سعيد لأنني استطعت مساعدتك. هل هناك شيء آخر تحتاجه؟' };
+  }
+  
+  if (analysis.intents.isComplaining) {
+    return { 
+      reply: 'أعتذر عن المشكلة التي واجهتها 😔\n' +
+             'للتأكد من حلها بشكل أفضل، يرجى:\n' +
+             '• التواصل مع الدعم: /contact\n' +
+             '• أو الإبلاغ عن المشكلة: /report\n\n' +
+             'سنتابع الأمر بأسرع وقت ممكن!'
+    };
   }
 
   if (isCancel(message)) {
@@ -1252,11 +1418,15 @@ async function handleListingWizard({ user, message, meta }) {
 
     return {
       reply:
-        'تم نشر الإعلان ✅\n\n' +
+        'تم نشر الإعلان بنجاح! 🎉\n\n' +
         `رابط الإعلان: /listing/${ref.id}\n\n` +
         (Array.isArray(listing.images) && listing.images.length
           ? `تم ربط ${listing.images.length} صورة بالإعلان ✅`
-          : 'إذا حبيت تضيف صور: استخدم زر 📷 داخل الشات قبل النشر أو من صفحة /add.'),
+          : 'إذا حبيت تضيف صور: استخدم زر 📷 داخل الشات قبل النشر أو من صفحة /add.') +
+        '\n\nنصائح لبيع أسرع:\n' +
+        '• رد بسرعة على الرسائل الواردة\n' +
+        '• أضف المزيد من الصور من صفحة الإعلان\n' +
+        '• شاهد إحصائيات الإعلان: /stats/' + ref.id,
     };
   }
 
@@ -1402,7 +1572,7 @@ async function handleListingWizard({ user, message, meta }) {
 }
 
 // =========================
-// Route
+// Route الرئيسية
 // =========================
 
 export async function POST(request) {
@@ -1421,8 +1591,17 @@ export async function POST(request) {
       return NextResponse.json({ error: 'الرسالة فارغة' }, { status: 400 });
     }
 
-    const normalized = normalizeText(trimmedMessage);
+    // ✅ تطبيق Rate Limiting
     const user = await getUserFromRequest(request);
+    const userId = user?.uid || 'anonymous';
+    
+    if (!checkRateLimit(userId, 'assistant_request')) {
+      return NextResponse.json({
+        error: 'لقد تجاوزت الحد المسموح من الطلبات. حاول مرة أخرى بعد دقيقة.'
+      }, { status: 429 });
+    }
+
+    const normalized = normalizeText(trimmedMessage);
 
     // ✅ إذا وصلت صور من الواجهة: نتعامل معها كجزء من مسار إضافة الإعلان
     const metaImages = normalizeImagesMeta(meta?.images);
@@ -1457,10 +1636,21 @@ export async function POST(request) {
 
       const label = category ? categoryNameFromSlug(category) : 'كل الأقسام';
       const numberText = result.approximate ? `${result.publicCount}+` : String(result.publicCount);
+      
+      let additionalInfo = '';
+      if (result.approximate) {
+        additionalInfo = '\n(العدد تقريبي - قد يكون هناك المزيد)';
+      }
+      
+      if (category && result.publicCount === 0) {
+        additionalInfo += '\n💡 يمكنك أن تكون أول من يضيف إعلان في هذا القسم!';
+      }
+      
       return NextResponse.json({
         reply:
-          `عدد الإعلانات (المتاحة) في ${label}: ${numberText}\n` +
-          (category ? '' : '\nتقدر تحدد القسم مثل: سيارات أو عقارات.'),
+          `📊 عدد الإعلانات (المتاحة) في ${label}: ${numberText}\n` +
+          (category ? '' : '\nتقدر تحدد القسم مثل: سيارات أو عقارات.') +
+          additionalInfo,
       });
     }
 
@@ -1492,76 +1682,132 @@ export async function POST(request) {
           '• كيفية إضافة إعلان\n' +
           '• إضافة إعلان من داخل الشات (اكتب: أضف إعلان)\n' +
           '• رفع صور للإعلان من داخل الشات (زر 📷)\n' +
-          '• تسجيل صوت وتحويله إلى نص (زر 🎙️)\n\n' +
+          '• تسجيل صوت وتحويله إلى نص (زر 🎙️)\n' +
+          '• معرفة عدد الإعلانات\n' +
+          '• الإجابة على أسئلتك\n\n' +
           'كيف أساعدك؟',
       });
     }
 
     if (thanks.some((t) => normalized.includes(normalizeText(t)))) {
       return NextResponse.json({
-        reply: 'العفو! 😊 إذا عندك أي استفسار آخر، أنا حاضر.',
+        reply: 'العفو! 😊 سعيد لأنني استطعت مساعدتك. إذا عندك أي استفسار آخر، أنا حاضر.',
       });
     }
 
-    // 5) FAQ
+    // 5) FAQ موسع
     const answer = findBestMatch(trimmedMessage);
     if (answer) {
       return NextResponse.json({ reply: answer });
     }
 
-    // 6) AI fallback
-    const aiResult = await runAiFallback({ message: trimmedMessage, history });
-    if (aiResult?.ok) {
-      if (aiResult.action === 'count_listings') {
-        const category = aiResult.category ? detectCategorySlug(aiResult.category) : null;
-        const result = await tryCountListings(category);
-        if (!result.ok) {
-          return NextResponse.json({ reply: adminNotReadyMessage() });
-        }
+    // 6) AI fallback مع تحليل النية
+    const analysis = await analyzeIntentAndSentiment(trimmedMessage);
+    
+    if (analysis.intents.isAskingForHelp) {
+      const aiResult = await runAiFallback({ message: trimmedMessage, history });
+      if (aiResult?.ok) {
+        if (aiResult.action === 'count_listings') {
+          const category = aiResult.category ? detectCategorySlug(aiResult.category) : null;
+          const result = await tryCountListings(category);
+          if (!result.ok) {
+            return NextResponse.json({ reply: adminNotReadyMessage() });
+          }
 
-        const label = category ? categoryNameFromSlug(category) : 'كل الأقسام';
-        const numberText = result.approximate ? `${result.publicCount}+` : String(result.publicCount);
-        return NextResponse.json({
-          reply:
-          `عدد الإعلانات (المتاحة) في ${label}: ${numberText}\n` +
-          (category ? '' : '\nتقدر تحدد القسم مثل: سيارات أو عقارات.'),
-        });
-      }
-
-      if (aiResult.action === 'create_listing') {
-        if (!user || user.error) {
+          const label = category ? categoryNameFromSlug(category) : 'كل الأقسام';
+          const numberText = result.approximate ? `${result.publicCount}+` : String(result.publicCount);
           return NextResponse.json({
             reply:
-              'لإضافة إعلان عبر المساعد لازم تسجل دخول أولاً ✅\n\n' +
-              'بعد تسجيل الدخول اكتب: أضف إعلان\n' +
-              'أو استخدم صفحة الإضافة مباشرة: /add',
+            `عدد الإعلانات (المتاحة) في ${label}: ${numberText}\n` +
+            (category ? '' : '\nتقدر تحدد القسم مثل: سيارات أو عقارات.'),
           });
         }
-        if (!adminDb || !adminAuth) {
-          return NextResponse.json({ reply: adminNotReadyMessage() });
+
+        if (aiResult.action === 'create_listing') {
+          if (!user || user.error) {
+            return NextResponse.json({
+              reply:
+                'لإضافة إعلان عبر المساعد لازم تسجل دخول أولاً ✅\n\n' +
+                'بعد تسجيل الدخول اكتب: أضف إعلان\n' +
+                'أو استخدم صفحة الإضافة مباشرة: /add',
+            });
+          }
+          if (!adminDb || !adminAuth) {
+            return NextResponse.json({ reply: adminNotReadyMessage() });
+          }
+
+          const draft = await startDraftFromAi(user, aiResult.listing || {});
+          const prompt = listingNextPrompt(draft.step, { step: draft.step, data: draft.data });
+          const replyText = [aiResult.reply, prompt].filter(Boolean).join('\n\n');
+          return NextResponse.json({ reply: replyText });
         }
 
-        const draft = await startDraftFromAi(user, aiResult.listing || {});
-        const prompt = listingNextPrompt(draft.step, { step: draft.step, data: draft.data });
-        const replyText = [aiResult.reply, prompt].filter(Boolean).join('\n\n');
-        return NextResponse.json({ reply: replyText });
+        return NextResponse.json({ reply: aiResult.reply });
       }
-
-      return NextResponse.json({ reply: aiResult.reply });
     }
 
-    // رد افتراضي
+    // رد افتراضي محسن
     return NextResponse.json({
       reply:
         'ما فهمت سؤالك تماماً 🤔\n\n' +
-        'أمثلة سريعة:\n' +
+        'جرب أحد هذه الخيارات:\n' +
         '• كيف أضيف إعلان؟\n' +
         '• أضف إعلان (لبدء إضافة إعلان من الشات)\n' +
-        '• كيف أبحث عن سيارات؟\n\n' +
-        'حاول تكتب سؤالك بصياغة أبسط وسأساعدك.',
+        '• كيف أبحث عن سيارات؟\n' +
+        '• كم اعلان سيارات؟\n' +
+        '• كيف احذف اعلان؟\n' +
+        '• شروط الاستخدام\n\n' +
+        'أو اكتب سؤالك بشكل أوضح وسأساعدك 😊',
     });
   } catch (error) {
     console.error('Chat API error:', error);
-    return NextResponse.json({ error: 'حدث خطأ في معالجة الطلب' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'حدث خطأ في معالجة الطلب',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    }, { status: 500 });
+  }
+}
+
+// =========================
+// GET Route للإحصائيات العامة
+// =========================
+
+export async function GET(request) {
+  try {
+    // يمكن استخدام GET للحصول على إحصائيات عامة
+    const url = new URL(request.url);
+    const action = url.searchParams.get('action');
+    
+    if (action === 'stats') {
+      // إحصائيات عامة
+      if (!adminDb) {
+        return NextResponse.json({
+          totalListings: 'N/A',
+          activeUsers: 'N/A',
+          message: 'Firebase Admin غير مفعل'
+        });
+      }
+      
+      const [listingsCount, usersCount] = await Promise.all([
+        tryCountListings(null),
+        adminDb.collection('users').count().get().then(snap => snap.data().count)
+      ]);
+      
+      return NextResponse.json({
+        totalListings: listingsCount.ok ? listingsCount.publicCount : 'N/A',
+        activeUsers: usersCount,
+        updatedAt: new Date().toISOString()
+      });
+    }
+    
+    return NextResponse.json({
+      status: 'active',
+      version: '2.0.0',
+      features: ['faq', 'listing_wizard', 'counts', 'ai_fallback', 'rate_limiting', 'caching']
+    });
+    
+  } catch (error) {
+    console.error('GET API error:', error);
+    return NextResponse.json({ error: 'حدث خطأ' }, { status: 500 });
   }
 }
