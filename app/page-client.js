@@ -1,4 +1,3 @@
-// app/page.jsx
 'use client';
 
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
@@ -789,13 +788,6 @@ export default function HomePageClient({ initialListings = [] }) {
             )}
           </div>
         </main>
-
-        <Link href="/add" className="floating-add-button focus-ring" aria-label="إضافة إعلان جديد" title="أضف إعلان جديد">
-          <span className="floating-add-icon" aria-hidden="true">
-            ➕
-          </span>
-          <span className="floating-add-text">أضف إعلان</span>
-        </Link>
 
         <style jsx>{`
           .hidden {
