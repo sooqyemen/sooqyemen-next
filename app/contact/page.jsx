@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useAuth } from '@/lib/useAuth';
 
 export default function ContactPage() {
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -12,24 +14,44 @@ export default function ContactPage() {
   });
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
     setSubmitting(true);
 
-    // TODO: Replace with actual form submission logic
-    // This should send the form data to a backend API or email service
-    // For now, we simulate the submission
-    setTimeout(() => {
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (user) {
+        const token = await user.getIdToken();
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const res = await fetch('/api/support', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(formData),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.message || 'تعذر إرسال الرسالة. تأكد من إعداد Firebase Admin في الاستضافة.');
+      }
+
       setSubmitted(true);
-      setSubmitting(false);
       setFormData({ name: '', email: '', subject: '', message: '' });
-    }, 1000);
+    } catch (err) {
+      setError(err?.message || 'تعذر إرسال الرسالة. حاول لاحقاً.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -49,16 +71,20 @@ export default function ContactPage() {
                 <p className="muted" style={{ marginBottom: 16 }}>
                   شكراً لتواصلك معنا. سنرد على رسالتك خلال 24-48 ساعة.
                 </p>
-                <button
-                  className="btn btnPrimary"
-                  onClick={() => setSubmitted(false)}
-                >
+                <button className="btn btnPrimary" onClick={() => setSubmitted(false)}>
                   إرسال رسالة أخرى
                 </button>
               </div>
             </div>
           ) : (
             <form onSubmit={handleSubmit}>
+              {error ? (
+                <div className="card" style={{ padding: 12, marginBottom: 14, border: '1px solid #fecaca', background: '#fef2f2' }}>
+                  <strong style={{ display: 'block', marginBottom: 6 }}>تعذر الإرسال</strong>
+                  <div>{error}</div>
+                </div>
+              ) : null}
+
               <div style={{ marginBottom: 16 }}>
                 <label htmlFor="name" style={{ display: 'block', marginBottom: 6, fontWeight: 700 }}>
                   الاسم الكامل <span style={{ color: '#dc2626' }}>*</span>
@@ -129,7 +155,7 @@ export default function ContactPage() {
                   type="submit"
                   className="btn btnPrimary"
                   disabled={submitting}
-                  style={{ minWidth: 120 }}
+                  style={{ minWidth: 140 }}
                 >
                   {submitting ? 'جاري الإرسال...' : 'إرسال الرسالة'}
                 </button>
@@ -156,6 +182,10 @@ export default function ContactPage() {
                 <span><strong>ساعات العمل:</strong> الأحد - الخميس، 9 صباحاً - 5 مساءً</span>
               </div>
             </div>
+          </div>
+
+          <div className="muted" style={{ marginTop: 14, fontSize: 12 }}>
+            ملاحظة: رسائل نموذج (اتصل بنا) تُحفظ في لوحة الإدارة: /admin/support
           </div>
         </div>
       </div>
