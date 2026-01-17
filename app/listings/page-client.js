@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 
@@ -176,6 +177,16 @@ export default function ListingsPageClient({ initialListings = [] }) {
   const [err, setErr] = useState('');
   const [search, setSearch] = useState('');
   const [hasMore, setHasMore] = useState(true);
+
+  const searchParams = useSearchParams();
+
+  // ✅ افتح الخريطة مباشرة عبر: /listings?view=map (أو list/grid)
+  useEffect(() => {
+    const v = String(searchParams?.get('view') || '').toLowerCase();
+    if (v === 'map' || v === 'list' || v === 'grid') {
+      setView((prev) => (prev === v ? prev : v));
+    }
+  }, [searchParams]);
 
   const lastDocRef = useRef(null);
   const loadMoreRef = useRef(null);
