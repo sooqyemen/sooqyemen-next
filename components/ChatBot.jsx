@@ -309,29 +309,17 @@ export default function ChatBot() {
             <button type="button" className={`chip ${isRecording ? 'chip-recording' : ''}`} onClick={toggleRecording} disabled={isLoading}>
               🎙️ {isRecording ? 'إيقاف' : 'صوت'}
             </button>
-            <button type="button" className="chip" onClick={() => quickAsk('الفئات')} disabled={isLoading}>
-              📂 الفئات
-            </button>
-            <button type="button" className="chip" onClick={() => quickAsk('كيف أبحث؟')} disabled={isLoading}>
-              🔍 كيف أبحث؟
-            </button>
-            <button type="button" className="chip" onClick={() => quickAsk('كيف أتواصل مع البائع؟')} disabled={isLoading}>
-              💬 تواصل مع البائع
-            </button>
-            <button type="button" className="chip" onClick={() => goTo('/login')}>
-              🔐 دخول
-            </button>
             <button type="button" className="chip" onClick={() => goTo('/add')}>
               📝 صفحة الإضافة
             </button>
             <button type="button" className="chip" onClick={() => goTo('/contact')}>
               📞 تواصل
             </button>
-            <button type="button" className="chip" onClick={() => quickAsk('الشروط والخصوصية')} disabled={isLoading}>
-              🛡️ الشروط
-            </button>
             <button type="button" className="chip chip-location" onClick={shareMyLocation} disabled={isLoading || locationBusy}>
               📍 {locationBusy ? 'جارٍ تحديد…' : 'موقعي'}
+            </button>
+            <button type="button" className="chip" onClick={() => goTo('/map')} disabled={isLoading}>
+              🗺️ عرض الإعلانات على الخريطة
             </button>
           </div>
 
