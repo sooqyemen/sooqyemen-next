@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/lib/useAuth';
+import { storage } from '@/lib/firebaseClient';
 
 export default function ChatBot() {
   const { user } = useAuth();
@@ -12,7 +13,16 @@ export default function ChatBot() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [locationBusy, setLocationBusy] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const speechRef = useRef(null);
+  const latestInputRef = useRef('');
+
+  useEffect(() => {
+    latestInputRef.current = input;
+  }, [input]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -21,6 +31,56 @@ export default function ChatBot() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isOpen]);
+
+  // ✅ تحويل الكلام إلى نص (Voice to Text) عبر Web Speech API (في المتصفحات المدعومة)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'ar';
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    speechRef.current = recognition;
+
+    let baseInput = '';
+
+    recognition.onstart = () => {
+      baseInput = latestInputRef.current || '';
+      setIsRecording(true);
+    };
+
+    recognition.onresult = (event) => {
+      try {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0]?.transcript || '';
+        }
+        const next = String((baseInput + ' ' + transcript).replace(/\s+/g, ' ')).trim();
+        setInput(next);
+      } catch {
+        // ignore
+      }
+    };
+
+    recognition.onerror = () => {
+      setIsRecording(false);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    return () => {
+      try {
+        recognition.stop();
+      } catch {
+        // ignore
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const sendText = async (messageText, meta) => {
     if (!String(messageText || '').trim() || isLoading) return;
@@ -126,6 +186,81 @@ export default function ChatBot() {
     }
   };
 
+  const toggleRecording = async () => {
+    if (isLoading) return;
+    const recognition = speechRef.current;
+    if (!recognition) {
+      await sendText('ميزة التسجيل الصوتي غير مدعومة في هذا المتصفح. جرّب Chrome على الجوال/الكمبيوتر.');
+      return;
+    }
+
+    try {
+      if (isRecording) {
+        recognition.stop();
+        setIsRecording(false);
+        return;
+      }
+      recognition.start();
+    } catch (e) {
+      setIsRecording(false);
+    }
+  };
+
+  const openImagePicker = () => {
+    if (isLoading || uploadBusy) return;
+    if (!fileInputRef.current) return;
+    fileInputRef.current.value = '';
+    fileInputRef.current.click();
+  };
+
+  const handleImagePicked = async (e) => {
+    const files = Array.from(e?.target?.files || []).filter(Boolean);
+    if (!files.length) return;
+
+    if (!user) {
+      await sendText('لرفع الصور من داخل الشات لازم تسجل دخول أولاً ✅\nاذهب إلى: /login');
+      return;
+    }
+
+    // حد أقصى 8 صور
+    const picked = files.slice(0, 8);
+
+    setUploadBusy(true);
+    try {
+      const uploaded = [];
+
+      for (let i = 0; i < picked.length; i++) {
+        const file = picked[i];
+        if (!file || !file.type || !file.type.startsWith('image/')) continue;
+
+        const safeName = String(file.name || 'image')
+          .toLowerCase()
+          .replace(/[^a-z0-9._-]+/g, '-')
+          .slice(0, 80);
+
+        const path = `chat_uploads/${user.uid}/${Date.now()}_${i}_${safeName}`;
+        const ref = storage.ref().child(path);
+        await ref.put(file, { contentType: file.type });
+        const url = await ref.getDownloadURL();
+        uploaded.push({ url, path, name: file.name || safeName });
+      }
+
+      if (!uploaded.length) {
+        await sendText('ما قدرت أرفع الصور. جرّب صور بصيغة JPG/PNG وبحجم أصغر.');
+        return;
+      }
+
+      await sendText(`📷 تم رفع ${uploaded.length} صورة. سأضيفها لمسودة الإعلان (إن وجدت).`, {
+        images: uploaded,
+      });
+    } catch (err) {
+      console.warn('[ChatBot] upload images failed', err);
+      await sendText('حدث خطأ أثناء رفع الصور. تأكد أنك مسجل دخول وأن الاتصال جيد.');
+    } finally {
+      setUploadBusy(false);
+    }
+  };
+
   return (
     <>
       {/* زر العائم */}
@@ -153,16 +288,35 @@ export default function ChatBot() {
             <button className="close-btn" onClick={() => setIsOpen(false)}>✕</button>
           </div>
 
+          {/* رفع صور (مخفي) */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            style={{ display: 'none' }}
+            onChange={handleImagePicked}
+          />
+
           {/* أزرار سريعة */}
           <div className="quick-actions">
             <button type="button" className="chip" onClick={() => quickAsk('أضف إعلان')} disabled={isLoading}>
               ➕ إضافة إعلان
             </button>
+            <button type="button" className="chip" onClick={openImagePicker} disabled={isLoading || uploadBusy}>
+              📷 صور
+            </button>
+            <button type="button" className={`chip ${isRecording ? 'chip-recording' : ''}`} onClick={toggleRecording} disabled={isLoading}>
+              🎙️ {isRecording ? 'إيقاف' : 'صوت'}
+            </button>
             <button type="button" className="chip" onClick={() => quickAsk('الفئات')} disabled={isLoading}>
               📂 الفئات
             </button>
-            <button type="button" className="chip" onClick={() => quickAsk('كم إعلان سيارات؟')} disabled={isLoading}>
-              📊 كم سيارات؟
+            <button type="button" className="chip" onClick={() => quickAsk('كيف أبحث؟')} disabled={isLoading}>
+              🔍 كيف أبحث؟
+            </button>
+            <button type="button" className="chip" onClick={() => quickAsk('كيف أتواصل مع البائع؟')} disabled={isLoading}>
+              💬 تواصل مع البائع
             </button>
             <button type="button" className="chip" onClick={() => goTo('/login')}>
               🔐 دخول
@@ -172,6 +326,9 @@ export default function ChatBot() {
             </button>
             <button type="button" className="chip" onClick={() => goTo('/contact')}>
               📞 تواصل
+            </button>
+            <button type="button" className="chip" onClick={() => quickAsk('الشروط والخصوصية')} disabled={isLoading}>
+              🛡️ الشروط
             </button>
             <button type="button" className="chip chip-location" onClick={shareMyLocation} disabled={isLoading || locationBusy}>
               📍 {locationBusy ? 'جارٍ تحديد…' : 'موقعي'}
@@ -199,6 +356,24 @@ export default function ChatBot() {
 
           {/* الإدخال */}
           <form className="input-area" onSubmit={sendMessage}>
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={openImagePicker}
+              title="إرفاق صور"
+              disabled={isLoading || uploadBusy}
+            >
+              📷
+            </button>
+            <button
+              type="button"
+              className={`icon-btn ${isRecording ? 'icon-btn-recording' : ''}`}
+              onClick={toggleRecording}
+              title="تسجيل صوت"
+              disabled={isLoading}
+            >
+              🎙️
+            </button>
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -298,6 +473,7 @@ export default function ChatBot() {
           cursor: not-allowed;
         }
         .chip-location { background: #0f172a; color: #fff; border-color: #0f172a; }
+        .chip-recording { background: #fee2e2; color: #991b1b; border-color: #ef4444; }
         .message-row { display: flex; margin: 8px 0; }
         .user-row { justify-content: flex-end; }
         .bot-row { justify-content: flex-start; }
@@ -336,6 +512,27 @@ export default function ChatBot() {
           font-weight: 700;
         }
         .input-area button:disabled { background: #94a3b8; cursor: not-allowed; }
+
+        .icon-btn {
+          border: 1px solid #e2e8f0;
+          background: #f8fafc;
+          color: #0f172a;
+          width: 40px;
+          min-width: 40px;
+          height: 40px;
+          padding: 0;
+          border-radius: 10px;
+          cursor: pointer;
+          font-size: 16px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .icon-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .icon-btn-recording {
+          border-color: #ef4444;
+          background: #fee2e2;
+        }
 
         @media (max-width: 480px) {
           .chat-window {
