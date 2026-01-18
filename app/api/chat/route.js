@@ -1,4 +1,4 @@
-import { NextResponse, NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import admin, { adminAuth, adminDb } from '@/lib/firebaseAdmin';
 
 // =========================
@@ -6,7 +6,6 @@ import admin, { adminAuth, adminDb } from '@/lib/firebaseAdmin';
 // =========================
 
 const DEFAULT_SAR = 425;
-const DEFAULT_USD = 1632;
 const DRAFTS_COLLECTION = 'assistant_drafts';
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 دقيقة
 const MAX_REQUESTS_PER_WINDOW = 15; // 15 طلب لكل دقيقة
@@ -24,10 +23,10 @@ const ASSISTANT_PREFER_GEMINI = String(process.env.ASSISTANT_PREFER_GEMINI || '1
 // إدارة الذاكرة (Rate Limit & Cache)
 // =========================
 
-const rateLimiter = new Map<string, number[]>();
-const LRU_CACHE = new Map<string, { data: any; timestamp: number }>();
+const rateLimiter = new Map();
+const LRU_CACHE = new Map();
 
-// تنظيف دوري للذاكرة كل 5 دقائق لمنع التسريب
+// تنظيف دوري للذاكرة كل 5 دقائق
 setInterval(() => {
   const now = Date.now();
   // تنظيف Rate Limiter
@@ -65,16 +64,15 @@ const CATEGORIES = [
   { slug: 'other', name: 'أخرى', keywords: ['اخرى', 'أخرى', 'other'] },
 ];
 
-const KNOWLEDGE_BASE: Record<string, string> = {
-  // تم دمج بعض المفاتيح المتشابهة لتقليل حجم الكائن وتسريع البحث
+const KNOWLEDGE_BASE = {
   'ما هو|ماهو|ايش هو|شنو هو|عن الموقع|عن سوق اليمن':
-    'سوق اليمن هو أكبر منصة للإعلانات والمزادات في اليمن. نقدم خدمة بيع وشراء السيارات، العقارات، الجوالات، وغيرها. تصفح أكثر من 16 فئة مختلفة!',
+    'سوق اليمن هو أكبر منصة للإعلانات والمزادات في اليمن. نقدم خدمة بيع وشراء السيارات، العقارات، الجوالات، وغيرها.',
   
   'كيف اضيف|كيف انشر|كيف اعلن|اضافة اعلان|نشر اعلان|انشاء اعلان':
     'لإضافة إعلان:\n1) سجل دخول\n2) اضغط "إضافة إعلان"\n3) اختر الفئة واملأ التفاصيل\n4) اضغط نشر\n\nأو يمكنك البدء من هنا بكتابة "أضف إعلان".\nرابط مباشر: /add',
 
   'فئات|اقسام|تصنيفات|categories':
-    'أهم الفئات:\n🚗 سيارات\n🏠 عقارات\n📱 جوالات\n💻 إلكترونيات\n☀️ طاقة شمسية\n...وغيرها الكثير في القائمة الرئيسية.',
+    'أهم الفئات:\n🚗 سيارات\n🏠 عقارات\n📱 جوالات\n💻 إلكترونيات\n☀️ طاقة شمسية\n...وغيرها الكثير.',
 
   'محادثة|شات|تواصل مع البائع|كيف اكلم':
     'افتح الإعلان واضغط زر "💬 محادثة" للتواصل المباشر والآمن مع البائع.',
@@ -158,27 +156,21 @@ const SOCIAL_INTERACTIONS = {
 // دوال مساعدة (Helpers)
 // =========================
 
-function normalizeText(input: string): string {
+function normalizeText(input) {
   return String(input || '')
     .toLowerCase()
     .replace(/[إأآ]/g, 'ا')
     .replace(/ى/g, 'ي')
     .replace(/ة/g, 'ه')
-    .replace(/[^\w\s\u0600-\u06FF]/g, ' ') // إبقاء الأحرف والأرقام فقط
+    .replace(/[^\w\s\u0600-\u06FF]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-function escapeRegex(s: string) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// تحسين البحث في الـ FAQ
-function findBestMatch(message: string): string | null {
+function findBestMatch(message) {
   const normMsg = normalizeText(message);
   for (const [pattern, response] of Object.entries(KNOWLEDGE_BASE)) {
     const keywords = pattern.split('|');
-    // البحث عن أي كلمة مفتاحية ككلمة كاملة أو جزء ذو معنى
     if (keywords.some(k => normMsg.includes(normalizeText(k)))) {
       return response;
     }
@@ -186,7 +178,7 @@ function findBestMatch(message: string): string | null {
   return null;
 }
 
-function detectCategorySlug(raw: string): string | null {
+function detectCategorySlug(raw) {
   const t = normalizeText(raw);
   for (const c of CATEGORIES) {
     if (t.includes(normalizeText(c.slug))) return c.slug;
@@ -197,29 +189,28 @@ function detectCategorySlug(raw: string): string | null {
   return null;
 }
 
-function normalizePhone(raw: string): string {
+function normalizePhone(raw) {
   let s = String(raw || '').trim().replace(/[\s\-()]/g, '').replace(/[^0-9+]/g, '');
-  // تصحيح الأرقام اليمنية الشائعة
   if (s.startsWith('00967')) s = '+' + s.substring(2);
   else if (s.startsWith('967')) s = '+' + s;
-  else if (s.startsWith('7') && s.length === 9) s = '+967' + s; // افتراض إضافة المفتاح
+  else if (s.startsWith('7') && s.length === 9) s = '+967' + s;
   return s;
 }
 
-function isValidPhone(phone: string): boolean {
+function isValidPhone(phone) {
   const p = normalizePhone(phone);
   const digits = p.replace(/[^0-9]/g, '');
   return digits.length >= 9 && digits.length <= 15;
 }
 
-function detectCurrency(text: string): string {
+function detectCurrency(text) {
   const t = normalizeText(text);
   if (t.includes('سعود') || t.includes('sar')) return 'SAR';
   if (t.includes('دولار') || t.includes('usd') || t.includes('$')) return 'USD';
   return 'YER';
 }
 
-function extractNumber(text: string): number | null {
+function extractNumber(text) {
   const m = text.replace(/[,،]/g, '').match(/(\d+(?:\.\d+)?)/);
   return m ? Number(m[1]) : null;
 }
@@ -228,7 +219,7 @@ function extractNumber(text: string): number | null {
 // إدارة الـ Rate Limit & Cache
 // =========================
 
-function checkRateLimit(userId: string): boolean {
+function checkRateLimit(userId) {
   const key = `rl_${userId}`;
   const now = Date.now();
   const timestamps = rateLimiter.get(key) || [];
@@ -241,21 +232,11 @@ function checkRateLimit(userId: string): boolean {
   return true;
 }
 
-async function cachedFetch<T>(key: string, fetchFn: () => Promise<T>, ttl = CACHE_TTL): Promise<T> {
-  const cached = LRU_CACHE.get(key);
-  if (cached && Date.now() - cached.timestamp < ttl) {
-    return cached.data as T;
-  }
-  const data = await fetchFn();
-  LRU_CACHE.set(key, { data, timestamp: Date.now() });
-  return data;
-}
-
 // =========================
 // Firebase Auth & Db
 // =========================
 
-async function getUserFromRequest(request: NextRequest) {
+async function getUserFromRequest(request) {
   const token = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || '';
   if (!token) return null;
   if (!adminAuth) return { error: 'server_config_error' };
@@ -272,13 +253,13 @@ async function getUserFromRequest(request: NextRequest) {
   }
 }
 
-async function loadDraft(uid: string) {
+async function loadDraft(uid) {
   if (!adminDb) return null;
   const snap = await adminDb.collection(DRAFTS_COLLECTION).doc(uid).get();
   return snap.exists ? snap.data() : null;
 }
 
-async function saveDraft(uid: string, data: any) {
+async function saveDraft(uid, data) {
   if (!adminDb) return;
   await adminDb.collection(DRAFTS_COLLECTION).doc(uid).set({
     ...data,
@@ -286,7 +267,7 @@ async function saveDraft(uid: string, data: any) {
   }, { merge: true });
 }
 
-async function clearDraft(uid: string) {
+async function clearDraft(uid) {
   if (!adminDb) return;
   await adminDb.collection(DRAFTS_COLLECTION).doc(uid).delete();
 }
@@ -295,7 +276,7 @@ async function clearDraft(uid: string) {
 // منطق المساعد الذكي (AI Logic)
 // =========================
 
-async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number) {
+async function fetchWithTimeout(url, options, timeoutMs) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -306,8 +287,7 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: nu
   }
 }
 
-async function runAiAnalysis(message: string, history: any[]) {
-  // بناء المحادثة
+async function runAiAnalysis(message, history) {
   const messages = [
     {
       role: 'system',
@@ -327,7 +307,7 @@ async function runAiAnalysis(message: string, history: any[]) {
     { role: 'user', content: message }
   ];
 
-  // محاولة استخدام Gemini أولاً (أرخص وأسرع)
+  // محاولة استخدام Gemini أولاً
   if (GEMINI_API_KEY && ASSISTANT_PREFER_GEMINI) {
     try {
       const response = await fetchWithTimeout(
@@ -336,7 +316,7 @@ async function runAiAnalysis(message: string, history: any[]) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: JSON.stringify(messages) }] }], // تبسيط لـ Gemini
+            contents: [{ parts: [{ text: JSON.stringify(messages) }] }],
             generationConfig: { responseMimeType: 'application/json' }
           }),
         },
@@ -365,7 +345,7 @@ async function runAiAnalysis(message: string, history: any[]) {
           },
           body: JSON.stringify({
             model: OPENAI_MODEL,
-            messages: messages.map(m => ({ role: m.role, content: m.content || '' })), // OpenAI expects standard format
+            messages: messages.map(m => ({ role: m.role, content: m.content || '' })),
             response_format: { type: 'json_object' }
           }),
         },
@@ -385,22 +365,22 @@ async function runAiAnalysis(message: string, history: any[]) {
 }
 
 // =========================
-// معالج إضافة الإعلان (Wizard State Machine)
+// معالج إضافة الإعلان (Wizard)
 // =========================
 
 const WIZARD_STEPS = ['category', 'title', 'description', 'city', 'phone', 'location', 'price', 'confirm'];
 
-function getNextStep(current: string): string {
+function getNextStep(current) {
   const idx = WIZARD_STEPS.indexOf(current);
   return (idx >= 0 && idx < WIZARD_STEPS.length - 1) ? WIZARD_STEPS[idx + 1] : 'confirm';
 }
 
-function getPrevStep(current: string): string {
+function getPrevStep(current) {
   const idx = WIZARD_STEPS.indexOf(current);
   return (idx > 0) ? WIZARD_STEPS[idx - 1] : 'category';
 }
 
-function getStepPrompt(step: string, data: any): string {
+function getStepPrompt(step, data) {
   const common = '\n\n(أوامر: "رجوع"، "تعديل"، "إلغاء")';
   switch (step) {
     case 'category': return 'ما هو قسم الإعلان؟ (مثال: سيارات، عقارات، جوالات)' + common;
@@ -412,25 +392,23 @@ function getStepPrompt(step: string, data: any): string {
     case 'price': return 'كم السعر المطلوب؟ (حدد العملة إذا أمكن).' + common;
     case 'confirm': 
       return `📋 مراجعة الإعلان:\n` +
-             `العنوان: ${data.title}\nالسعر: ${data.originalPrice} ${data.originalCurrency}\n` +
+             `العنوان: ${data.title}\nالسعر: ${data.originalPrice} ${data.originalCurrency || 'YER'}\n` +
              `هل أنت متأكد من النشر؟ (اكتب "نشر" للتأكيد)`;
     default: return '';
   }
 }
 
-async function handleWizard(user: any, message: string, meta: any) {
+async function handleWizard(user, message, meta) {
   const uid = user.uid;
   let draft = await loadDraft(uid);
   const normalizedMsg = normalizeText(message);
 
-  // 1. بدء مسودة جديدة
   if (!draft || normalizedMsg.includes('اضف اعلان') || normalizedMsg.includes('اعلان جديد')) {
     draft = { step: 'category', data: {} };
     await saveDraft(uid, draft);
     return { reply: 'أهلاً بك! لنبدأ إضافة إعلان جديد. 📝\n' + getStepPrompt('category', draft.data) };
   }
 
-  // 2. أوامر التحكم
   if (normalizedMsg === 'الغاء' || normalizedMsg === '/cancel') {
     await clearDraft(uid);
     return { reply: 'تم إلغاء العملية. يمكنك البدء من جديد في أي وقت. ❌' };
@@ -442,7 +420,6 @@ async function handleWizard(user: any, message: string, meta: any) {
     return { reply: '↩️ رجعنا للخطوة السابقة.\n' + getStepPrompt(draft.step, draft.data) };
   }
 
-  // 3. معالجة البيانات حسب الخطوة
   const data = draft.data;
   const step = draft.step;
 
@@ -479,13 +456,12 @@ async function handleWizard(user: any, message: string, meta: any) {
       break;
 
     case 'location':
-      // محاولة استخراج الموقع من الميتا أو النص
       if (meta?.location?.lat) {
         data.lat = meta.location.lat;
         data.lng = meta.location.lng;
         data.locationLabel = 'موقع محدد على الخريطة';
       } else if (message.includes('http')) {
-         data.locationLabel = `رابط: ${message}`; // يمكن تحسين استخراج الرابط
+         data.locationLabel = `رابط: ${message}`;
       } else {
         data.locationLabel = message;
       }
@@ -502,7 +478,6 @@ async function handleWizard(user: any, message: string, meta: any) {
 
     case 'confirm':
       if (normalizedMsg.includes('نشر') || normalizedMsg.includes('تاكيد')) {
-        // الحفظ النهائي في الداتابيس
         try {
           const listingData = {
             ...data,
@@ -510,11 +485,10 @@ async function handleWizard(user: any, message: string, meta: any) {
             userName: user.name,
             isActive: true,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            // تحويل العملة افتراضياً للريال اليمني إذا لزم الأمر
             priceYER: data.originalCurrency === 'SAR' ? data.originalPrice * DEFAULT_SAR : data.originalPrice
           };
           
-          const ref = await adminDb!.collection('listings').add(listingData);
+          const ref = await adminDb.collection('listings').add(listingData);
           await clearDraft(uid);
           return { reply: `🎉 تم نشر الإعلان بنجاح!\nرقم الإعلان: ${ref.id}\nيمكنك مشاهدته في صفحة "إعلاناتي".` };
         } catch (e) {
@@ -533,7 +507,7 @@ async function handleWizard(user: any, message: string, meta: any) {
 // Main Handler (POST)
 // =========================
 
-export async function POST(request: NextRequest) {
+export async function POST(request) {
   try {
     const body = await request.json().catch(() => ({}));
     const { message, history, meta } = body;
@@ -542,7 +516,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     }
 
-    // 1. التحقق من Rate Limit
     const user = await getUserFromRequest(request);
     const userId = user?.uid || 'anonymous';
     
@@ -551,9 +524,6 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedMsg = normalizeText(message);
-
-    // 2. التحقق من وجود مسودة نشطة (Wizard Mode)
-    // إذا كان المستخدم مسجلاً ولديه مسودة، أو يطلب صراحة إضافة إعلان
     const activeDraft = user && !user.error ? await loadDraft(user.uid) : null;
     const isWizardIntent = normalizedMsg.includes('اضف اعلان') || normalizedMsg.includes('اعلان جديد');
 
@@ -564,13 +534,11 @@ export async function POST(request: NextRequest) {
        return NextResponse.json({ reply: '🔒 يرجى تسجيل الدخول أولاً لإضافة إعلان.' });
     }
 
-    // 3. التحقق من FAQ (قاعدة المعرفة المحلية)
     const faqAnswer = findBestMatch(message);
     if (faqAnswer) {
       return NextResponse.json({ reply: faqAnswer });
     }
 
-    // 4. التحقق من التفاعلات الاجتماعية السريعة
     for (const group of Object.values(SOCIAL_INTERACTIONS)) {
       if (group.patterns.some(p => normalizedMsg.includes(normalizeText(p)))) {
         const reply = group.responses[Math.floor(Math.random() * group.responses.length)];
@@ -578,11 +546,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 5. استخدام الذكاء الاصطناعي (AI Fallback)
     const aiResult = await runAiAnalysis(message, history || []);
     
     if (aiResult) {
-      // تنفيذ الأوامر من الـ AI
       if (aiResult.action === 'count_listings' && adminDb) {
         const catSlug = detectCategorySlug(aiResult.category || '');
         let q = adminDb.collection('listings').where('isActive', '==', true);
@@ -598,12 +564,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 6. رد افتراضي إذا فشل كل شيء
     return NextResponse.json({ 
       reply: 'عذراً، لم أفهم سؤالك تماماً. 🤔\nيمكنك سؤالي عن:\n- إضافة إعلان\n- أسعار السيارات\n- طريقة التسجيل' 
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('API Error:', error);
     return NextResponse.json(
       { error: 'Internal Server Error', details: error.message }, 
@@ -616,7 +581,7 @@ export async function POST(request: NextRequest) {
 // Main Handler (GET) - Stats
 // =========================
 
-export async function GET(request: NextRequest) {
+export async function GET(request) {
   const { searchParams } = new URL(request.url);
   
   if (searchParams.get('action') === 'stats' && adminDb) {
@@ -630,5 +595,5 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  return NextResponse.json({ msg: 'Souq Yemen Assistant API v2.0 (Optimized)' });
+  return NextResponse.json({ msg: 'Souq Yemen Assistant API v2.0 (JS Optimized)' });
 }
