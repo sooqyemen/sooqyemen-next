@@ -1,939 +1,1813 @@
-// app/api/chat/route.js
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
-import admin, { adminDb } from '@/lib/firebaseAdmin';
-
-export const runtime = 'nodejs';
+import admin, { adminAuth, adminDb } from '@/lib/firebaseAdmin';
 
 // =========================
-// Collections
+// مساعد ذكي (FAQ + إحصاءات + إنشاء إعلان عبر محادثة)
 // =========================
-const SESSIONS_COLLECTION = 'assistant_sessions';
-const LISTINGS_COLLECTION = 'listings';
-const IDEMPOTENCY_COLLECTION = 'assistant_idempotency';
-const GEOCODE_CACHE_COLLECTION = 'geocode_cache';
 
-// =========================
-// Rate limit (in-memory; best-effort in serverless)
-// =========================
+// نظام Rate Limiting
 const rateLimiter = new Map();
-const RATE_LIMIT_WINDOW_MS = 60 * 1000;
-const MAX_REQUESTS_PER_WINDOW = 25;
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1 دقيقة
+const MAX_REQUESTS_PER_WINDOW = 15; // 15 طلب لكل دقيقة
 
-function getClientIp(req) {
-  const xf = req.headers.get('x-forwarded-for');
-  if (xf) return xf.split(',')[0].trim();
-  return req.headers.get('x-real-ip') || 'unknown';
-}
-
-function rateLimitOrThrow(key) {
-  const now = Date.now();
-  const row = rateLimiter.get(key) || { start: now, count: 0 };
-  if (now - row.start > RATE_LIMIT_WINDOW_MS) {
-    rateLimiter.set(key, { start: now, count: 1 });
-    return;
-  }
-  row.count += 1;
-  rateLimiter.set(key, row);
-  if (row.count > MAX_REQUESTS_PER_WINDOW) {
-    const err = new Error('RATE_LIMIT');
-    err.code = 'RATE_LIMIT';
-    throw err;
-  }
-}
+// Cache للأسعار والإحصائيات
+const LRU_CACHE = new Map();
+const CACHE_TTL = 60000; // 1 دقيقة
 
 // =========================
-// Helpers
+// قاعدة معرفية موسعة (FAQ)
 // =========================
-function nowTs() {
-  return admin.firestore.FieldValue.serverTimestamp();
-}
 
-function shortId(len = 18) {
-  return crypto.randomBytes(Math.ceil(len / 2)).toString('hex').slice(0, len);
-}
+const knowledgeBase = {
+  // أسئلة حول الموقع
+  'ما هو|ماهو|ايش هو|شنو هو|عن الموقع|عن سوق اليمن':
+    'سوق اليمن هو أكبر منصة للإعلانات والمزادات في اليمن. نقدم خدمة بيع وشراء السيارات، العقارات، الجوالات، الإلكترونيات، والمزيد. يمكنك تصفح أكثر من 16 فئة مختلفة.',
 
-function normText(s) {
-  return String(s || '')
-    .trim()
-    .replace(/\s+/g, ' ')
-    .toLowerCase();
-}
+  // كيفية إضافة إعلان
+  'كيف اضيف|كيف انشر|كيف اعلن|اضافة اعلان|نشر اعلان|انشاء اعلان|طريقة اضافة اعلان':
+    'لإضافة إعلان، اتبع هذه الخطوات:\n1) سجل دخول أو أنشئ حساب جديد\n2) اضغط على زر "إضافة إعلان" من القائمة\n3) اختر الفئة المناسبة\n4) املأ تفاصيل الإعلان وأضف الصور\n5) اضغط نشر\n\nيمكنك الانتقال مباشرة لصفحة الإضافة من هنا: /add',
 
-function isCancel(s) {
-  const t = normText(s);
-  return (
-    t === 'الغاء' ||
-    t === 'إلغاء' ||
-    t.includes('الغ') ||
-    t.includes('إلغاء') ||
-    t.includes('cancel') ||
-    t.includes('وقف') ||
-    t.includes('ايقاف') ||
-    t.includes('إيقاف')
-  );
-}
+  // الفئات المتاحة
+  'فئات|اقسام|تصنيفات|categories|الاقسام|الاصناف':
+    'الفئات المتوفرة في سوق اليمن:\n🚗 سيارات\n🏠 عقارات\n📱 جوالات\n💻 إلكترونيات\n🏍️ دراجات نارية\n🚜 معدات ثقيلة\n☀️ طاقة شمسية\n🌐 نت وشبكات\n🔧 صيانة\n🛋️ أثاث\n🏡 أدوات منزلية\n👔 ملابس\n🐾 حيوانات وطيور\n💼 وظائف\n⚙️ خدمات\n📦 أخرى',
 
-function isStartAdd(s) {
-  const t = normText(s);
-  return (
-    t.includes('اضافة اعلان') ||
-    t.includes('إضافة اعلان') ||
-    t.includes('إضافة إعلان') ||
-    t.includes('اعلان جديد') ||
-    t.includes('إعلان جديد') ||
-    t === 'اضافة' ||
-    t === 'إضافة'
-  );
-}
+  // المحادثات
+  'محادثة|شات|تواصل مع البائع|كيف اكلم البائع|ارسل رسالة للبائع|التواصل مع البائع':
+    'يمكنك التواصل مع البائع مباشرة من خلال:\n1) افتح صفحة الإعلان\n2) اضغط على زر "💬 محادثة"\n3) ابدأ المحادثة مع البائع\n\nيمكنك أيضاً مراجعة جميع محادثاتك من صفحة "محادثاتي".',
 
-function isPublish(s) {
-  const t = normText(s);
-  return t === 'نشر' || t === 'انشر' || t === 'نعم' || t === 'موافق' || t === 'تمام';
-}
+  // المزادات
+  'مزاد|مزادات|auction|كيف اشارك في المزاد|المزادات كيف تعمل|كيف ابيع في المزاد':
+    'المزادات في سوق اليمن تتيح لك:\n• المزايدة على المنتجات\n• متابعة المزادات المفتوحة\n• الحصول على أفضل الأسعار\n\nابحث عن الإعلانات التي تحتوي على علامة "مزاد" للمشاركة.',
 
-// تحويل أرقام عربية/فارسية إلى إنجليزية + فواصل
-function toEnglishDigits(input) {
+  // التسجيل والحساب
+  'تسجيل|حساب|دخول|login|register|انشاء حساب|كيف اسجل|كيف اسجل دخول|نسيت كلمة المرور':
+    'للتسجيل في سوق اليمن:\n1) اضغط على "تسجيل" من القيمة\n2) أدخل بريدك الإلكتروني وكلمة المرور\n3) أكمل البيانات الشخصية\n\nأو يمكنك استخدام التسجيل السريع عبر Google.',
+
+  // البحث
+  'بحث|search|ابحث|كيف ابحث|طريقة البحث|بحث عن|البحث المتقدم':
+    'للبحث عن إعلان:\n1) استخدم شريط البحث في الأعلى\n2) أو تصفح الفئات المختلفة\n3) استخدم الفلاتر لتضييق النتائج\n\nيمكنك أيضاً استخدام الخريطة للبحث حسب الموقع.',
+
+  // معلومات الإعلان
+  'صور|اضافة صور|رفع صور|عدد الصور|نوع الصور|حجم الصور|جودة الصور':
+    'يمكنك إضافة حتى 8 صور لكل إعلان. تأكد من:\n• جودة الصور عالية\n• الصور واضحة وتظهر المنتج بشكل جيد\n• تنوع الزوايا',
+
+  // الأسعار
+  'سعر|اسعار|price|prices|كيف اضع السعر|العملات المتاحة|ريال يمني|دولار|ريال سعودي':
+    'في سوق اليمن يمكنك عرض الأسعار بـ:\n• الريال اليمني (ر.ي)\n• الريال السعودي (SAR)\n• الدولار الأمريكي (USD)\n\nيمكنك أيضاً اختيار "قابل للتفاوض" إذا كنت مرناً في السعر.',
+
+  // الموقع
+  'موقع|خريطة|location|map|كيف اضيف موقع|تحديد الموقع|العنوان|المنطقة':
+    'نستخدم الخرائط التفاعلية لمساعدتك في:\n• تحديد موقع المنتج\n• البحث حسب المنطقة\n• معرفة المسافة من موقعك\n\nيمكنك تفعيل الموقع للحصول على نتائج أدق.',
+
+  // الدعم والمساعدة
+  'مساعدة|دعم|help|support|مشكلة|تواصل مع الدعم|الشكاوي|الاقتراحات':
+    'إذا كنت تواجه أي مشكلة:\n• تفضل بزيارة صفحة المساعدة: /help\n• أو تواصل معنا: /contact\n\nنحن هنا لمساعدتك! 😊',
+
+  // شروط الاستخدام
+  'شروط|سياسة|privacy|terms|الشروط والاحكام|سياسة الخصوصية|حقوق المستخدم':
+    'للاطلاع على:\n• شروط الاستخدام: /terms\n• سياسة الخصوصية: /privacy\n\nنحن نحترم خصوصيتك ونحمي بياناتك.',
+
+  // ✅ أسئلة جديدة مضافة بناءً على الاستخدام المتوقع
+  'كيف احذف اعلان|حذف اعلان|ازالة اعلان|الغاء نشر اعلان':
+    'لحذف إعلان:\n1) انتقل إلى صفحة إعلاناتك\n2) اختر الإعلان الذي تريد حذفه\n3) اضغط على زر "🗑️ حذف"\n4) أكد الحذف\n\nملاحظة: يمكن استرجاع الإعلان خلال 24 ساعة من صفحة المحذوفات.',
+
+  'كيف اعدل اعلان|تعديل اعلان|تغيير سعر|تحديث اعلان':
+    'لتعديل إعلان:\n1) انتقل إلى صفحة إعلاناتك\n2) اختر الإعلان الذي تريد تعديله\n3) اضغط على زر "✏️ تعديل"\n4) عدل التفاصيل المطلوبة\n5) حفظ التعديلات',
+
+  'الاعلانات المميزة|تثبيت اعلان|تمييز اعلان|اعلان مميز':
+    'الخدمات المميزة:\n• تثبيت الإعلان: 50,000 ر.ي\n• تمييز الإعلان بلون خاص: 30,000 ر.ي\n• ظهور في الصدارة: 70,000 ر.ي\n\nلتفعيل الخدمات المميزة: /premium',
+
+  'كيف ابيع|نصائح للبيع|افضل طريقة للبيع|زيادة مبيعات':
+    'نصائح لبيع أسرع:\n1) أضف صور واضحة وجذابة\n2) اكتب وصف تفصيلي وشامل\n3) ضع سعر مناسب للسوق\n4) كن متاح للرد على الرسائل\n5) ضع إعلانك في القسم المناسب',
+
+  'كيف اشتري|نصائح للشراء|تأكيد الشراء|الدفع الامن':
+    'نصائح للشراء الآمن:\n1) تواصل مع البائع واطلب تفاصيل أكثر\n2) اطلب صور إضافية إذا لزم الأمر\n3) قابل البائع في مكان عام\n4) تأكد من المنتج قبل الدفع\n5) استخدم نظام التقييمات',
+
+  'التقييمات|كيف اقييم|شهادة مستخدم|تقيم البائع':
+    'نظام التقييمات:\n• يمكنك تقييم البائع بعد كل عملية\n• التقييم من 1 إلى 5 نجوم\n• يمكنك كتابة تعليق عن التجربة\n• التقييمات تساعد الآخرين في الاختيار',
+
+  'الابلاغ عن اعلان|ابلاغ|اعلان مخالف|احتيال|نصاب':
+    'للإبلاغ عن إعلان مخالف:\n1) افتح صفحة الإعلان\n2) اضغط على زر "⚠️ إبلاغ"\n3) اختر سبب الإبلاغ\n4) أضف تفاصيل إذا لزم\nسيتم مراجعة الإبلاغ خلال 24 ساعة.',
+
+  'كيف اتابع اعلان|المفضلة|حفظ اعلان|متابعة اعلان':
+    'لمتابعة الإعلانات:\n1) اضغط على زر "❤️" في أي إعلان\n2) ستظهر في صفحة "المفضلة"\n3) ستصل لك إشعارات بالتحديثات\n4) يمكنك تنظيم المفضلة حسب الفئة',
+
+  'الاشعارات|كيف اشغل الاشعارات|إعدادات الاشعارات|رسائل تنبيه':
+    'للتحكم في الإشعارات:\n1) انتقل إلى إعدادات الحساب\n2) اختر "الإشعارات"\n3) قم بتفعيل/تعطيل الإشعارات المطلوبة\n4) حفظ التعديلات',
+
+  'حسابي|صفحتي|معلومات الحساب|تعديل الملف الشخصي':
+    'لإدارة حسابك:\n1) اضغط على صورتك في الأعلى\n2) اختر "حسابي"\n3) يمكنك تعديل:\n   • المعلومات الشخصية\n   • كلمة المرور\n   • الإعدادات\n   • التفضيلات',
+
+  'رسائلي|المحادثات|الشات|المراسلات':
+    'لإدارة محادثاتك:\n1) اضغط على أيقونة "💬" في الأعلى\n2) اختر المحادثة المراد عرضها\n3) يمكنك حذف المحادثات القديمة\n4) البحث في المحادثات',
+
+  'الرسائل الواردة|طلبات الشراء|عروض السعر|المفاوضات':
+    'لإدارة عروض السعر:\n1) انتقل إلى صفحة إعلاناتك\n2) اختر إعلان\n3) اضغط على "العروض"\n4) يمكنك قبول/رفض/تفاوض على العروض',
+
+  'العمولة|الرسوم|تكلفة النشر|اسعار الخدمات':
+    'الرسوم الحالية:\n• النشر العادي: مجاني\n• التميز: حسب الخدمة\n• المزادات: 2% من سعر البيع النهائي\n• الإعلانات المثبتة: 50,000 ر.ي\n\nتفاصيل أكثر: /pricing',
+
+  'الضمان|كيف احصل على ضمان|الشراء المؤمن|حماية المشتري':
+    'خدمة الحماية:\n• متوفرة للمنتجات التي تحمل علامة "🛡️"\n• تحفظ المبلغ حتى استلام المنتج\n• في حالة النزاع، نتوسط لحله\n• تفاصيل الخدمة: /protection',
+
+  'الشحن|التوصيل|كيف اشحن|تكلفة الشحن|شركات الشحن':
+    'خيارات الشحن:\n• توصيل محلي (في نفس المدينة)\n• شحن بين المحافظات\n• شحن دولي (متوفر لبعض المنتجات)\n• يمكنك الاتفاق مع البائع على الشحن',
+};
+
+// =========================
+// إعدادات + أدوات مساعدة
+// =========================
+
+const DEFAULT_SAR = 425;
+const DEFAULT_USD = 1632;
+const DRAFTS_COLLECTION = 'assistant_drafts';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS || 15000);
+const ASSISTANT_PREFER_GEMINI = String(process.env.ASSISTANT_PREFER_GEMINI || '1') !== '0';
+
+const CATEGORIES = [
+  { slug: 'cars', name: 'سيارات', keywords: ['سيارة', 'سيارات', 'car', 'cars'] },
+  { slug: 'realestate', name: 'عقارات', keywords: ['عقار', 'عقارات', 'شقة', 'شقق', 'أرض', 'ارض', 'realestate', 'estate'] },
+  { slug: 'phones', name: 'جوالات', keywords: ['جوال', 'جوالات', 'هاتف', 'هواتف', 'phone', 'phones'] },
+  { slug: 'electronics', name: 'إلكترونيات', keywords: ['الكترونيات', 'إلكترونيات', 'electronics'] },
+  { slug: 'motorcycles', name: 'دراجات نارية', keywords: ['دراجة', 'دراجات', 'دراجات نارية', 'motorcycle', 'motorcycles'] },
+  { slug: 'heavy_equipment', name: 'معدات ثقيلة', keywords: ['معدات', 'معدات ثقيلة', 'شيول', 'حفار', 'heavy', 'equipment'] },
+  { slug: 'solar', name: 'طاقة شمسية', keywords: ['طاقة شمسية', 'الواح', 'ألواح', 'بطاريات', 'solar'] },
+  { slug: 'networks', name: 'نت وشبكات', keywords: ['نت', 'شبكات', 'انترنت', 'internet', 'networks'] },
+  { slug: 'maintenance', name: 'صيانة', keywords: ['صيانة', 'تصليح', 'maintenance'] },
+  { slug: 'furniture', name: 'أثاث', keywords: ['اثاث', 'أثاث', 'furniture'] },
+  { slug: 'home_tools', name: 'أدوات منزلية', keywords: ['ادوات منزلية', 'أدوات منزلية', 'home tools'] },
+  { slug: 'clothes', name: 'ملابس', keywords: ['ملابس', 'clothes'] },
+  { slug: 'animals', name: 'حيوانات وطيور', keywords: ['حيوانات', 'طيور', 'حيوان', 'animal', 'animals'] },
+  { slug: 'jobs', name: 'وظائف', keywords: ['وظائف', 'وظيفة', 'job', 'jobs'] },
+  { slug: 'services', name: 'خدمات', keywords: ['خدمات', 'service', 'services'] },
+  { slug: 'other', name: 'أخرى', keywords: ['اخرى', 'أخرى', 'other'] },
+];
+
+// =========================
+// وظائف مساعدة محسنة
+// =========================
+
+function normalizeText(input) {
   return String(input || '')
-    .replace(/[٠-٩]/g, (d) => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)])
-    .replace(/[۰-۹]/g, (d) => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
-    .replace(/٫/g, '.')
-    .replace(/٬/g, '')
-    .replace(/,/g, '');
+    .toLowerCase()
+    .replace(/[إأآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-function extractNumber(s) {
-  const m = String(s || '').match(/(-?\d+(\.\d+)?)/);
+function escapeRegex(s) {
+  return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function categoryNameFromSlug(slug) {
+  const item = CATEGORIES.find((c) => c.slug === slug);
+  return item ? item.name : slug;
+}
+
+function detectCategorySlug(raw) {
+  const t = normalizeText(raw);
+
+  // match slug directly
+  for (const c of CATEGORIES) {
+    if (t.includes(normalizeText(c.slug))) return c.slug;
+  }
+
+  // match keywords
+  for (const c of CATEGORIES) {
+    for (const kw of c.keywords) {
+      const k = normalizeText(kw);
+      if (k && t.includes(k)) return c.slug;
+    }
+  }
+
+  return null;
+}
+
+// دالة لإيجاد أفضل تطابق (FAQ)
+function findBestMatch(message) {
+  const lowerMessage = normalizeText(message);
+
+  for (const [pattern, response] of Object.entries(knowledgeBase)) {
+    const patterns = pattern.split('|');
+    if (
+      patterns.some((p) => {
+        const p2 = normalizeText(p);
+        const regex = new RegExp(`(^|\\s)${escapeRegex(p2)}($|\\s|[،.؟!])`, 'i');
+        return regex.test(lowerMessage) || lowerMessage.includes(p2);
+      })
+    ) {
+      return response;
+    }
+  }
+  return null;
+}
+
+// ردود عامة
+const greetings = ['مرحبا', 'اهلا', 'السلام', 'صباح', 'مساء', 'هلا', 'هلو', 'hello', 'hi'];
+const thanks = ['شكرا', 'شكراً', 'يعطيك', 'thanks', 'thank you', 'مشكور', 'ممتاز', 'رائع'];
+
+// =========================
+// نظام Rate Limiting محسن
+// =========================
+
+function checkRateLimit(userId, action) {
+  const key = `${userId || 'anonymous'}_${action}`;
+  const now = Date.now();
+  
+  if (!rateLimiter.has(key)) {
+    rateLimiter.set(key, []);
+  }
+  
+  const timestamps = rateLimiter.get(key);
+  // احتفظ فقط بالتسجيلات في النافذة الزمنية
+  const validTimestamps = timestamps.filter(t => now - t < RATE_LIMIT_WINDOW);
+  
+  if (validTimestamps.length >= MAX_REQUESTS_PER_WINDOW) {
+    return false;
+  }
+  
+  validTimestamps.push(now);
+  rateLimiter.set(key, validTimestamps);
+  
+  // تنظيف الذاكرة القديمة تلقائياً
+  if (validTimestamps.length === 1) {
+    setTimeout(() => {
+      rateLimiter.delete(key);
+    }, RATE_LIMIT_WINDOW + 1000);
+  }
+  
+  return true;
+}
+
+// =========================
+// نظام Cache محسن
+// =========================
+
+async function cachedFetch(key, fetchFn, ttl = CACHE_TTL) {
+  const cached = LRU_CACHE.get(key);
+  if (cached && Date.now() - cached.timestamp < ttl) {
+    return cached.data;
+  }
+  const data = await fetchFn();
+  LRU_CACHE.set(key, { data, timestamp: Date.now() });
+  
+  // تنظيف الـ Cache تلقائياً بعد TTL
+  setTimeout(() => {
+    LRU_CACHE.delete(key);
+  }, ttl + 1000);
+  
+  return data;
+}
+
+// =========================
+// Auth helpers
+// =========================
+
+async function getUserFromRequest(request) {
+  const h = request.headers.get('authorization') || request.headers.get('Authorization') || '';
+  const m = String(h).match(/^Bearer\s+(.+)$/i);
+  const token = m && m[1] ? m[1].trim() : '';
+  if (!token) return null;
+  if (!adminAuth) return { error: 'admin_not_configured' };
+
+  try {
+    const decoded = await adminAuth.verifyIdToken(token);
+    return {
+      uid: decoded.uid,
+      email: decoded.email || null,
+      name: decoded.name || decoded.displayName || null,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+function adminNotReadyMessage() {
+  return (
+    'هذه الميزة تحتاج تفعيل Firebase Admin في بيئة الاستضافة.\n\n' +
+    'تأكد من إضافة المتغيرات التالية في Vercel/Netlify ثم أعد النشر:\n' +
+    '• FIREBASE_PROJECT_ID\n' +
+    '• FIREBASE_CLIENT_EMAIL\n' +
+    '• FIREBASE_PRIVATE_KEY\n\n' +
+    'بعدها سيقدر المساعد يحسب الأعداد ويضيف إعلانات لك وأنت مسجل دخول.'
+  );
+}
+
+// =========================
+// تحليل النية والمشاعر
+// =========================
+
+async function analyzeIntentAndSentiment(message) {
+  const text = normalizeText(message);
+  
+  const intents = {
+    isAskingForHelp: /مساعدة|مشكلة|سؤال|استفسار|كيف|طريقة/.test(text),
+    isLookingToBuy: /اشتري|اريد|مطلوب|ابحث عن|شراء/.test(text),
+    isLookingToSell: /للبع|معروض|بيع|اضيف|اعلان/.test(text),
+    isNegotiating: /سعر|كم|تفاوض|رخيص|غالي/.test(text),
+    isUrgent: /سريع|عاجل|ضروري|الان|فوري/.test(text),
+    isComplaining: /مشكلة|شكوى|غلط|خطأ|احتيال|نصاب/.test(text),
+    isThanking: /شكر|ممتاز|رائع|احسنت|يعطيك/.test(text),
+  };
+  
+  const sentiment = {
+    isPositive: /شكر|حلو|رائع|ممتاز|جميل|احسنت/.test(text),
+    isNegative: /مشكلة|غلط|خطأ|سيء|مافهمت|احتيال|نصاب/.test(text),
+    isNeutral: !/(شكر|مشكلة|احتيال|نصاب|رائع|ممتاز)/.test(text)
+  };
+  
+  return { intents, sentiment };
+}
+
+// =========================
+// Counts (كم إعلان؟) محسن
+// =========================
+
+function extractCountIntent(messageRaw) {
+  const t = normalizeText(messageRaw);
+  const asksHowMany = t.startsWith('كم') || t.includes('كم ') || t.includes('عدد') || t.includes('احص') || t.includes('كمية');
+  if (!asksHowMany) return null;
+
+  const mentionsAds = t.includes('اعلان') || t.includes('اعلانات') || t.includes('إعلان') || t.includes('إعلانات') || t.includes('منشور');
+  const cat = detectCategorySlug(t);
+
+  // أمثلة: "كم اعلان سيارات" أو "كم سيارات" أو "عدد عقارات"
+  if (mentionsAds || cat || t.includes('عقار') || t.includes('سيار') || t.includes('جوال')) {
+    return { category: cat };
+  }
+
+  return null;
+}
+
+async function tryCountListings(categorySlug) {
+  if (!adminDb) return { ok: false, reason: 'admin_not_configured' };
+
+  return cachedFetch(`count_${categorySlug || 'all'}`, async () => {
+    const base = adminDb.collection('listings').where('isActive', '==', true);
+    const q = categorySlug ? base.where('category', '==', categorySlug) : base;
+
+    try {
+      const [totalAgg, hiddenAgg] = await Promise.all([
+        q.count().get(),
+        q.where('hidden', '==', true).count().get(),
+      ]);
+
+      const totalActive = Number(totalAgg?.data()?.count || 0);
+      const hiddenTrue = Number(hiddenAgg?.data()?.count || 0);
+      const publicCount = Math.max(0, totalActive - hiddenTrue);
+      return { ok: true, totalActive, hiddenTrue, publicCount, approximate: false };
+    } catch (e) {
+      // fallback: قراءة عدد محدود
+      try {
+        const limit = 5000;
+        const snap = await q.limit(limit).get();
+        const approx = snap.size;
+        return { ok: true, totalActive: approx, hiddenTrue: 0, publicCount: approx, approximate: snap.size >= limit };
+      } catch (e2) {
+        return { ok: false, reason: 'count_failed' };
+      }
+    }
+  });
+}
+
+// =========================
+// Listing Wizard محسن
+// =========================
+
+function isStartCreateListing(messageRaw) {
+  const t = normalizeText(String(messageRaw || '').trim().replace(/^\/+\s*/, ''));
+  return (
+    t.includes('اضف اعلان') ||
+    t.includes('اضافه اعلان') ||
+    t.includes('انشئ اعلان') ||
+    t.includes('سوي اعلان') ||
+    t.includes('ابغى اعلان') ||
+    t.includes('ابغى اضيف اعلان') ||
+    t.includes('بدء اعلان جديد') ||
+    t.includes('اعلان جديد')
+  );
+}
+
+function isCancel(messageRaw) {
+  const t = normalizeText(String(messageRaw || '').trim().replace(/^\/+\s*/, ''));
+  return t === 'الغاء' || t === 'إلغاء' || t.includes('الغاء') || t.includes('كنسل') || t.includes('cancel') || t.includes('حذف المسوده');
+}
+
+function isConfirmPublish(messageRaw) {
+  const t = normalizeText(String(messageRaw || '').trim().replace(/^\/+\s*/, ''));
+  return t === 'نشر' || t === 'انشر' || t.includes('تاكيد') || t.includes('تأكيد') || t.includes('اعتماد') || t.includes('نشر الاعلان') || t.includes('انهاء');
+}
+
+function normalizeImagesMeta(metaImages) {
+  if (!metaImages) return [];
+  const arr = Array.isArray(metaImages) ? metaImages : [metaImages];
+  const urls = arr
+    .map((it) => {
+      if (!it) return null;
+      if (typeof it === 'string') return it;
+      if (typeof it === 'object') return it.url || it.downloadURL || it.href || null;
+      return null;
+    })
+    .filter((u) => typeof u === 'string' && u.trim().startsWith('http'))
+    .map((u) => u.trim());
+
+  // unique
+  const out = [];
+  for (const u of urls) {
+    if (!out.includes(u)) out.push(u);
+  }
+  return out;
+}
+
+function extractNumber(messageRaw) {
+  const t = String(messageRaw || '').replace(/[,،]/g, '');
+  const m = t.match(/(\d+(?:\.\d+)?)/);
   return m ? Number(m[1]) : null;
 }
 
-// دعم مبسط لكلمات مثل: ألف، ألفين، مليون
-function parseArabicWordNumber(s) {
-  const t = normText(s);
-  if (t.includes('مليون')) return 1000000;
-  if (t.includes('الفين') || t.includes('ألفين')) return 2000;
-  if (t.includes('الف') || t.includes('ألف')) return 1000;
-  return null;
+function detectCurrency(messageRaw) {
+  const t = normalizeText(messageRaw);
+  if (t.includes('sar') || t.includes('سعود') || t.includes('ريال سعودي')) return 'SAR';
+  if (t.includes('usd') || t.includes('دولار') || t.includes('$')) return 'USD';
+  return 'YER';
 }
 
-function detectCurrencyFromText(s) {
-  const t = normText(s);
-
-  if (t.includes('usd') || t.includes('دولار') || t.includes('دولارات')) return { code: 'USD', ambiguous: false };
-  if (t.includes('sar') || t.includes('ريال سعودي') || t.includes('سعودي') || t.includes('س.ر') || t.includes('rs'))
-    return { code: 'SAR', ambiguous: false };
-  if (t.includes('yer') || t.includes('ريال يمني') || t.includes('يمني') || t.includes('ر.ي')) return { code: 'YER', ambiguous: false };
-
-  // "ريال" فقط = مبهم
-  if (t.includes('ريال')) return { code: null, ambiguous: true };
-
-  return { code: null, ambiguous: false };
-}
-
-function parsePriceAndMaybeCurrency(rawText) {
-  const text = toEnglishDigits(rawText);
-  let price = extractNumber(text);
-
-  if (!Number.isFinite(price)) {
-    const w = parseArabicWordNumber(rawText);
-    if (Number.isFinite(w)) price = w;
-  }
-
-  if (!Number.isFinite(price) || price <= 0) {
-    return { ok: false, error: 'INVALID_PRICE', price: null, currency: null, ambiguousCurrency: false };
-  }
-
-  const cur = detectCurrencyFromText(rawText);
-  return { ok: true, price: Math.round(price), currency: cur.code, ambiguousCurrency: !!cur.ambiguous };
-}
-
-function normalizeContact(raw) {
-  const s = toEnglishDigits(raw);
-  const cleaned = String(s || '')
+function normalizePhone(raw) {
+  const s = String(raw || '')
     .trim()
-    .replace(/[^\d+]/g, '')
-    .replace(/^\+{2,}/g, '+');
+    .replace(/[\s\-()]/g, '')
+    .replace(/[^0-9+]/g, '');
 
-  const normalized = cleaned.startsWith('+') ? '+' + cleaned.slice(1).replace(/\+/g, '') : cleaned.replace(/\+/g, '');
-  return { raw: String(raw || '').trim(), normalized };
+  // +9677xxxxxxxx
+  if (s.startsWith('+')) {
+    const digits = s.replace(/[^0-9]/g, '');
+    // keep leading +
+    return `+${digits}`;
+  }
+  return s;
 }
 
-function isValidContactLocalOrIntl(normalized) {
-  if (!normalized) return false;
-  if (normalized.startsWith('+')) return /^\+\d{8,15}$/.test(normalized);
-  return /^\d{7,15}$/.test(normalized);
+function isValidPhone(phone) {
+  const p = normalizePhone(phone);
+  const digits = p.replace(/[^0-9]/g, '');
+
+  // Accept Yemen-like numbers (very lenient):
+  // - 9 digits starting with 7 (e.g., 777123456)
+  // - or 12 digits starting with 9677 (e.g., 967777123456)
+  if (digits.length === 9 && digits.startsWith('7')) return true;
+  if (digits.length === 12 && digits.startsWith('9677')) return true;
+  return digits.length >= 7 && digits.length <= 15;
 }
 
-function extractLatLng(s) {
-  const text = toEnglishDigits(s);
-  const m = text.match(/(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/);
+function extractLatLngFromText(messageRaw) {
+  const t = String(messageRaw || '');
+  // match: 15.3694, 44.1910 OR 15.3694 44.1910
+  const m = t.match(/(-?\d{1,2}(?:\.\d+)?)[,\s]+(-?\d{1,3}(?:\.\d+)?)/);
   if (!m) return null;
   const lat = Number(m[1]);
   const lng = Number(m[2]);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (!isFinite(lat) || !isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
   return { lat, lng };
 }
 
-// ===== Google Maps URL -> lat/lng =====
-// يدعم:
-// - https://www.google.com/maps?q=15.3,44.2
-// - https://www.google.com/maps/search/?api=1&query=15.3,44.2
-// - .../@15.3694,44.1910,17z
-// - ll=15.3,44.2
-function extractLatLngFromGoogleMapsUrl(urlText) {
-  const text = String(urlText || '').trim();
-  if (!text) return null;
-  if (!/google\.[a-z.]+\/maps/i.test(text) && !/maps\.app\.goo\.gl/i.test(text)) return null;
-
-  const decoded = decodeURIComponent(text);
-
-  // pattern: @lat,lng
-  let m = decoded.match(/@(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/);
-  if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
-
-  // pattern: q=lat,lng or query=lat,lng or ll=lat,lng
-  m = decoded.match(/[?&](q|query|ll)=(-?\d{1,2}\.\d+)%2C(-?\d{1,3}\.\d+)/);
-  if (m) return { lat: Number(m[2]), lng: Number(m[3]) };
-
-  m = decoded.match(/[?&](q|query|ll)=(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/);
-  if (m) return { lat: Number(m[2]), lng: Number(m[3]) };
-
-  // بعض الروابط تكون فيها /?q=lat,lng بدون فواصل واضحة
-  m = decoded.match(/\/\?q=(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/);
-  if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
-
-  return null;
+function extractMapsLink(messageRaw) {
+  const t = String(messageRaw || '');
+  const m = t.match(/https?:\/\/\S+/i);
+  if (!m) return null;
+  const url = m[0];
+  // accept most map links (google maps / goo.gl / openstreetmap)
+  if (/google\.[^/]+\/maps|goo\.gl\/maps|maps\.app\.goo\.gl|openstreetmap\.org/i.test(url)) return url;
+  return url;
 }
 
-// Yemen bounds (تقريبي)
-const YEMEN_BOUNDS = { minLat: 12.0, maxLat: 19.5, minLng: 41.0, maxLng: 54.7 };
-function isLikelyYemen(lat, lng) {
-  return lat >= YEMEN_BOUNDS.minLat && lat <= YEMEN_BOUNDS.maxLat && lng >= YEMEN_BOUNDS.minLng && lng <= YEMEN_BOUNDS.maxLng;
-}
-
-// =========================
-// Categories (match Firestore IDs exactly)
-// =========================
-const CATEGORY_CANON = [
-  { id: 'animals', nameAr: 'حيوانات' },
-  { id: 'cars', nameAr: 'سيارات' },
-  { id: 'clothes', nameAr: 'ملابس' },
-  { id: 'electronics', nameAr: 'إلكترونيات' },
-  { id: 'furniture', nameAr: 'أثاث' },
-  { id: 'heavy_equipment', nameAr: 'معدات ثقيلة' },
-  { id: 'home_tools', nameAr: 'منزل وأدوات' },
-  { id: 'jobs', nameAr: 'وظائف' },
-  { id: 'maintenance', nameAr: 'صيانة' },
-  { id: 'motorcycles', nameAr: 'دراجات نارية' },
-  { id: 'networks', nameAr: 'شبكات' },
-  { id: 'phones', nameAr: 'جوالات' },
-  { id: 'real_estate', nameAr: 'عقارات' },
-  { id: 'services', nameAr: 'خدمات' },
-  { id: 'solar', nameAr: 'طاقة شمسية' },
-  { id: 'other', nameAr: 'أخرى' },
-];
-
-const CATEGORY_ALIASES = new Map([
-  ['سيارات', 'cars'],
-  ['سيارة', 'cars'],
-  ['car', 'cars'],
-  ['cars', 'cars'],
-  ['كارس', 'cars'],
-
-  ['جوالات', 'phones'],
-  ['جوال', 'phones'],
-  ['هواتف', 'phones'],
-  ['فون', 'phones'],
-  ['phone', 'phones'],
-  ['phones', 'phones'],
-  ['mobile', 'phones'],
-  ['mobiles', 'phones'],
-
-  ['عقارات', 'real_estate'],
-  ['عقار', 'real_estate'],
-  ['اراضي', 'real_estate'],
-  ['أراضي', 'real_estate'],
-  ['realestate', 'real_estate'],
-  ['real estate', 'real_estate'],
-  ['real_estate', 'real_estate'],
-
-  ['الكترونيات', 'electronics'],
-  ['إلكترونيات', 'electronics'],
-  ['electronics', 'electronics'],
-  ['كمبيوتر', 'electronics'],
-  ['لاب توب', 'electronics'],
-  ['لابتوب', 'electronics'],
-
-  ['شبكات', 'networks'],
-  ['شبكة', 'networks'],
-  ['انترنت', 'networks'],
-  ['واي فاي', 'networks'],
-  ['networks', 'networks'],
-
-  ['خدمات', 'services'],
-  ['خدمة', 'services'],
-  ['services', 'services'],
-
-  ['طاقة شمسية', 'solar'],
-  ['شمسي', 'solar'],
-  ['solar', 'solar'],
-
-  ['صيانة', 'maintenance'],
-  ['maintenance', 'maintenance'],
-
-  ['معدات', 'heavy_equipment'],
-  ['معدات ثقيلة', 'heavy_equipment'],
-  ['heavy equipment', 'heavy_equipment'],
-  ['heavy_equipment', 'heavy_equipment'],
-
-  ['منزل', 'home_tools'],
-  ['بيت', 'home_tools'],
-  ['ادوات منزلية', 'home_tools'],
-  ['أدوات منزلية', 'home_tools'],
-  ['home tools', 'home_tools'],
-  ['home_tools', 'home_tools'],
-
-  ['اثاث', 'furniture'],
-  ['أثاث', 'furniture'],
-  ['furniture', 'furniture'],
-
-  ['ملابس', 'clothes'],
-  ['clothes', 'clothes'],
-
-  ['وظائف', 'jobs'],
-  ['وظيفة', 'jobs'],
-  ['jobs', 'jobs'],
-
-  ['حيوانات', 'animals'],
-  ['animals', 'animals'],
-
-  ['دراجات', 'motorcycles'],
-  ['دراجة', 'motorcycles'],
-  ['دراجات نارية', 'motorcycles'],
-  ['motorcycles', 'motorcycles'],
-
-  ['أخرى', 'other'],
-  ['اخرى', 'other'],
-  ['other', 'other'],
-]);
-
-function pickCategoryByNumber(n) {
-  const idx = Number(n) - 1;
-  if (!Number.isFinite(idx) || idx < 0 || idx >= CATEGORY_CANON.length) return null;
-  const c = CATEGORY_CANON[idx];
-  return { id: c.id, nameAr: c.nameAr };
-}
-
-function normalizeCategory(input) {
-  const raw = String(input || '').trim();
-  const t = normText(raw).replace(/[^\p{L}\p{N}\s_]/gu, '').trim();
-
-  const num = extractNumber(toEnglishDigits(t));
-  if (num && Number.isInteger(num)) {
-    const picked = pickCategoryByNumber(num);
-    if (picked) return picked;
-  }
-
-  if (CATEGORY_ALIASES.has(t)) {
-    const id = CATEGORY_ALIASES.get(t);
-    const found = CATEGORY_CANON.find((x) => x.id === id);
-    return found ? { id: found.id, nameAr: found.nameAr } : { id, nameAr: raw };
-  }
-
-  const direct = CATEGORY_CANON.find((x) => normText(x.id) === t);
-  if (direct) return { id: direct.id, nameAr: direct.nameAr };
-
-  for (const [alias, id] of CATEGORY_ALIASES.entries()) {
-    if (t.includes(alias)) {
-      const found = CATEGORY_CANON.find((x) => x.id === id);
-      return found ? { id: found.id, nameAr: found.nameAr } : { id, nameAr: raw };
+async function getRatesServer() {
+  if (!adminDb) return { sar: DEFAULT_SAR, usd: DEFAULT_USD };
+  
+  return cachedFetch('exchange_rates', async () => {
+    try {
+      const snap = await adminDb.collection('settings').doc('rates').get();
+      const raw = snap.exists ? snap.data() : null;
+      const sar = raw && raw.sar != null ? Number(raw.sar) : raw && raw.sarToYer != null ? Number(raw.sarToYer) : DEFAULT_SAR;
+      const usd = raw && raw.usd != null ? Number(raw.usd) : raw && raw.usdToYer != null ? Number(raw.usdToYer) : DEFAULT_USD;
+      return {
+        sar: sar > 0 ? sar : DEFAULT_SAR,
+        usd: usd > 0 ? usd : DEFAULT_USD,
+      };
+    } catch {
+      return { sar: DEFAULT_SAR, usd: DEFAULT_USD };
     }
-  }
-
-  return { id: 'other', nameAr: 'أخرى' };
-}
-
-function categoriesMenu() {
-  return CATEGORY_CANON.map((c, i) => `${i + 1}) ${c.nameAr}`).join('\n');
-}
-
-// =========================
-// Session storage (Firestore)
-// =========================
-async function getSession(sessionId) {
-  if (!sessionId) return null;
-  const ref = adminDb.collection(SESSIONS_COLLECTION).doc(sessionId);
-  const snap = await ref.get();
-  if (!snap.exists) return null;
-  return { id: sessionId, ...snap.data() };
-}
-
-async function upsertSession(sessionId, patch) {
-  const ref = adminDb.collection(SESSIONS_COLLECTION).doc(sessionId);
-  await ref.set(
-    {
-      ...patch,
-      updatedAt: nowTs(),
-    },
-    { merge: true }
-  );
-}
-
-function defaultSession() {
-  return {
-    mode: 'add_listing_only',
-    step: 'idle',
-    draft: {},
-    lastUser: '',
-    lastPrompt: '',
-    lastReplyHash: '',
-    createdAt: nowTs(),
-    updatedAt: nowTs(),
-  };
-}
-
-function avoidRepeatReply(session, reply) {
-  const h = crypto.createHash('sha1').update(reply).digest('hex');
-  if (session?.lastReplyHash && session.lastReplyHash === h) return null;
-  return h;
-}
-
-// =========================
-// Geocoding (Nominatim) + Cache
-// =========================
-function geocodeCacheKey(q) {
-  return crypto.createHash('sha1').update(normText(q)).digest('hex').slice(0, 24);
-}
-
-async function getGeocodeFromCache(q) {
-  const key = geocodeCacheKey(q);
-  const ref = adminDb.collection(GEOCODE_CACHE_COLLECTION).doc(key);
-  const snap = await ref.get();
-  if (!snap.exists) return null;
-  const data = snap.data() || {};
-  return data?.result || null;
-}
-
-async function setGeocodeCache(q, result) {
-  const key = geocodeCacheKey(q);
-  const ref = adminDb.collection(GEOCODE_CACHE_COLLECTION).doc(key);
-  await ref.set(
-    {
-      q: String(q || '').trim(),
-      result,
-      updatedAt: nowTs(),
-      createdAt: nowTs(),
-    },
-    { merge: true }
-  );
-}
-
-async function geocodePlaceNominatim(query) {
-  const q = String(query || '').trim();
-  if (!q) return { ok: false, error: 'EMPTY_QUERY' };
-
-  const cached = await getGeocodeFromCache(q);
-  if (cached) return { ok: true, ...cached, cached: true };
-
-  const url =
-    'https://nominatim.openstreetmap.org/search?' +
-    new URLSearchParams({
-      q,
-      format: 'json',
-      addressdetails: '1',
-      limit: '5',
-      countrycodes: 'ye',
-      'accept-language': 'ar',
-    }).toString();
-
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'User-Agent': 'sooqyemen/1.0 (contact: support@sooqyemen.local)',
-      Accept: 'application/json',
-    },
   });
-
-  if (!res.ok) return { ok: false, error: 'GEOCODE_HTTP', status: res.status };
-
-  const arr = await res.json().catch(() => null);
-  if (!Array.isArray(arr) || arr.length === 0) {
-    const pack = { ok: false, error: 'NO_RESULTS' };
-    await setGeocodeCache(q, { ok: false, error: 'NO_RESULTS' });
-    return pack;
-  }
-
-  const mapped = arr
-    .map((x) => ({
-      display: x.display_name,
-      lat: Number(x.lat),
-      lng: Number(x.lon),
-      importance: Number(x.importance || 0),
-    }))
-    .filter((x) => Number.isFinite(x.lat) && Number.isFinite(x.lng));
-
-  const inside = mapped.filter((x) => isLikelyYemen(x.lat, x.lng));
-  const pickFrom = inside.length ? inside : mapped;
-
-  pickFrom.sort((a, b) => (b.importance || 0) - (a.importance || 0));
-  const options = pickFrom.slice(0, 3);
-
-  const payload =
-    options.length === 1
-      ? { ok: true, single: true, lat: options[0].lat, lng: options[0].lng, display: options[0].display }
-      : { ok: true, single: false, options };
-
-  await setGeocodeCache(q, payload);
-  return payload;
 }
 
-// =========================
-// Listing publish (idempotency)
-// =========================
-async function publishListing(draft, sessionId) {
-  const idemKey = crypto
-    .createHash('sha1')
-    .update(JSON.stringify({ sessionId, draft }))
-    .digest('hex')
-    .slice(0, 24);
-
-  const idemRef = adminDb.collection(IDEMPOTENCY_COLLECTION).doc(idemKey);
-  const idemSnap = await idemRef.get();
-  if (idemSnap.exists) {
-    const data = idemSnap.data() || {};
-    return { ok: true, already: true, listingId: data.listingId || null };
-  }
-
-  const listingId = shortId(20);
-
-  const payload = {
-    id: listingId,
-
-    title: String(draft.title || '').trim(),
-    description: String(draft.description || '').trim(),
-
-    category: draft.categorySlug || 'other',
-    categorySlug: draft.categorySlug || 'other',
-    categoryName: draft.categoryName || 'أخرى',
-
-    city: String(draft.city || '').trim(),
-
-    price: draft.price,
-    currency: draft.currency,
-
-    contactRaw: String(draft.contactRaw || '').trim(),
-    contact: String(draft.contact || '').trim(),
-
-    images: Array.isArray(draft.images) ? draft.images : [],
-
-    lat: draft.lat,
-    lng: draft.lng,
-
-    status: 'active',
-    source: 'assistant',
-
-    createdAt: nowTs(),
-    updatedAt: nowTs(),
-  };
-
-  const missing = [];
-  if (!payload.title || payload.title.length < 3) missing.push('title');
-  if (!payload.description || payload.description.length < 10) missing.push('description');
-  if (!payload.city || payload.city.length < 2) missing.push('city');
-  if (!payload.categorySlug) missing.push('category');
-  if (!Number.isFinite(payload.price) || payload.price <= 0) missing.push('price');
-  if (!payload.currency) missing.push('currency');
-  if (!payload.contact || !isValidContactLocalOrIntl(payload.contact)) missing.push('contact');
-  if (!Number.isFinite(payload.lat) || !Number.isFinite(payload.lng)) missing.push('location');
-  if (!Array.isArray(payload.images) || payload.images.length === 0) missing.push('images');
-
-  if (missing.length) return { ok: false, error: 'MISSING_FIELDS', missing };
-
-  await adminDb.collection(LISTINGS_COLLECTION).doc(listingId).set(payload);
-  await idemRef.set({ listingId, createdAt: nowTs() });
-
-  return { ok: true, already: false, listingId };
+function toYERServer(amount, currency, rates) {
+  const v = Number(amount || 0);
+  if (!v || !isFinite(v)) return 0;
+  if (currency === 'SAR') return Math.round(v * (rates?.sar || DEFAULT_SAR));
+  if (currency === 'USD') return Math.round(v * (rates?.usd || DEFAULT_USD));
+  return Math.round(v);
 }
 
-// =========================
-// Wizard (Order 1)
-// title -> description -> category -> city -> location -> price -> currency(if needed) -> contact -> images -> confirm/publish
-// =========================
-function buildSummary(draft) {
-  const lines = [];
-  lines.push(`• العنوان: ${draft.title || '-'}`);
-  lines.push(`• الوصف: ${draft.description || '-'}`);
-  lines.push(`• القسم: ${draft.categoryName || '-'} (${draft.categorySlug || '-'})`);
-  lines.push(`• المدينة: ${draft.city || '-'}`);
-  lines.push(`• الموقع: ${draft.lat && draft.lng ? `${draft.lat}, ${draft.lng}` : '-'}`);
-  lines.push(`• السعر: ${draft.price ? `${draft.price} ${draft.currency || ''}`.trim() : '-'}`);
-  lines.push(`• التواصل: ${draft.contactRaw || draft.contact || '-'}`);
-  lines.push(`• الصور: ${Array.isArray(draft.images) && draft.images.length ? `(${draft.images.length})` : '-'}`);
+async function loadDraft(uid) {
+  if (!adminDb) return null;
+  const ref = adminDb.collection(DRAFTS_COLLECTION).doc(uid);
+  const snap = await ref.get();
+  return snap.exists ? snap.data() : null;
+}
+
+async function saveDraft(uid, data) {
+  if (!adminDb) return;
+  const ref = adminDb.collection(DRAFTS_COLLECTION).doc(uid);
+  await ref.set(
+    {
+      ...data,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+async function clearDraft(uid) {
+  if (!adminDb) return;
+  await adminDb.collection(DRAFTS_COLLECTION).doc(uid).delete();
+}
+
+function categoriesHint() {
+  const lines = CATEGORIES.map((c) => `• ${c.name} (${c.slug})`);
   return lines.join('\n');
 }
 
-function nextPrompt(step, draft) {
-  switch (step) {
-    case 'ask_title':
-      return `تمام ✅ اكتب *عنوان الإعلان* (قصير وواضح).`;
-    case 'ask_description':
-      return `اكتب *وصف الإعلان* (تفاصيل + الحالة + أي ملاحظات).`;
-    case 'ask_category':
-      return `اختر *القسم* (اكتب رقم أو اسم القسم):\n${categoriesMenu()}`;
-    case 'ask_city':
-      return `اكتب *المدينة/المنطقة* (ويُفضّل تضيف الحي إذا تعرفه مثل: صنعاء، حدة).`;
-    case 'ask_location':
-      return (
-        `حدد *الموقع* (إلزامي لظهور الإعلان على الخريطة):\n` +
-        `- اكتب اسم المكان: "صنعاء، حدة"\n` +
-        `- أو ارسل إحداثيات: 15.3694, 44.1910\n` +
-        `- أو ارسل رابط Google Maps (وأستخرج الإحداثيات تلقائياً)`
-      );
-    case 'choose_location':
-      return `اختر رقم الموقع الصحيح من الخيارات.`;
-    case 'ask_price':
-      return `اكتب *السعر*.\nمثال: 1000 سعودي / 35000 يمني / 200 دولار / "ألف ريال سعودي"`;
-    case 'ask_currency':
-      return `حدد *العملة*: يمني / سعودي / دولار`;
-    case 'ask_contact':
-      return `اكتب *رقم التواصل* (إلزامي) بدون مفتاح دولي عادي.\nمثال: 777123456`;
-    case 'ask_images':
-      return `ارسل *الصور* عبر زر رفع الصور أو أرسل روابط الصور هنا.\nوعندما تخلص اكتب: تم`;
-    case 'confirm':
-      return `راجع الإعلان قبل النشر:\n${buildSummary(draft)}\n\nإذا تمام اكتب: نشر\nأو اكتب: تعديل العنوان / تعديل الوصف / تعديل القسم / تعديل المدينة / تعديل الموقع / تعديل السعر / تعديل العملة / تعديل التواصل / تعديل الصور\nوللإلغاء: إلغاء`;
-    default:
-      return `اكتب "إضافة إعلان" للبدء.`;
+function draftSummary(d) {
+  const data = d?.data || {};
+  const parts = [];
+  if (data.category) parts.push(`القسم: ${categoryNameFromSlug(data.category)}`);
+  if (data.title) parts.push(`العنوان: ${data.title}`);
+  if (data.description) parts.push(`الوصف: ${data.description}`);
+  if (data.city) parts.push(`المدينة: ${data.city}`);
+  if (data.phone) parts.push(`الجوال: ${data.phone}`);
+  if (data.locationLabel) parts.push(`الموقع: ${data.locationLabel}`);
+  if (data.lat != null && data.lng != null) parts.push(`الإحداثيات: ${data.lat}, ${data.lng}`);
+  if (data.originalPrice) {
+    parts.push(`السعر: ${data.originalPrice} ${data.originalCurrency || 'YER'}`);
+  }
+  if (Array.isArray(data.images) && data.images.length) {
+    parts.push(`الصور: ${data.images.length}`);
+  }
+  return parts.join('\n');
+}
+
+function listingNextPrompt(step, draft) {
+  if (step === 'category') {
+    return (
+      'الخطوة 1/7: اختر القسم (اكتب اسم القسم):\n' +
+      categoriesHint() +
+      '\n\n(تقدر تلغي بأي وقت بكتابة: إلغاء)'
+    );
+  }
+
+  if (step === 'title') {
+    return 'الخطوة 2/7: اكتب عنوان الإعلان.';
+  }
+
+  if (step === 'description') {
+    return 'الخطوة 3/7: اكتب وصف الإعلان (على الأقل 10 أحرف).';
+  }
+
+  if (step === 'city') {
+    return 'الخطوة 4/7: اكتب اسم المدينة.';
+  }
+
+  if (step === 'phone') {
+    return 'الخطوة 5/7: اكتب رقم الجوال للتواصل (مثال: 777123456 أو +967777123456).';
+  }
+
+  if (step === 'location') {
+    return (
+      'الخطوة 6/7: حدّد موقع الإعلان.\n' +
+      '• اضغط زر "📍 موقعي" داخل الشات لإرسال الإحداثيات تلقائياً\n' +
+      '• أو اكتب الإحداثيات بهذا الشكل: 15.3694, 44.1910\n' +
+      '• أو أرسل رابط خرائط جوجل\n\n' +
+      'تقدر أيضاً تكتب اسم الحي/المنطقة (مثال: صنعاء - حدة).'
+    );
+  }
+
+  if (step === 'price') {
+    return 'الخطوة 7/7: اكتب السعر (مثال: 100000) ويمكن تكتب العملة معها مثل: 100 USD أو 100 SAR.';
+  }
+
+  return (
+    'هذه مسودة الإعلان الحالية:\n\n' +
+    draftSummary(draft) +
+    '\n\nيمكنك إضافة صور الآن عبر زر 📷 صور داخل الشات.\n\nإذا كل شيء تمام اكتب: نشر\nأو اكتب: إلغاء لإلغاء المسودة.'
+  );
+}
+
+function normalizeHistory(history) {
+  if (!Array.isArray(history)) return [];
+  return history
+    .filter((entry) => entry && typeof entry === 'object')
+    .map((entry) => ({
+      role: entry.role === 'assistant' ? 'assistant' : 'user',
+      content: String(entry.content || entry.text || '').trim(),
+    }))
+    .filter((entry) => entry.content);
+}
+
+function sanitizeCurrency(currency) {
+  if (currency === 'SAR' || currency === 'USD' || currency === 'YER') return currency;
+  return 'YER';
+}
+
+function safeJsonParse(text) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    return null;
   }
 }
 
-function applyEditCommand(text) {
-  const t = normText(text);
-  if (!t.startsWith('تعديل')) return null;
-  if (t.includes('عنوان')) return 'ask_title';
-  if (t.includes('وصف')) return 'ask_description';
-  if (t.includes('قسم')) return 'ask_category';
-  if (t.includes('مدينة') || t.includes('المدينة')) return 'ask_city';
-  if (t.includes('موقع') || t.includes('الموقع')) return 'ask_location';
-  if (t.includes('سعر') || t.includes('السعر')) return 'ask_price';
-  if (t.includes('عملة') || t.includes('العملة')) return 'ask_currency';
-  if (t.includes('تواصل') || t.includes('رقم')) return 'ask_contact';
-  if (t.includes('صور') || t.includes('الصورة') || t.includes('الصوره')) return 'ask_images';
+// =========================
+// Auto extraction محسن
+// =========================
+
+function extractFirstPhone(messageRaw) {
+  const t = String(messageRaw || '');
+  // Grab likely phone sequences: +digits or long digit groups
+  const candidates = t.match(/\+?\d[\d\s\-()]{6,}\d/g) || [];
+  for (const c of candidates) {
+    const normalized = normalizePhone(c);
+    if (normalized && isValidPhone(normalized)) return normalized;
+  }
+  // fallback: any 7-15 digits
+  const digitsOnly = t.replace(/[^0-9\s]/g, ' ');
+  const groups = digitsOnly.split(/\s+/).filter(Boolean);
+  for (const g of groups) {
+    if (g.length >= 7 && g.length <= 15) {
+      const normalized = normalizePhone(g);
+      if (normalized && isValidPhone(normalized)) return normalized;
+    }
+  }
   return null;
 }
 
-function extractUrls(text) {
-  const s = String(text || '');
-  const urls = s.match(/https?:\/\/[^\s]+/g) || [];
-  return urls.map((u) => u.replace(/[),.]+$/g, '')).filter(Boolean);
+function looksLikeListingDetails(messageRaw, meta) {
+  const t = normalizeText(messageRaw);
+  const hasDigits = /\d/.test(t);
+  const hasPriceHints = hasDigits && (t.includes('سعر') || t.includes('ريال') || t.includes('دولار') || t.includes('sar') || t.includes('usd') || t.includes('$'));
+  const hasSellingWords = t.includes('للبيع') || t.includes('معروض') || t.includes('مطلوب') || t.includes('عرض');
+  const hasCategory = Boolean(detectCategorySlug(t));
+  const phone = extractFirstPhone(messageRaw);
+  const hasPhone = Boolean(phone);
+  const hasLocation =
+    meta?.location?.lat != null ||
+    meta?.location?.lng != null ||
+    Boolean(extractLatLngFromText(messageRaw)) ||
+    Boolean(extractMapsLink(messageRaw));
+  const hasImages = Array.isArray(meta?.images) && meta.images.length > 0;
+
+  return (
+    (hasPhone && (hasPriceHints || hasCategory || hasSellingWords)) ||
+    (hasPriceHints && hasCategory && (hasSellingWords || hasLocation)) ||
+    (hasImages && (hasCategory || hasSellingWords))
+  );
 }
 
-// يلتقط روابط صور من body.images إن وُجدت (واجهة الزر)
-function extractImageUrlsFromBodyImages(bodyImages) {
-  if (!Array.isArray(bodyImages)) return [];
-  return bodyImages
-    .map((x) => {
-      if (typeof x === 'string') return x;
-      if (x && typeof x === 'object') return x.url || x.downloadURL || x.src || '';
-      return '';
-    })
-    .filter((u) => typeof u === 'string' && u.startsWith('http'));
+function shouldAutoExtractInWizard(messageRaw) {
+  const raw = String(messageRaw || '').trim();
+  const t = normalizeText(raw);
+  if (!t) return false;
+  if (t.length >= 20) return true;
+  if (/\n/.test(raw)) return true;
+  if (extractFirstPhone(raw)) return true;
+  if (/\d/.test(t) && (t.includes('سعر') || t.includes('ريال') || t.includes('دولار') || t.includes('sar') || t.includes('usd') || t.includes('$'))) return true;
+  if (t.includes('للبيع') || t.includes('معروض') || t.includes('مطلوب')) return true;
+  if (t.includes('عنوان') || t.includes('وصف') || t.includes('مدينة') || t.includes('المدينة')) return true;
+  if (Boolean(extractLatLngFromText(raw)) || Boolean(extractMapsLink(raw))) return true;
+  return false;
 }
 
-async function handleWizard(session, userMessage, sessionId, bodyImages = null) {
-  const raw = String(userMessage || '').trim();
+function computeDraftStep(data) {
+  const d = data || {};
+  const hasLocation = (d.lat != null && d.lng != null) || (d.locationLabel && String(d.locationLabel).trim().length >= 2);
+  if (!d.category) return 'category';
+  if (!d.title) return 'title';
+  if (!d.description) return 'description';
+  if (!d.city) return 'city';
+  if (!d.phone) return 'phone';
+  if (!hasLocation) return 'location';
+  if (!d.originalPrice) return 'price';
+  return 'confirm';
+}
 
-  if (isCancel(raw)) {
-    await upsertSession(sessionId, { ...defaultSession(), step: 'idle', draft: {} });
-    return { reply: `تم الإلغاء ✅\nإذا تبغى تبدأ من جديد اكتب: إضافة إعلان`, step: 'idle', draft: {} };
+function mergeExtractedListingIntoDraftData(oldData, listing) {
+  const prev = oldData || {};
+  const next = { ...prev };
+  const changed = [];
+
+  const catRaw = listing?.category || listing?.categorySlug || null;
+  const cat = catRaw ? detectCategorySlug(String(catRaw)) : null;
+  if (cat && next.category !== cat) {
+    next.category = cat;
+    changed.push('category');
   }
 
-  if (session.step === 'idle' || isStartAdd(raw)) {
-    const step = 'ask_title';
-    const draft = {};
-    return { reply: nextPrompt(step, draft), step, draft };
+  const title = listing?.title ? String(listing.title).trim() : null;
+  if (title && title.length >= 3 && next.title !== title) {
+    next.title = title;
+    changed.push('title');
   }
 
-  const editStep = applyEditCommand(raw);
-  if (session.step === 'confirm' && editStep) {
-    return { reply: nextPrompt(editStep, session.draft || {}), step: editStep, draft: session.draft || {} };
+  const description = listing?.description ? String(listing.description).trim() : null;
+  if (description && description.length >= 5 && next.description !== description) {
+    next.description = description;
+    changed.push('description');
   }
 
-  if (session.step === 'confirm' && isPublish(raw)) {
-    const draft = session.draft || {};
-    const res = await publishListing(draft, sessionId);
+  const city = listing?.city ? String(listing.city).trim() : null;
+  if (city && city.length >= 2 && next.city !== city) {
+    next.city = city;
+    changed.push('city');
+  }
 
-    if (!res.ok) {
-      return {
-        reply: `ما قدرت أنشر الإعلان لأن في بيانات ناقصة/غير صحيحة: ${Array.isArray(res.missing) ? res.missing.join(', ') : res.error}\n\n${nextPrompt('confirm', draft)}`,
-        step: 'confirm',
-        draft,
-      };
+  const phone = listing?.phone ? normalizePhone(listing.phone) : null;
+  if (phone && isValidPhone(phone) && next.phone !== phone) {
+    next.phone = phone;
+    changed.push('phone');
+  }
+
+  const locationLabel = listing?.locationLabel ? String(listing.locationLabel).trim() : null;
+  if (locationLabel && locationLabel.length >= 2 && next.locationLabel !== locationLabel) {
+    next.locationLabel = locationLabel;
+    changed.push('locationLabel');
+  }
+
+  if (listing?.lat != null && listing?.lng != null) {
+    const lat = Number(listing.lat);
+    const lng = Number(listing.lng);
+    if (isFinite(lat) && isFinite(lng)) {
+      if (next.lat !== lat || next.lng !== lng) {
+        next.lat = lat;
+        next.lng = lng;
+        changed.push('coords');
+      }
+    }
+  }
+
+  if (listing?.price != null) {
+    const price = Number(listing.price);
+    if (isFinite(price) && price > 0 && next.originalPrice !== price) {
+      next.originalPrice = price;
+      changed.push('price');
+    }
+  }
+
+  if (listing?.currency) {
+    const cur = sanitizeCurrency(String(listing.currency).toUpperCase());
+    if (cur && next.originalCurrency !== cur) {
+      next.originalCurrency = cur;
+      changed.push('currency');
+    }
+  }
+
+  // Keep images as-is (they are handled separately)
+
+  return { next, changed };
+}
+
+async function runListingExtractorGemini(message) {
+  if (!GEMINI_API_KEY) return { ok: false };
+
+  const categoriesGuide = CATEGORIES.map((c) => `${c.slug}: ${c.name}`).join('\n');
+
+  const schema = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      categorySlug: { type: ['string', 'null'] },
+      title: { type: ['string', 'null'] },
+      description: { type: ['string', 'null'] },
+      city: { type: ['string', 'null'] },
+      phone: { type: ['string', 'null'] },
+      locationLabel: { type: ['string', 'null'] },
+      lat: { type: ['number', 'null'] },
+      lng: { type: ['number', 'null'] },
+      price: { type: ['number', 'null'] },
+      currency: { type: ['string', 'null'] },
+    },
+    required: [],
+  };
+
+  const systemPrompt =
+    'أنت مستخرج بيانات لإعلانات في موقع سوق اليمن.\n' +
+    'مهمتك: اقرأ نص المستخدم واستخرج (فقط مما ذُكر) بيانات الإعلان في JSON.\n' +
+    'لا تخترع معلومات غير موجودة. إذا غير مذكور ضع null.\n' +
+    'حوّل الأرقام العربية مثل "100 الف" إلى رقم 100000 إن أمكن.\n' +
+    'العملة: استخدم واحداً من YER أو SAR أو USD إن أمكن، وإلا null.\n' +
+    'categorySlug: اختر أقرب تصنيف من القائمة التالية (اكتب الـ slug فقط) أو null.\n' +
+    'إذا لم يوجد عنوان صريح، اصنع عنواناً قصيراً (مستند على النص) بدون اختراع مواصفات.\n' +
+    '\n' +
+    'التصنيفات المتاحة (slug: الاسم):\n' +
+    categoriesGuide;
+
+  try {
+    const response = await fetchWithTimeout(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { role: 'system', parts: [{ text: systemPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: String(message || '') }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: schema,
+          },
+        }),
+      },
+      OPENAI_TIMEOUT_MS
+    );
+
+    if (!response.ok) return { ok: false };
+    const data = await response.json();
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!rawText) return { ok: false };
+    const parsed = safeJsonParse(rawText);
+    if (!parsed || typeof parsed !== 'object') return { ok: false };
+    return { ok: true, listing: parsed };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function tryExtractPriceHeuristic(messageRaw) {
+  const raw = String(messageRaw || '');
+  const t = normalizeText(raw);
+  // Prefer patterns like: سعر 100000 or 100 SAR
+  const m1 = raw.match(/(?:سعر|السعر)\s*[:\-]?\s*(\d+(?:\.\d+)?)/i);
+  if (m1) return Number(m1[1]);
+  // currency nearby
+  const m2 = raw.match(/(\d+(?:\.\d+)?)\s*(sar|usd|\$|ريال سعودي|ريال|ر\.ي|دولار)/i);
+  if (m2) return Number(m2[1]);
+  // fallback: any number but avoid phone-like
+  const n = extractNumber(raw);
+  if (!n) return null;
+  const phone = extractFirstPhone(raw);
+  if (phone) {
+    const digits = normalizePhone(phone).replace(/[^0-9]/g, '');
+    if (String(n).replace(/\D/g, '') === digits) return null;
+  }
+  return n;
+}
+
+async function extractListingDetailsFromMessage(messageRaw, meta) {
+  const raw = String(messageRaw || '').trim();
+  const out = {
+    category: null,
+    title: null,
+    description: null,
+    city: null,
+    phone: null,
+    locationLabel: null,
+    lat: null,
+    lng: null,
+    price: null,
+    currency: null,
+  };
+
+  // 1) Gemini extractor (best for title/description/city)
+  const ai = await runListingExtractorGemini(raw);
+  if (ai.ok && ai.listing) {
+    const l = ai.listing;
+    if (l.categorySlug) out.category = String(l.categorySlug);
+    if (l.title) out.title = String(l.title);
+    if (l.description) out.description = String(l.description);
+    if (l.city) out.city = String(l.city);
+    if (l.phone) out.phone = String(l.phone);
+    if (l.locationLabel) out.locationLabel = String(l.locationLabel);
+    if (l.lat != null && l.lng != null) {
+      out.lat = Number(l.lat);
+      out.lng = Number(l.lng);
+    }
+    if (l.price != null) out.price = Number(l.price);
+    if (l.currency) out.currency = String(l.currency);
+  }
+
+  // 2) Heuristics fill missing fields safely
+  if (!out.category) {
+    const c = detectCategorySlug(raw);
+    if (c) out.category = c;
+  }
+
+  if (!out.phone) {
+    const p = extractFirstPhone(raw);
+    if (p) out.phone = p;
+  }
+
+  // location from meta first
+  if (meta?.location?.lat != null && meta?.location?.lng != null) {
+    const lat = Number(meta.location.lat);
+    const lng = Number(meta.location.lng);
+    if (isFinite(lat) && isFinite(lng)) {
+      out.lat = lat;
+      out.lng = lng;
+    }
+  }
+
+  if (out.lat == null || out.lng == null) {
+    const coords = extractLatLngFromText(raw);
+    if (coords) {
+      out.lat = coords.lat;
+      out.lng = coords.lng;
+    }
+  }
+
+  if (!out.locationLabel) {
+    const link = extractMapsLink(raw);
+    if (link) out.locationLabel = `رابط الموقع: ${link}`;
+  }
+
+  if (!out.price) {
+    const p = tryExtractPriceHeuristic(raw);
+    if (p && isFinite(p) && p > 0) out.price = p;
+  }
+
+  if (!out.currency) {
+    const cur = detectCurrency(raw);
+    if (cur) out.currency = cur;
+  }
+
+  return out;
+}
+
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function runModeration(text) {
+  if (!OPENAI_API_KEY) return { ok: true };
+  try {
+    const response = await fetchWithTimeout(
+      'https://api.openai.com/v1/moderations',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'omni-moderation-latest',
+          input: text,
+        }),
+      },
+      OPENAI_TIMEOUT_MS
+    );
+
+    if (!response.ok) return { ok: true };
+    const data = await response.json();
+    const flagged = Boolean(data?.results?.[0]?.flagged);
+    return { ok: !flagged };
+  } catch (error) {
+    return { ok: true };
+  }
+}
+
+async function runAiFallback({ message, history }) {
+  const hasOpenAi = Boolean(OPENAI_API_KEY);
+  const hasGemini = Boolean(GEMINI_API_KEY);
+
+  if (!hasOpenAi && !hasGemini) {
+    return {
+      ok: false,
+      reply:
+        'ما فهمت سؤالك تماماً 🤔\n\n' +
+        'أمثلة سريعة:\n' +
+        '• كيف أضيف إعلان؟\n' +
+        '• أضف إعلان (لبدء إضافة إعلان من الشات)\n' +
+        '• كيف أبحث عن سيارات؟\n\n' +
+        'حاول تكتب سؤالك بصياغة أبسط وسأساعدك.',
+    };
+  }
+
+  const schema = {
+    name: 'assistant_response',
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['none', 'create_listing', 'count_listings'],
+        },
+        reply: { type: 'string' },
+        category: { type: ['string', 'null'] },
+        listing: {
+          type: ['object', 'null'],
+          additionalProperties: false,
+          properties: {
+            category: { type: ['string', 'null'] },
+            title: { type: ['string', 'null'] },
+            description: { type: ['string', 'null'] },
+            city: { type: ['string', 'null'] },
+            locationLabel: { type: ['string', 'null'] },
+            lat: { type: ['number', 'null'] },
+            lng: { type: ['number', 'null'] },
+            price: { type: ['number', 'null'] },
+            currency: { type: ['string', 'null'] },
+            phone: { type: ['string', 'null'] },
+          },
+        },
+      },
+      required: ['action', 'reply'],
+    },
+  };
+
+  const categoriesGuide = CATEGORIES.map((c) => `${c.slug}: ${c.name}`).join('\n');
+  const siteRoutes =
+    'روابط مهمة داخل الموقع (استخدمها عند اللزوم):\n' +
+    '• إضافة إعلان: /add\n' +
+    '• الفئات: /categories\n' +
+    '• تسجيل الدخول: /login\n' +
+    '• إنشاء حساب: /register\n' +
+    '• المساعدة: /help\n' +
+    '• تواصل معنا: /contact\n' +
+    '• الشروط: /terms\n' +
+    '• الخصوصية: /privacy\n' +
+    '• الأسعار: /pricing\n' +
+    '• الحماية: /protection\n' +
+    '• المفضلة: /favorites\n';
+
+  const systemPrompt =
+    'أنت مساعد ذكي لموقع سوق اليمن.\n' +
+    'هدفك: الإجابة على استفسارات المستخدم عن الموقع (إعلانات/مزادات/تسجيل/تواصل/فئات).\n' +
+    'التزم بالمعلومات العامة، وإذا ما عندك معلومة مؤكدة لا تخترع—اطلب توضيح أو وجّه المستخدم إلى /help أو /contact.\n' +
+    'حاول دائماً إضافة رابط مناسب داخل الموقع عند إعطاء إرشادات.\n' +
+    '\n' +
+    siteRoutes +
+    '\n' +
+    'قواعد اختيار action:\n' +
+    '• إذا كانت نية المستخدم بيع/عرض/إضافة إعلان اختر action=create_listing وحاول استخراج البيانات المتاحة.\n' +
+    '• إذا كان السؤال عن "كم/عدد" للإعلانات اختر action=count_listings وحدد category إن وجدت.\n' +
+    '• خلاف ذلك اختر action=none مع رد مباشر وواضح.\n' +
+    '\n' +
+    'التصنيفات المتاحة (slug: الاسم):\n' +
+    categoriesGuide;
+
+  try {
+    // ✅ افتراضيًا: استخدم Gemini أولاً إن كان متاحاً
+    if (hasGemini && ASSISTANT_PREFER_GEMINI) {
+      const normalizedHistory = normalizeHistory(history);
+      const contents = [
+        ...normalizedHistory.map((entry) => ({
+          role: entry.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: entry.content }],
+        })),
+        { role: 'user', parts: [{ text: message }] },
+      ];
+
+      const response = await fetchWithTimeout(
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            systemInstruction: {
+              role: 'system',
+              parts: [{ text: systemPrompt }],
+            },
+            contents,
+            generationConfig: {
+              responseMimeType: 'application/json',
+              responseSchema: schema.schema,
+            },
+          }),
+        },
+        OPENAI_TIMEOUT_MS
+      );
+
+      if (!response.ok) {
+        // لو Gemini فشل، نجرب OpenAI إذا متاح
+        if (!hasOpenAi) return { ok: false };
+      } else {
+        const data = await response.json();
+        const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (!rawText) return { ok: false };
+        const parsed = safeJsonParse(rawText);
+        if (!parsed) return { ok: false };
+        return { ok: true, ...parsed };
+      }
     }
 
-    const msg = res.already
-      ? `هذا الإعلان تم نشره مسبقاً ✅\nرقم الإعلان: ${res.listingId || '-'}\n\nتبغى تضيف إعلان ثاني؟ اكتب: إضافة إعلان`
-      : `تم نشر الإعلان بنجاح ✅\nرقم الإعلان: ${res.listingId}\n\nتبغى تضيف إعلان ثاني؟ اكتب: إضافة إعلان`;
+    // OpenAI كخيار احتياطي
+    if (hasOpenAi) {
+      const moderation = await runModeration(message);
+      if (!moderation.ok) {
+        return {
+          ok: true,
+          action: 'none',
+          reply: 'عذراً، لا يمكنني المساعدة في هذا الطلب.',
+        };
+      }
 
-    return { reply: msg, step: 'idle', draft: {} };
-  }
+      const messages = [
+        { role: 'system', content: [{ type: 'text', text: systemPrompt }] },
+        ...normalizeHistory(history).map((entry) => ({
+          role: entry.role,
+          content: [{ type: 'text', text: entry.content }],
+        })),
+        { role: 'user', content: [{ type: 'text', text: message }] },
+      ];
 
-  const draft = session.draft || {};
-  let step = session.step;
+      const response = await fetchWithTimeout(
+        'https://api.openai.com/v1/responses',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: OPENAI_MODEL,
+            input: messages,
+            response_format: {
+              type: 'json_schema',
+              json_schema: schema,
+            },
+          }),
+        },
+        OPENAI_TIMEOUT_MS
+      );
 
-  // ==== order steps ====
+      if (!response.ok) {
+        return { ok: false };
+      }
 
-  if (step === 'ask_title') {
-    const title = String(raw || '').trim();
-    if (title.length < 3) return { reply: `العنوان قصير. اكتب عنوان أوضح.`, step, draft };
-    draft.title = title.slice(0, 120);
-    step = 'ask_description';
-    return { reply: nextPrompt(step, draft), step, draft };
-  }
+      const data = await response.json();
+      const rawText =
+        data?.output?.[0]?.content?.[0]?.text ||
+        data?.output_text ||
+        data?.output?.[0]?.content?.[0]?.input_text ||
+        '';
+      if (!rawText) return { ok: false };
+      const parsed = safeJsonParse(rawText);
+      if (!parsed) return { ok: false };
 
-  if (step === 'ask_description') {
-    const desc = String(raw || '').trim();
-    if (desc.length < 10) return { reply: `الوصف قصير. اكتب تفاصيل أكثر.`, step, draft };
-    draft.description = desc.slice(0, 2500);
-    step = 'ask_category';
-    return { reply: nextPrompt(step, draft), step, draft };
-  }
+      const outputModeration = await runModeration(parsed.reply || '');
+      if (!outputModeration.ok) {
+        return { ok: true, action: 'none', reply: 'عذراً، لا يمكنني المساعدة في هذا الطلب.' };
+      }
 
-  if (step === 'ask_category') {
-    const cat = normalizeCategory(raw);
-    draft.categorySlug = cat.id;
-    draft.categoryName = cat.nameAr;
-    step = 'ask_city';
-    return { reply: nextPrompt(step, draft), step, draft };
-  }
-
-  if (step === 'ask_city') {
-    const city = String(raw || '').trim();
-    if (city.length < 2) return { reply: `اكتب المدينة بشكل أوضح (مثال: صنعاء، حدة).`, step, draft };
-    draft.city = city.slice(0, 80);
-    step = 'ask_location';
-    return { reply: nextPrompt(step, draft), step, draft };
-  }
-
-  if (step === 'ask_location') {
-    const msg = toEnglishDigits(raw);
-
-    // 1) lat,lng as text
-    const ll = extractLatLng(msg);
-    if (ll) {
-      draft.lat = ll.lat;
-      draft.lng = ll.lng;
-      step = 'ask_price';
-      return { reply: nextPrompt(step, draft), step, draft };
+      return { ok: true, ...parsed };
     }
 
-    // 2) Google Maps URL
-    const fromMaps = extractLatLngFromGoogleMapsUrl(raw);
-    if (fromMaps && Number.isFinite(fromMaps.lat) && Number.isFinite(fromMaps.lng)) {
-      draft.lat = fromMaps.lat;
-      draft.lng = fromMaps.lng;
-      step = 'ask_price';
-      return { reply: `تم استخراج الموقع من رابط الخرائط ✅\n\n${nextPrompt(step, draft)}`, step, draft };
+    // لو ما توفر أي مزود
+    return { ok: false };
+  } catch (error) {
+    return { ok: false };
+  }
+}
+
+async function startDraftFromAi(user, listing) {
+  const data = {};
+  const categoryRaw = listing?.category || '';
+  const category = categoryRaw ? detectCategorySlug(categoryRaw) : null;
+  if (category) data.category = category;
+  if (listing?.title) data.title = String(listing.title).trim();
+  if (listing?.description) data.description = String(listing.description).trim();
+  if (listing?.city) data.city = String(listing.city).trim();
+  if (listing?.locationLabel) data.locationLabel = String(listing.locationLabel).trim();
+  if (listing?.lat != null && listing?.lng != null) {
+    const lat = Number(listing.lat);
+    const lng = Number(listing.lng);
+    if (isFinite(lat) && isFinite(lng)) {
+      data.lat = lat;
+      data.lng = lng;
+    }
+  }
+  if (listing?.price) data.originalPrice = Number(listing.price);
+  if (listing?.currency) data.originalCurrency = sanitizeCurrency(String(listing.currency).toUpperCase());
+  if (listing?.phone) data.phone = String(listing.phone).trim();
+
+  const step = computeDraftStep(data);
+
+  await saveDraft(user.uid, { step, data });
+  return { step, data };
+}
+
+async function handleListingWizard({ user, message, meta }) {
+  // هذه الميزة تتطلب Admin SDK حتى نتحقق من التوكن ونكتب على Firestore
+  if (!adminDb || !adminAuth) {
+    return { reply: adminNotReadyMessage() };
+  }
+
+  // تحليل النية والمشاعر
+  const analysis = await analyzeIntentAndSentiment(message);
+  
+  if (analysis.intents.isThanking) {
+    return { reply: 'العفو! 😊 سعيد لأنني استطعت مساعدتك. هل هناك شيء آخر تحتاجه؟' };
+  }
+  
+  if (analysis.intents.isComplaining) {
+    return { 
+      reply: 'أعتذر عن المشكلة التي واجهتها 😔\n' +
+             'للتأكد من حلها بشكل أفضل، يرجى:\n' +
+             '• التواصل مع الدعم: /contact\n' +
+             '• أو الإبلاغ عن المشكلة: /report\n\n' +
+             'سنتابع الأمر بأسرع وقت ممكن!'
+    };
+  }
+
+  if (isCancel(message)) {
+    await clearDraft(user.uid);
+    return { reply: 'تم إلغاء مسودة الإعلان ✅\nإذا حبيت نبدأ من جديد اكتب: أضف إعلان' };
+  }
+
+  let draft = await loadDraft(user.uid);
+  const incomingImages = normalizeImagesMeta(meta?.images);
+
+  // بدء المسار
+  if (!draft) {
+    const baseData = { images: incomingImages.slice(0, 8) };
+    const rawMsg = String(message || '').trim();
+    const canAuto = shouldAutoExtractInWizard(rawMsg) && !isStartCreateListing(rawMsg);
+
+    if (canAuto) {
+      const extracted = await extractListingDetailsFromMessage(rawMsg, meta);
+      const merged = mergeExtractedListingIntoDraftData(baseData, extracted);
+      const nextData = merged.next;
+      const step = computeDraftStep(nextData);
+
+      // إذا ما استخرجنا شيء مفيد، نكمل المعالج التقليدي
+      if (merged.changed.length) {
+        await saveDraft(user.uid, { step, data: nextData });
+        const draftObj = { step, data: nextData };
+        const summary = draftSummary(draftObj);
+        const tail =
+          step === 'confirm'
+            ? 'إذا كل شيء تمام اكتب: /نشر\nأو اكتب: /إلغاء لإلغاء المسودة.\n\nيمكنك إضافة صور عبر زر 📷.'
+            : listingNextPrompt(step, draftObj);
+
+        return {
+          reply:
+            'تمام ✅ استخرجت تفاصيل الإعلان من كلامك وجهزت مسودة.\n\n' +
+            (incomingImages.length ? `تم حفظ ${incomingImages.slice(0, 8).length} صورة للمسودة ✅\n\n` : '') +
+            'مسودة إعلانك الحالية:\n\n' +
+            (summary || '(لا تزال بعض التفاصيل ناقصة)') +
+            '\n\n' +
+            tail,
+        };
+      }
     }
 
-    // 3) place name -> Nominatim
-    const q = `${draft.city || ''} ${raw}`.trim();
-    const geo = await geocodePlaceNominatim(q);
+    await saveDraft(user.uid, { step: 'category', data: baseData });
+    return {
+      reply:
+        'تمام! بنضيف إعلان من داخل الشات ✅\n\n' +
+        (incomingImages.length ? `تم حفظ ${incomingImages.slice(0, 8).length} صورة للمسودة ✅\n\n` : '') +
+        'الخطوة 1/7: اختر القسم (اكتب اسم القسم):\n' +
+        categoriesHint() +
+        '\n\n(تقدر تلغي بأي وقت بكتابة: إلغاء)',
+    };
+  }
 
-    if (!geo.ok) {
+  const step = String(draft.step || 'category');
+  const data = draft.data || {};
+  const msg = String(message || '').trim();
+
+  // ✅ تحديث/تعبئة تلقائية: إذا كتب المستخدم كل التفاصيل مرة واحدة أو طلب تعديل
+  if (shouldAutoExtractInWizard(msg) && !isCancel(msg) && !isConfirmPublish(msg) && !isStartCreateListing(msg)) {
+    const extracted = await extractListingDetailsFromMessage(msg, meta);
+    const merged = mergeExtractedListingIntoDraftData(data, extracted);
+    const nextData = merged.next;
+
+    // دعم تحديث الموقع حتى لو المستخدم في خطوة أخرى
+    if (meta?.location?.lat != null && meta?.location?.lng != null) {
+      const lat = Number(meta.location.lat);
+      const lng = Number(meta.location.lng);
+      if (isFinite(lat) && isFinite(lng)) {
+        if (nextData.lat !== lat || nextData.lng !== lng) {
+          nextData.lat = lat;
+          nextData.lng = lng;
+          merged.changed.push('coords');
+        }
+      }
+    }
+
+    if (merged.changed.length) {
+      const newStep = computeDraftStep(nextData);
+      await saveDraft(user.uid, { step: newStep, data: nextData });
+      const draftObj = { step: newStep, data: nextData };
+      const summary = draftSummary(draftObj);
+      const tail =
+        newStep === 'confirm'
+          ? 'إذا كل شيء تمام اكتب: /نشر\nأو اكتب: /إلغاء لإلغاء المسودة.\n\nيمكنك إضافة صور عبر زر 📷.'
+          : listingNextPrompt(newStep, draftObj);
+
       return {
         reply:
-          `ما قدرت أحدد الموقع من هذا الاسم.\n` +
-          `جرّب تكتب أدق (مدينة + حي) مثل: "صنعاء، حدة"\n` +
-          `أو ارسل الإحداثيات: 15.3694, 44.1910\n` +
-          `أو ارسل رابط Google Maps`,
-        step,
-        draft,
+          'تم تحديث مسودة الإعلان بناءً على كلامك ✅\n\n' +
+          (summary || '(لا تزال بعض التفاصيل ناقصة)') +
+          '\n\n' +
+          tail,
+      };
+    }
+  }
+
+  // ✅ إذا وصلت صور من الشات: نحفظها للمسودة بدون تغيير الخطوة
+  if (incomingImages.length) {
+    const current = Array.isArray(data.images) ? data.images : [];
+    const merged = [];
+    for (const u of [...current, ...incomingImages]) {
+      if (typeof u !== 'string' || !u.trim()) continue;
+      const v = u.trim();
+      if (!merged.includes(v)) merged.push(v);
+      if (merged.length >= 8) break;
+    }
+
+    await saveDraft(user.uid, { step, data: { ...data, images: merged } });
+    const updatedDraft = { step, data: { ...data, images: merged } };
+    return {
+      reply:
+        `تم إضافة ${Math.min(incomingImages.length, 8)} صورة للمسودة ✅\n\n` +
+        listingNextPrompt(step, updatedDraft),
+    };
+  }
+
+  // لو المستخدم كتب "أضف إعلان" وهو داخل المسار بالفعل
+  if (isStartCreateListing(msg)) {
+    await saveDraft(user.uid, { step: 'category', data: {} });
+    return {
+      reply:
+        'بدأنا من جديد ✅\n\n' +
+        'الخطوة 1/7: اختر القسم (اكتب اسم القسم):\n' +
+        categoriesHint() +
+        '\n\n(تقدر تلغي بأي وقت بكتابة: إلغاء)',
+    };
+  }
+
+  // نشر نهائي
+  if (step === 'confirm') {
+    if (!isConfirmPublish(msg)) {
+      return {
+        reply:
+          'هذه مسودة الإعلان الحالية:\n\n' +
+          draftSummary(draft) +
+          '\n\nإذا كل شيء تمام اكتب: نشر\nأو اكتب: إلغاء لإلغاء المسودة.',
       };
     }
 
-    if (geo.single) {
-      draft.lat = geo.lat;
-      draft.lng = geo.lng;
-      step = 'ask_price';
-      return { reply: `تم تحديد الموقع ✅\n${geo.display || ''}\n\n${nextPrompt(step, draft)}`, step, draft };
-    }
+    const rates = await getRatesServer();
+    const originalCurrency = data.originalCurrency || 'YER';
+    const originalPrice = Number(data.originalPrice || 0);
+    const priceYER = toYERServer(originalPrice, originalCurrency, rates);
 
-    draft._geoOptions = geo.options || [];
-    step = 'choose_location';
+    const hasCoords = data.lat != null && data.lng != null;
+    const listing = {
+      title: String(data.title || '').trim(),
+      description: String(data.description || '').trim(),
+      city: String(data.city || '').trim(),
+      category: String(data.category || '').trim(),
 
-    const list = (draft._geoOptions || [])
-      .map((o, i) => `${i + 1}) ${o.display || ''} (${o.lat}, ${o.lng})`)
-      .join('\n');
+      phone: data.phone ? String(data.phone).trim() : null,
+      isWhatsapp: true,
 
-    return { reply: `اختر الموقع الصحيح برقم:\n${list}`, step, draft };
+      priceYER: Number(priceYER),
+      originalPrice: Number(originalPrice),
+      originalCurrency,
+      currencyBase: 'YER',
+
+      coords: hasCoords ? [Number(data.lat), Number(data.lng)] : null,
+      lat: hasCoords ? Number(data.lat) : null,
+      lng: hasCoords ? Number(data.lng) : null,
+      locationLabel: data.locationLabel ? String(data.locationLabel).trim() : null,
+      images: Array.isArray(data.images) ? data.images.slice(0, 8) : [],
+
+      userId: user.uid,
+      userEmail: user.email || null,
+      userName: user.name || null,
+
+      views: 0,
+      likes: 0,
+      isActive: true,
+      hidden: false,
+
+      auctionEnabled: false,
+      auctionEndAt: null,
+      currentBidYER: null,
+
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    const ref = await adminDb.collection('listings').add(listing);
+    await clearDraft(user.uid);
+
+    return {
+      reply:
+        'تم نشر الإعلان بنجاح! 🎉\n\n' +
+        `رابط الإعلان: /listing/${ref.id}\n\n` +
+        (Array.isArray(listing.images) && listing.images.length
+          ? `تم ربط ${listing.images.length} صورة بالإعلان ✅`
+          : 'إذا حبيت تضيف صور: استخدم زر 📷 داخل الشات قبل النشر أو من صفحة /add.') +
+        '\n\nنصائح لبيع أسرع:\n' +
+        '• رد بسرعة على الرسائل الواردة\n' +
+        '• أضف المزيد من الصور من صفحة الإعلان\n' +
+        '• شاهد إحصائيات الإعلان: /stats/' + ref.id,
+    };
   }
 
-  if (step === 'choose_location') {
-    const n = extractNumber(toEnglishDigits(raw));
-    const idx = n ? Number(n) - 1 : -1;
-    const opts = Array.isArray(draft._geoOptions) ? draft._geoOptions : [];
-    if (!Number.isInteger(idx) || idx < 0 || idx >= opts.length) {
-      const list = opts.map((o, i) => `${i + 1}) ${o.display || ''}`).join('\n');
-      return { reply: `اكتب رقم صحيح من الخيارات:\n${list}`, step, draft };
+  // خطوات جمع البيانات
+  if (step === 'category') {
+    const cat = detectCategorySlug(msg);
+    if (!cat) {
+      return {
+        reply:
+          'ما قدرت أحدد القسم من رسالتك 🤔\n' +
+          'اكتب اسم القسم (مثلاً: سيارات أو عقارات)\n\n' +
+          categoriesHint(),
+      };
     }
-    const chosen = opts[idx];
-    draft.lat = chosen.lat;
-    draft.lng = chosen.lng;
-    draft._geoOptions = [];
-    step = 'ask_price';
-    return { reply: `تم اختيار الموقع ✅\n\n${nextPrompt(step, draft)}`, step, draft };
+    await saveDraft(user.uid, { step: 'title', data: { ...data, category: cat } });
+    return { reply: `تمام ✅ القسم: ${categoryNameFromSlug(cat)}\n\nالخطوة 2/7: اكتب عنوان الإعلان.` };
   }
 
-  if (step === 'ask_price') {
-    const parsed = parsePriceAndMaybeCurrency(raw);
-
-    if (!parsed.ok) {
-      return { reply: `السعر غير واضح. مثال: 1000 سعودي / 35000 يمني / 200 دولار`, step, draft };
+  if (step === 'title') {
+    const title = msg.trim();
+    if (!title || title.length < 5) {
+      return { reply: 'العنوان لازم يكون واضح (5 أحرف على الأقل). اكتب عنوان الإعلان الآن.' };
     }
-
-    draft.price = parsed.price;
-
-    if (parsed.currency) {
-      draft.currency = parsed.currency;
-      step = 'ask_contact';
-      return { reply: nextPrompt(step, draft), step, draft };
-    }
-
-    step = 'ask_currency';
-    return { reply: nextPrompt(step, draft), step, draft };
+    await saveDraft(user.uid, { step: 'description', data: { ...data, title } });
+    return { reply: 'تمام ✅\n\nالخطوة 3/7: اكتب وصف الإعلان (على الأقل 10 أحرف).' };
   }
 
-  if (step === 'ask_currency') {
-    const t = normText(raw);
-    let cur = null;
-
-    if (t.includes('يمن') || t.includes('يمني') || t === 'yer') cur = 'YER';
-    if (t.includes('سعود') || t.includes('سعودي') || t.includes('ريال سعودي') || t === 'sar') cur = 'SAR';
-    if (t.includes('دول') || t.includes('دولار') || t === 'usd') cur = 'USD';
-
-    if (!cur) return { reply: `اكتب العملة: يمني / سعودي / دولار`, step, draft };
-
-    draft.currency = cur;
-    step = 'ask_contact';
-    return { reply: nextPrompt(step, draft), step, draft };
+  if (step === 'description') {
+    const description = msg.trim();
+    if (!description || description.length < 10) {
+      return { reply: 'الوصف قصير. اكتب وصف أوضح (10 أحرف على الأقل).' };
+    }
+    await saveDraft(user.uid, { step: 'city', data: { ...data, description } });
+    return { reply: 'تمام ✅\n\nالخطوة 4/7: اكتب اسم المدينة.' };
   }
 
-  if (step === 'ask_contact') {
-    const { raw: contactRaw, normalized } = normalizeContact(raw);
-    if (!isValidContactLocalOrIntl(normalized)) {
-      return { reply: `الرقم غير واضح. اكتبه بدون مسافات مثل: 777123456`, step, draft };
+  if (step === 'city') {
+    const city = msg.trim();
+    if (!city || city.length < 2) {
+      return { reply: 'اكتب اسم المدينة بشكل صحيح (مثلاً: صنعاء).' };
     }
-    draft.contactRaw = contactRaw;
-    draft.contact = normalized;
-    step = 'ask_images';
-    return { reply: nextPrompt(step, draft), step, draft };
+    await saveDraft(user.uid, { step: 'phone', data: { ...data, city } });
+    return { reply: 'تمام ✅\n\nالخطوة 5/7: اكتب رقم الجوال للتواصل (مثال: 777123456 أو +967777123456).' };
   }
 
-  if (step === 'ask_images') {
-    // 1) صور من body.images (زر الرفع)
-    const incomingFromButton = extractImageUrlsFromBodyImages(bodyImages);
-    if (incomingFromButton.length) {
-      const current = Array.isArray(draft.images) ? draft.images : [];
-      draft.images = [...current, ...incomingFromButton].slice(0, 12);
-      return { reply: `تم استلام الصور ✅\nإذا انتهيت اكتب: تم`, step, draft };
+  if (step === 'phone') {
+    const phone = normalizePhone(msg);
+    if (!phone || !isValidPhone(phone)) {
+      return { reply: 'اكتب رقم جوال صحيح (مثال: 777123456 أو +967777123456).' };
     }
+    await saveDraft(user.uid, { step: 'location', data: { ...data, phone } });
+    return {
+      reply:
+        'تمام ✅\n\n' +
+        'الخطوة 6/7: حدّد موقع الإعلان.\n' +
+        '• اضغط زر "📍 موقعي" داخل الشات لإرسال الإحداثيات تلقائياً\n' +
+        '• أو اكتب الإحداثيات بهذا الشكل: 15.3694, 44.1910\n' +
+        '• أو أرسل رابط خرائط\n\n' +
+        'تقدر أيضاً تكتب اسم الحي/المنطقة (مثال: صنعاء - حدة).',
+    };
+  }
 
-    // 2) روابط في الرسالة
-    const urls = extractUrls(raw);
-    if (urls.length) {
-      const current = Array.isArray(draft.images) ? draft.images : [];
-      draft.images = [...current, ...urls].slice(0, 12);
-      return { reply: `تم إضافة ${urls.length} صورة ✅\nأرسل صور أخرى أو اكتب: تم`, step, draft };
-    }
-
-    // 3) إنهاء
-    const t = normText(raw);
-    if (t === 'تم' || t === 'done') {
-      if (!Array.isArray(draft.images) || draft.images.length === 0) {
-        return { reply: `لازم تضيف صورة واحدة على الأقل. ارفع صورة أو أرسل رابط ثم اكتب: تم`, step, draft };
+  if (step === 'location') {
+    // 1) meta location from client
+    const metaLat = meta?.location?.lat;
+    const metaLng = meta?.location?.lng;
+    if (metaLat != null && metaLng != null) {
+      const lat = Number(metaLat);
+      const lng = Number(metaLng);
+      if (isFinite(lat) && isFinite(lng)) {
+        const locationLabel = msg && msg !== '📍 هذا موقعي' ? String(msg).trim() : data.locationLabel || null;
+        await saveDraft(user.uid, { step: 'price', data: { ...data, lat, lng, locationLabel } });
+        return {
+          reply:
+            'تم حفظ موقعك ✅\n\n' +
+            'الخطوة 7/7: اكتب السعر (مثال: 100000) ويمكن تكتب العملة معها مثل: 100 USD أو 100 SAR.',
+        };
       }
-      step = 'confirm';
-      return { reply: nextPrompt(step, draft), step, draft };
     }
 
-    return { reply: `ارفع الصور من زر الصور أو أرسل روابط. وعندما تخلص اكتب: تم`, step, draft };
+    // 2) parse lat,lng from text
+    const parsed = extractLatLngFromText(msg);
+    if (parsed) {
+      await saveDraft(user.uid, { step: 'price', data: { ...data, lat: parsed.lat, lng: parsed.lng, locationLabel: data.locationLabel || null } });
+      return {
+        reply:
+          'تمام ✅ تم حفظ الإحداثيات.\n\n' +
+          'الخطوة 7/7: اكتب السعر (مثال: 100000) ويمكن تكتب العملة معها مثل: 100 USD أو 100 SAR.',
+      };
+    }
+
+    // 3) accept maps link or label
+    if (msg && msg.length >= 2) {
+      const link = extractMapsLink(msg);
+      const locationLabel = link ? `رابط الموقع: ${link}` : msg;
+      await saveDraft(user.uid, { step: 'price', data: { ...data, locationLabel } });
+      return {
+        reply:
+          'تمام ✅ تم حفظ الموقع.\n\n' +
+          'الخطوة 7/7: اكتب السعر (مثال: 100000) ويمكن تكتب العملة معها مثل: 100 USD أو 100 SAR.',
+      };
+    }
+
+    return {
+      reply:
+        'ما قدرت أحدد موقع واضح 🤔\n' +
+        'جرّب أحد الخيارات:\n' +
+        '• اضغط زر "📍 موقعي" داخل الشات\n' +
+        '• اكتب الإحداثيات: 15.3694, 44.1910\n' +
+        '• أرسل رابط خرائط\n' +
+        '• أو اكتب اسم الحي/المنطقة',
+    };
   }
 
-  if (step === 'confirm') {
-    return { reply: `اكتب "نشر" للنشر ✅ أو "تعديل ..." للتعديل، أو "إلغاء" للإلغاء.`, step, draft };
+  if (step === 'price') {
+    const n = extractNumber(msg);
+    if (!n || n <= 0) {
+      return { reply: 'ما فهمت السعر. اكتب رقم فقط (مثال: 100000) أو (100 USD).' };
+    }
+    const originalCurrency = detectCurrency(msg);
+    await saveDraft(user.uid, {
+      step: 'confirm',
+      data: { ...data, originalPrice: n, originalCurrency },
+    });
+
+    const fakeDraft = { step: 'confirm', data: { ...data, originalPrice: n, originalCurrency } };
+    return {
+      reply:
+        'وصلنا للنهاية ✅ هذه مسودة إعلانك:\n\n' +
+        draftSummary(fakeDraft) +
+        '\n\nإذا كل شيء تمام اكتب: نشر\nأو اكتب: إلغاء لإلغاء المسودة.',
+    };
   }
 
-  return { reply: `اكتب "إضافة إعلان" للبدء.`, step: 'idle', draft: {} };
+  // خطوة غير معروفة
+  await saveDraft(user.uid, { step: 'category', data: {} });
+  return {
+    reply:
+      'صار عندي لخبطة بسيطة 😅 خلّينا نبدأ من جديد.\n\n' +
+      'الخطوة 1/7: اختر القسم (اكتب اسم القسم):\n' +
+      categoriesHint(),
+  };
 }
 
 // =========================
-// API Handlers
+// Route الرئيسية
 // =========================
-export async function POST(req) {
+
+export async function POST(request) {
   try {
-    const ip = getClientIp(req);
-    const body = await req.json().catch(() => ({}));
+    const body = await request.json().catch(() => ({}));
+    const message = body?.message;
+    const history = body?.history;
+    const meta = body?.meta || null;
 
-    const userMessage = body?.message ?? body?.text ?? '';
-    let sessionId = body?.sessionId ?? body?.sid ?? '';
-    const bodyImages = body?.images ?? body?.files ?? null;
-
-    if (!sessionId || String(sessionId).length < 8) sessionId = shortId(18);
-
-    rateLimitOrThrow(`${ip}:${sessionId}`);
-
-    let session = await getSession(sessionId);
-    if (!session) {
-      session = { ...defaultSession(), step: 'idle', draft: {} };
-      await upsertSession(sessionId, session);
+    if (!message || typeof message !== 'string') {
+      return NextResponse.json({ error: 'الرسالة مطلوبة' }, { status: 400 });
     }
 
-    // Dedup same user message (includes digit normalization)
-    const msgNorm = normText(toEnglishDigits(userMessage));
-    if (session.lastUser && session.lastUser === msgNorm && !Array.isArray(bodyImages)) {
-      const reply = session.lastPrompt || nextPrompt(session.step || 'idle', session.draft || {});
-      return NextResponse.json({ ok: true, sessionId, reply, step: session.step || 'idle', draft: session.draft || {}, dedup: true });
+    const trimmedMessage = message.trim();
+    if (trimmedMessage.length === 0) {
+      return NextResponse.json({ error: 'الرسالة فارغة' }, { status: 400 });
     }
 
-    const result = await handleWizard(session, userMessage, sessionId, bodyImages);
+    // ✅ تطبيق Rate Limiting
+    const user = await getUserFromRequest(request);
+    const userId = user?.uid || 'anonymous';
+    
+    if (!checkRateLimit(userId, 'assistant_request')) {
+      return NextResponse.json({
+        error: 'لقد تجاوزت الحد المسموح من الطلبات. حاول مرة أخرى بعد دقيقة.'
+      }, { status: 429 });
+    }
 
-    const replyHash = avoidRepeatReply(session, result.reply);
-    const replyToSend = replyHash === null ? `${result.reply}\n\n${nextPrompt(result.step, result.draft)}` : result.reply;
+    const normalized = normalizeText(trimmedMessage);
 
-    await upsertSession(sessionId, {
-      mode: 'add_listing_only',
-      step: result.step || 'idle',
-      draft: result.draft || {},
-      lastUser: msgNorm,
-      lastPrompt: replyToSend,
-      lastReplyHash: replyHash || session.lastReplyHash || '',
-    });
+    // ✅ إذا وصلت صور من الواجهة: نتعامل معها كجزء من مسار إضافة الإعلان
+    const metaImages = normalizeImagesMeta(meta?.images);
+    if (metaImages.length) {
+      if (!user || user.error) {
+        return NextResponse.json({
+          reply:
+            'لرفع الصور وربطها بمسودة الإعلان لازم تسجل دخول أولاً ✅\n\n' +
+            'اذهب إلى: /login',
+        });
+      }
 
+      const res = await handleListingWizard({ user, message: trimmedMessage, meta });
+      return NextResponse.json({ reply: res.reply });
+    }
+
+    // 1) إلغاء مسودة (لو مسجل دخول)
+    if (user && !user.error && isCancel(normalized)) {
+      const res = await handleListingWizard({ user, message: trimmedMessage, meta });
+      return NextResponse.json({ reply: res.reply });
+    }
+
+    // 2) إحصاءات: كم إعلان؟
+    const countIntent = extractCountIntent(normalized);
+    if (countIntent) {
+      const { category } = countIntent;
+      const result = await tryCountListings(category);
+
+      if (!result.ok) {
+        return NextResponse.json({ reply: adminNotReadyMessage() });
+      }
+
+      const label = category ? categoryNameFromSlug(category) : 'كل الأقسام';
+      const numberText = result.approximate ? `${result.publicCount}+` : String(result.publicCount);
+      
+      let additionalInfo = '';
+      if (result.approximate) {
+        additionalInfo = '\n(العدد تقريبي - قد يكون هناك المزيد)';
+      }
+      
+      if (category && result.publicCount === 0) {
+        additionalInfo += '\n💡 يمكنك أن تكون أول من يضيف إعلان في هذا القسم!';
+      }
+      
+      return NextResponse.json({
+        reply:
+          `📊 عدد الإعلانات (المتاحة) في ${label}: ${numberText}\n` +
+          (category ? '' : '\nتقدر تحدد القسم مثل: سيارات أو عقارات.') +
+          additionalInfo,
+      });
+    }
+
+    // 3) إضافة إعلان عبر الشات (يتطلب تسجيل الدخول)
+    const existingDraft = user && !user.error ? await loadDraft(user.uid) : null;
+    const autoCreateFromDetails = user && !user.error ? looksLikeListingDetails(trimmedMessage, meta) : false;
+
+    if (isStartCreateListing(normalized) || existingDraft || autoCreateFromDetails) {
+      if (!user || user.error) {
+        return NextResponse.json({
+          reply:
+            'لإضافة إعلان عبر المساعد لازم تسجل دخول أولاً ✅\n\n' +
+            'بعد تسجيل الدخول اكتب: أضف إعلان\n' +
+            'أو استخدم صفحة الإضافة مباشرة: /add',
+        });
+      }
+
+      const res = await handleListingWizard({ user, message: trimmedMessage, meta });
+      return NextResponse.json({ reply: res.reply });
+    }
+
+    // 4) تحية / شكر
+    if (greetings.some((g) => normalized.includes(normalizeText(g)))) {
+      return NextResponse.json({
+        reply:
+          'مرحباً بك في سوق اليمن! 🇾🇪\n\n' +
+          'أقدر أساعدك في:\n' +
+          '• معرفة معلومات عن الموقع\n' +
+          '• كيفية إضافة إعلان\n' +
+          '• إضافة إعلان من داخل الشات (اكتب: أضف إعلان)\n' +
+          '• رفع صور للإعلان من داخل الشات (زر 📷)\n' +
+          '• تسجيل صوت وتحويله إلى نص (زر 🎙️)\n' +
+          '• معرفة عدد الإعلانات\n' +
+          '• الإجابة على أسئلتك\n\n' +
+          'كيف أساعدك؟',
+      });
+    }
+
+    if (thanks.some((t) => normalized.includes(normalizeText(t)))) {
+      return NextResponse.json({
+        reply: 'العفو! 😊 سعيد لأنني استطعت مساعدتك. إذا عندك أي استفسار آخر، أنا حاضر.',
+      });
+    }
+
+    // 5) FAQ موسع
+    const answer = findBestMatch(trimmedMessage);
+    if (answer) {
+      return NextResponse.json({ reply: answer });
+    }
+
+    // 6) AI fallback مع تحليل النية
+    const analysis = await analyzeIntentAndSentiment(trimmedMessage);
+    
+    if (analysis.intents.isAskingForHelp) {
+      const aiResult = await runAiFallback({ message: trimmedMessage, history });
+      if (aiResult?.ok) {
+        if (aiResult.action === 'count_listings') {
+          const category = aiResult.category ? detectCategorySlug(aiResult.category) : null;
+          const result = await tryCountListings(category);
+          if (!result.ok) {
+            return NextResponse.json({ reply: adminNotReadyMessage() });
+          }
+
+          const label = category ? categoryNameFromSlug(category) : 'كل الأقسام';
+          const numberText = result.approximate ? `${result.publicCount}+` : String(result.publicCount);
+          return NextResponse.json({
+            reply:
+            `عدد الإعلانات (المتاحة) في ${label}: ${numberText}\n` +
+            (category ? '' : '\nتقدر تحدد القسم مثل: سيارات أو عقارات.'),
+          });
+        }
+
+        if (aiResult.action === 'create_listing') {
+          if (!user || user.error) {
+            return NextResponse.json({
+              reply:
+                'لإضافة إعلان عبر المساعد لازم تسجل دخول أولاً ✅\n\n' +
+                'بعد تسجيل الدخول اكتب: أضف إعلان\n' +
+                'أو استخدم صفحة الإضافة مباشرة: /add',
+            });
+          }
+          if (!adminDb || !adminAuth) {
+            return NextResponse.json({ reply: adminNotReadyMessage() });
+          }
+
+          const draft = await startDraftFromAi(user, aiResult.listing || {});
+          const prompt = listingNextPrompt(draft.step, { step: draft.step, data: draft.data });
+          const replyText = [aiResult.reply, prompt].filter(Boolean).join('\n\n');
+          return NextResponse.json({ reply: replyText });
+        }
+
+        return NextResponse.json({ reply: aiResult.reply });
+      }
+    }
+
+    // رد افتراضي محسن
     return NextResponse.json({
-      ok: true,
-      sessionId,
-      reply: replyToSend,
-      step: result.step || 'idle',
-      draft: result.draft || {},
-      mode: 'add_listing_only',
+      reply:
+        'ما فهمت سؤالك تماماً 🤔\n\n' +
+        'جرب أحد هذه الخيارات:\n' +
+        '• كيف أضيف إعلان؟\n' +
+        '• أضف إعلان (لبدء إضافة إعلان من الشات)\n' +
+        '• كيف أبحث عن سيارات؟\n' +
+        '• كم اعلان سيارات؟\n' +
+        '• كيف احذف اعلان؟\n' +
+        '• شروط الاستخدام\n\n' +
+        'أو اكتب سؤالك بشكل أوضح وسأساعدك 😊',
     });
-  } catch (e) {
-    if (e?.code === 'RATE_LIMIT' || String(e?.message || '').includes('RATE_LIMIT')) {
-      return NextResponse.json({ ok: false, error: 'RATE_LIMIT', reply: 'تم تجاوز الحد المسموح مؤقتاً. جرّب بعد قليل.' }, { status: 429 });
-    }
-    return NextResponse.json(
-      { ok: false, error: 'SERVER_ERROR', reply: 'صار خطأ في السيرفر أثناء معالجة الطلب.', details: String(e?.message || e) },
-      { status: 500 }
-    );
+  } catch (error) {
+    console.error('Chat API error:', error);
+    return NextResponse.json({ 
+      error: 'حدث خطأ في معالجة الطلب',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    }, { status: 500 });
   }
 }
 
-export async function GET() {
-  return NextResponse.json({
-    ok: true,
-    name: 'sooqyemen assistant api',
-    mode: 'add_listing_only',
-    supports: ['google_maps_url_location', 'nominatim_geocode', 'images_in_body_or_links'],
-    order: 'title->description->category->city->location->price->currency(if needed)->contact->images->confirm->publish',
-  });
+// =========================
+// GET Route للإحصائيات العامة
+// =========================
+
+export async function GET(request) {
+  try {
+    // يمكن استخدام GET للحصول على إحصائيات عامة
+    const url = new URL(request.url);
+    const action = url.searchParams.get('action');
+    
+    if (action === 'stats') {
+      // إحصائيات عامة
+      if (!adminDb) {
+        return NextResponse.json({
+          totalListings: 'N/A',
+          activeUsers: 'N/A',
+          message: 'Firebase Admin غير مفعل'
+        });
+      }
+      
+      const [listingsCount, usersCount] = await Promise.all([
+        tryCountListings(null),
+        adminDb.collection('users').count().get().then(snap => snap.data().count)
+      ]);
+      
+      return NextResponse.json({
+        totalListings: listingsCount.ok ? listingsCount.publicCount : 'N/A',
+        activeUsers: usersCount,
+        updatedAt: new Date().toISOString()
+      });
+    }
+    
+    return NextResponse.json({
+      status: 'active',
+      version: '2.0.0',
+      features: ['faq', 'listing_wizard', 'counts', 'ai_fallback', 'rate_limiting', 'caching']
+    });
+    
+  } catch (error) {
+    console.error('GET API error:', error);
+    return NextResponse.json({ error: 'حدث خطأ' }, { status: 500 });
+  }
 }
