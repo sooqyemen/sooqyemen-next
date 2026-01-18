@@ -500,7 +500,42 @@ async function tryCountListings(categorySlug) {
 }
 
 // =========================
-// Listing Wizard محسن
+// نظام منع تكرار الرسائل (Idempotency)
+// =========================
+
+function computeMessageHash(message, meta) {
+  const str = JSON.stringify({
+    message: String(message || '').trim(),
+    images: meta?.images ? Array.isArray(meta.images) ? meta.images.length : 1 : 0,
+    location: meta?.location ? `${meta.location.lat}_${meta.location.lng}` : null,
+    timestamp: Date.now() - (Date.now() % 10000) // قرب لأقرب 10 ثواني
+  });
+  
+  // دالة هاش بسيطة
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return hash.toString(36);
+}
+
+function isDuplicateMessage(draft, messageHash) {
+  if (!draft?.lastMessageHash || !messageHash) return false;
+  
+  const lastTime = draft.lastMessageTime || 0;
+  const now = Date.now();
+  
+  // نفس الرسالة خلال آخر 10 ثواني تعتبر تكرار
+  return (
+    draft.lastMessageHash === messageHash &&
+    (now - lastTime) < 10000
+  );
+}
+
+// =========================
+// Listing Wizard محسن (مع منع التكرار)
 // =========================
 
 function isStartCreateListing(messageRaw) {
@@ -513,18 +548,85 @@ function isStartCreateListing(messageRaw) {
     t.includes('ابغى اعلان') ||
     t.includes('ابغى اضيف اعلان') ||
     t.includes('بدء اعلان جديد') ||
-    t.includes('اعلان جديد')
+    t.includes('اعلان جديد') ||
+    t.includes('أضف إعلان') ||
+    t.includes('إضافة إعلان')
   );
 }
 
 function isCancel(messageRaw) {
   const t = normalizeText(String(messageRaw || '').trim().replace(/^\/+\s*/, ''));
-  return t === 'الغاء' || t === 'إلغاء' || t.includes('الغاء') || t.includes('كنسل') || t.includes('cancel') || t.includes('حذف المسوده');
+  return (
+    t === 'الغاء' || 
+    t === 'إلغاء' || 
+    t === '/الغاء' || 
+    t === '/إلغاء' || 
+    t.includes('الغاء') || 
+    t.includes('كنسل') || 
+    t.includes('cancel') || 
+    t.includes('حذف المسوده')
+  );
 }
 
 function isConfirmPublish(messageRaw) {
   const t = normalizeText(String(messageRaw || '').trim().replace(/^\/+\s*/, ''));
-  return t === 'نشر' || t === 'انشر' || t.includes('تاكيد') || t.includes('تأكيد') || t.includes('اعتماد') || t.includes('نشر الاعلان') || t.includes('انهاء');
+  return (
+    t === 'نشر' || 
+    t === '/نشر' || 
+    t === 'انشر' || 
+    t === '/انشر' || 
+    t.includes('تاكيد') || 
+    t.includes('تأكيد') || 
+    t.includes('اعتماد') || 
+    t.includes('نشر الاعلان') || 
+    t.includes('انهاء')
+  );
+}
+
+function isShowDraft(messageRaw) {
+  const t = normalizeText(String(messageRaw || '').trim());
+  return (
+    t.includes('عرض المسودة') ||
+    t.includes('اظهر المسودة') ||
+    t.includes('مسودتي') ||
+    t.includes('المسودة') ||
+    t === 'المسودة' ||
+    t === 'مسودتي'
+  );
+}
+
+function isGoBack(messageRaw) {
+  const t = normalizeText(String(messageRaw || '').trim());
+  return (
+    t === 'رجوع' ||
+    t === 'الرجوع' ||
+    t === 'back' ||
+    t === 'الخلف' ||
+    t.includes('ارجع')
+  );
+}
+
+function isSkipField(messageRaw) {
+  const t = normalizeText(String(messageRaw || '').trim());
+  return (
+    t === 'تخطي' ||
+    t === 'تجاوز' ||
+    t === 'skip' ||
+    t === 'لاحقا' ||
+    t.includes('تخطى')
+  );
+}
+
+function isEditField(messageRaw) {
+  const t = normalizeText(String(messageRaw || '').trim());
+  return (
+    t.includes('تعديل العنوان') ||
+    t.includes('تعديل الوصف') ||
+    t.includes('تعديل المدينة') ||
+    t.includes('تعديل الجوال') ||
+    t.includes('تعديل السعر') ||
+    t.includes('تعديل القسم')
+  );
 }
 
 function normalizeImagesMeta(metaImages) {
@@ -669,45 +771,59 @@ function categoriesHint() {
 function draftSummary(d) {
   const data = d?.data || {};
   const parts = [];
-  if (data.category) parts.push(`القسم: ${categoryNameFromSlug(data.category)}`);
-  if (data.title) parts.push(`العنوان: ${data.title}`);
-  if (data.description) parts.push(`الوصف: ${data.description}`);
-  if (data.city) parts.push(`المدينة: ${data.city}`);
-  if (data.phone) parts.push(`الجوال: ${data.phone}`);
-  if (data.locationLabel) parts.push(`الموقع: ${data.locationLabel}`);
-  if (data.lat != null && data.lng != null) parts.push(`الإحداثيات: ${data.lat}, ${data.lng}`);
+  if (data.category) parts.push(`📂 القسم: ${categoryNameFromSlug(data.category)}`);
+  if (data.title) parts.push(`📌 العنوان: ${data.title}`);
+  if (data.description) parts.push(`📝 الوصف: ${data.description.substring(0, 100)}${data.description.length > 100 ? '...' : ''}`);
+  if (data.city) parts.push(`🏙️ المدينة: ${data.city}`);
+  if (data.phone) parts.push(`📱 الجوال: ${data.phone}`);
+  if (data.locationLabel) parts.push(`📍 الموقع: ${data.locationLabel}`);
+  if (data.lat != null && data.lng != null) parts.push(`🗺️ الإحداثيات: ${data.lat.toFixed(4)}, ${data.lng.toFixed(4)}`);
   if (data.originalPrice) {
-    parts.push(`السعر: ${data.originalPrice} ${data.originalCurrency || 'YER'}`);
+    parts.push(`💰 السعر: ${data.originalPrice} ${data.originalCurrency || 'YER'}`);
   }
   if (Array.isArray(data.images) && data.images.length) {
-    parts.push(`الصور: ${data.images.length}`);
+    parts.push(`🖼️ الصور: ${data.images.length} صورة`);
   }
   return parts.join('\n');
 }
 
+function getEditFieldFromMessage(message) {
+  const t = normalizeText(message);
+  if (t.includes('عنوان')) return 'title';
+  if (t.includes('وصف')) return 'description';
+  if (t.includes('مدينة')) return 'city';
+  if (t.includes('جوال') || t.includes('رقم') || t.includes('هاتف')) return 'phone';
+  if (t.includes('سعر')) return 'price';
+  if (t.includes('قسم')) return 'category';
+  if (t.includes('موقع')) return 'location';
+  return null;
+}
+
 function listingNextPrompt(step, draft) {
+  const commands = '\n\n📋 الأوامر المتاحة:\n• عرض المسودة - إلغاء - رجوع - تخطي\n• تعديل [الحقل] مثل: تعديل العنوان\n• /نشر للإنهاء - /إلغاء للخروج';
+
   if (step === 'category') {
     return (
       'الخطوة 1/7: اختر القسم (اكتب اسم القسم):\n' +
       categoriesHint() +
-      '\n\n(تقدر تلغي بأي وقت بكتابة: إلغاء)'
+      commands
     );
   }
 
   if (step === 'title') {
-    return 'الخطوة 2/7: اكتب عنوان الإعلان.';
+    return 'الخطوة 2/7: اكتب عنوان الإعلان (3 أحرف على الأقل).' + commands;
   }
 
   if (step === 'description') {
-    return 'الخطوة 3/7: اكتب وصف الإعلان (على الأقل 10 أحرف).';
+    return 'الخطوة 3/7: اكتب وصف الإعلان (على الأقل 10 أحرف).' + commands;
   }
 
   if (step === 'city') {
-    return 'الخطوة 4/7: اكتب اسم المدينة.';
+    return 'الخطوة 4/7: اكتب اسم المدينة.' + commands;
   }
 
   if (step === 'phone') {
-    return 'الخطوة 5/7: اكتب رقم الجوال للتواصل (مثال: 777123456 أو +967777123456).';
+    return 'الخطوة 5/7: اكتب رقم الجوال للتواصل (مثال: 777123456 أو +967777123456).' + commands;
   }
 
   if (step === 'location') {
@@ -716,18 +832,20 @@ function listingNextPrompt(step, draft) {
       '• اضغط زر "📍 موقعي" داخل الشات لإرسال الإحداثيات تلقائياً\n' +
       '• أو اكتب الإحداثيات بهذا الشكل: 15.3694, 44.1910\n' +
       '• أو أرسل رابط خرائط جوجل\n\n' +
-      'تقدر أيضاً تكتب اسم الحي/المنطقة (مثال: صنعاء - حدة).'
+      'تقدر أيضاً تكتب اسم الحي/المنطقة (مثال: صنعاء - حدة).' +
+      commands
     );
   }
 
   if (step === 'price') {
-    return 'الخطوة 7/7: اكتب السعر (مثال: 100000) ويمكن تكتب العملة معها مثل: 100 USD أو 100 SAR.';
+    return 'الخطوة 7/7: اكتب السعر (مثال: 100000) ويمكن تكتب العملة معها مثل: 100 USD أو 100 SAR.' + commands;
   }
 
   return (
-    'هذه مسودة الإعلان الحالية:\n\n' +
+    '✅ هذه مسودة الإعلان الحالية:\n\n' +
     draftSummary(draft) +
-    '\n\nيمكنك إضافة صور الآن عبر زر 📷 صور داخل الشات.\n\nإذا كل شيء تمام اكتب: نشر\nأو اكتب: إلغاء لإلغاء المسودة.'
+    '\n\nيمكنك إضافة صور الآن عبر زر 📷 صور داخل الشات.' +
+    commands
   );
 }
 
@@ -757,7 +875,7 @@ function safeJsonParse(text) {
 }
 
 // =========================
-// Auto extraction محسن
+// Auto extraction محسن (مقيد للحالات الواضحة فقط)
 // =========================
 
 function extractFirstPhone(messageRaw) {
@@ -806,14 +924,25 @@ function shouldAutoExtractInWizard(messageRaw) {
   const raw = String(messageRaw || '').trim();
   const t = normalizeText(raw);
   if (!t) return false;
-  if (t.length >= 20) return true;
-  if (/\n/.test(raw)) return true;
-  if (extractFirstPhone(raw)) return true;
-  if (/\d/.test(t) && (t.includes('سعر') || t.includes('ريال') || t.includes('دولار') || t.includes('sar') || t.includes('usd') || t.includes('$'))) return true;
-  if (t.includes('للبيع') || t.includes('معروض') || t.includes('مطلوب')) return true;
-  if (t.includes('عنوان') || t.includes('وصف') || t.includes('مدينة') || t.includes('المدينة')) return true;
-  if (Boolean(extractLatLngFromText(raw)) || Boolean(extractMapsLink(raw))) return true;
-  return false;
+  
+  // فقط للحالات الواضحة جداً
+  const hasExplicitKeys = 
+    /\b(عنوان|وصف|مدينة|المدينة|سعر|جوال|رقم|هاتف|قسم|تصنيف):/i.test(raw) ||
+    /^(عنوان|وصف|مدينة|سعر|جوال|رقم):/i.test(raw);
+  
+  const hasMultipleLines = /\n/.test(raw) && raw.split('\n').length >= 2;
+  const hasPhone = extractFirstPhone(raw);
+  const hasPriceWithCurrency = /\d+\s*(sar|usd|\$|ريال سعودي|ريال|دولار)/i.test(raw);
+  
+  // فقط إذا كانت تحتوي على:
+  // 1. مفاتيح واضحة (مثل: عنوان: ...) أو
+  // 2. سطرين مع أرقام أو
+  // 3. رقم هاتف + سعر
+  return (
+    hasExplicitKeys ||
+    (hasMultipleLines && (hasPhone || /\d/.test(t))) ||
+    (hasPhone && hasPriceWithCurrency)
+  );
 }
 
 function computeDraftStep(data) {
@@ -1328,7 +1457,7 @@ async function startDraftFromAi(user, listing) {
 
   const step = computeDraftStep(data);
 
-  await saveDraft(user.uid, { step, data });
+  await saveDraft(user.uid, { step, data, lastMessageHash: null, lastMessageTime: null });
   return { step, data };
 }
 
@@ -1338,29 +1467,106 @@ async function handleListingWizard({ user, message, meta }) {
     return { reply: adminNotReadyMessage() };
   }
 
-  // تحليل النية والمشاعر
-  const analysis = await analyzeIntentAndSentiment(message);
-  
-  if (analysis.intents.isThanking) {
-    return { reply: 'العفو! 😊 سعيد لأنني استطعت مساعدتك. هل هناك شيء آخر تحتاجه؟' };
-  }
-  
-  if (analysis.intents.isComplaining) {
-    return { 
-      reply: 'أعتذر عن المشكلة التي واجهتها 😔\n' +
-             'للتأكد من حلها بشكل أفضل، يرجى:\n' +
-             '• التواصل مع الدعم: /contact\n' +
-             '• أو الإبلاغ عن المشكلة: /report\n\n' +
-             'سنتابع الأمر بأسرع وقت ممكن!'
-    };
+  const messageHash = computeMessageHash(message, meta);
+  let draft = await loadDraft(user.uid);
+
+  // ✅ التحقق من التكرار: إذا كانت نفس الرسالة خلال 10 ثواني، نعيد آخر رد
+  if (draft && isDuplicateMessage(draft, messageHash)) {
+    // نعيد آخر رد فقط دون معالجة
+    const lastResponse = draft.lastResponse || 'جاري المعالجة...';
+    return { reply: lastResponse };
   }
 
+  // ✅ تحديث معلومات الرسالة الأخيرة
+  if (draft) {
+    draft.lastMessageHash = messageHash;
+    draft.lastMessageTime = Date.now();
+  }
+
+  // ✅ منع التفاعلات الاجتماعية داخل المسار
+  const socialInteraction = detectSocialInteraction(message);
+  if (draft && socialInteraction) {
+    // نرسل رد سريع بدون قطع المسار
+    const quickResponse = socialInteraction.response.split('\n')[0]; // نأخذ أول سطر فقط
+    draft.lastResponse = quickResponse + ' 😊\n\n' + listingNextPrompt(draft.step, draft);
+    await saveDraft(user.uid, draft);
+    return { reply: draft.lastResponse };
+  }
+
+  // ✅ معالجة الأوامر الخاصة داخل المسار
+  if (draft) {
+    if (isShowDraft(message)) {
+      const summary = draftSummary(draft);
+      draft.lastResponse = '📄 مسودة إعلانك الحالية:\n\n' + summary + '\n\n' + listingNextPrompt(draft.step, draft);
+      await saveDraft(user.uid, draft);
+      return { reply: draft.lastResponse };
+    }
+
+    if (isGoBack(message)) {
+      // الرجوع خطوة للخلف
+      const steps = ['category', 'title', 'description', 'city', 'phone', 'location', 'price', 'confirm'];
+      const currentIndex = steps.indexOf(draft.step);
+      if (currentIndex > 0) {
+        const prevStep = steps[currentIndex - 1];
+        draft.step = prevStep;
+        draft.lastResponse = '↩️ رجعت للخطوة السابقة\n\n' + listingNextPrompt(prevStep, draft);
+        await saveDraft(user.uid, draft);
+        return { reply: draft.lastResponse };
+      }
+    }
+
+    if (isSkipField(message)) {
+      // تخطي الحقل الحالي
+      const steps = ['category', 'title', 'description', 'city', 'phone', 'location', 'price', 'confirm'];
+      const currentIndex = steps.indexOf(draft.step);
+      if (currentIndex < steps.length - 1 && draft.step !== 'confirm') {
+        const nextStep = steps[currentIndex + 1];
+        draft.step = nextStep;
+        draft.lastResponse = '⏭️ تم تخطي هذه الخطوة\n\n' + listingNextPrompt(nextStep, draft);
+        await saveDraft(user.uid, draft);
+        return { reply: draft.lastResponse };
+      }
+    }
+
+    if (isEditField(message)) {
+      // تعديل حقل محدد
+      const field = getEditFieldFromMessage(message);
+      if (field) {
+        const stepMap = {
+          'title': 'title',
+          'description': 'description',
+          'city': 'city',
+          'phone': 'phone',
+          'price': 'price',
+          'category': 'category',
+          'location': 'location'
+        };
+        
+        if (stepMap[field]) {
+          draft.step = stepMap[field];
+          // مسح قيمة الحقل ليتم إعادة إدخالها
+          if (field === 'title') draft.data.title = '';
+          else if (field === 'description') draft.data.description = '';
+          else if (field === 'city') draft.data.city = '';
+          else if (field === 'phone') draft.data.phone = '';
+          else if (field === 'price') { draft.data.originalPrice = ''; draft.data.originalCurrency = ''; }
+          else if (field === 'category') draft.data.category = '';
+          else if (field === 'location') { draft.data.lat = null; draft.data.lng = null; draft.data.locationLabel = ''; }
+          
+          draft.lastResponse = `✏️ عدّل ${field === 'price' ? 'السعر' : field === 'category' ? 'القسم' : field}\n\n` + listingNextPrompt(draft.step, draft);
+          await saveDraft(user.uid, draft);
+          return { reply: draft.lastResponse };
+        }
+      }
+    }
+  }
+
+  // إلغاء المسودة
   if (isCancel(message)) {
     await clearDraft(user.uid);
     return { reply: 'تم إلغاء مسودة الإعلان ✅\nإذا حبيت نبدأ من جديد اكتب: أضف إعلان' };
   }
 
-  let draft = await loadDraft(user.uid);
   const incomingImages = normalizeImagesMeta(meta?.images);
 
   // بدء المسار
@@ -1377,42 +1583,66 @@ async function handleListingWizard({ user, message, meta }) {
 
       // إذا ما استخرجنا شيء مفيد، نكمل المعالج التقليدي
       if (merged.changed.length) {
-        await saveDraft(user.uid, { step, data: nextData });
+        await saveDraft(user.uid, { 
+          step, 
+          data: nextData, 
+          lastMessageHash: messageHash,
+          lastMessageTime: Date.now(),
+          lastResponse: null
+        });
+        
         const draftObj = { step, data: nextData };
         const summary = draftSummary(draftObj);
-        const tail =
-          step === 'confirm'
-            ? 'إذا كل شيء تمام اكتب: /نشر\nأو اكتب: /إلغاء لإلغاء المسودة.\n\nيمكنك إضافة صور عبر زر 📷.'
-            : listingNextPrompt(step, draftObj);
-
-        return {
-          reply:
-            'تمام ✅ استخرجت تفاصيل الإعلان من كلامك وجهزت مسودة.\n\n' +
-            (incomingImages.length ? `تم حفظ ${incomingImages.slice(0, 8).length} صورة للمسودة ✅\n\n` : '') +
-            'مسودة إعلانك الحالية:\n\n' +
-            (summary || '(لا تزال بعض التفاصيل ناقصة)') +
-            '\n\n' +
-            tail,
-        };
+        const responseText = 
+          '✅ استخرجت تفاصيل الإعلان من كلامك وجهزت مسودة.\n\n' +
+          (incomingImages.length ? `تم حفظ ${incomingImages.slice(0, 8).length} صورة للمسودة ✅\n\n` : '') +
+          'مسودة إعلانك الحالية:\n\n' +
+          (summary || '(لا تزال بعض التفاصيل ناقصة)') +
+          '\n\n' +
+          listingNextPrompt(step, draftObj);
+        
+        // حفظ الرد الأخير
+        await saveDraft(user.uid, { 
+          ...draftObj,
+          lastMessageHash: messageHash,
+          lastMessageTime: Date.now(),
+          lastResponse: responseText
+        });
+        
+        return { reply: responseText };
       }
     }
 
-    await saveDraft(user.uid, { step: 'category', data: baseData });
-    return {
-      reply:
-        'تمام! بنضيف إعلان من داخل الشات ✅\n\n' +
-        (incomingImages.length ? `تم حفظ ${incomingImages.slice(0, 8).length} صورة للمسودة ✅\n\n` : '') +
-        'الخطوة 1/7: اختر القسم (اكتب اسم القسم):\n' +
-        categoriesHint() +
-        '\n\n(تقدر تلغي بأي وقت بكتابة: إلغاء)',
-    };
+    await saveDraft(user.uid, { 
+      step: 'category', 
+      data: baseData,
+      lastMessageHash: messageHash,
+      lastMessageTime: Date.now(),
+      lastResponse: null
+    });
+    
+    const responseText = 
+      '✅ بنضيف إعلان من داخل الشات\n\n' +
+      (incomingImages.length ? `تم حفظ ${incomingImages.slice(0, 8).length} صورة للمسودة ✅\n\n` : '') +
+      listingNextPrompt('category', { step: 'category', data: baseData });
+    
+    // حفظ الرد الأخير
+    await saveDraft(user.uid, { 
+      step: 'category', 
+      data: baseData,
+      lastMessageHash: messageHash,
+      lastMessageTime: Date.now(),
+      lastResponse: responseText
+    });
+    
+    return { reply: responseText };
   }
 
   const step = String(draft.step || 'category');
   const data = draft.data || {};
   const msg = String(message || '').trim();
 
-  // ✅ تحديث/تعبئة تلقائية: إذا كتب المستخدم كل التفاصيل مرة واحدة أو طلب تعديل
+  // ✅ تحديث/تعبئة تلقائية (مقيدة للحالات الواضحة فقط)
   if (shouldAutoExtractInWizard(msg) && !isCancel(msg) && !isConfirmPublish(msg) && !isStartCreateListing(msg)) {
     const extracted = await extractListingDetailsFromMessage(msg, meta);
     const merged = mergeExtractedListingIntoDraftData(data, extracted);
@@ -1433,21 +1663,23 @@ async function handleListingWizard({ user, message, meta }) {
 
     if (merged.changed.length) {
       const newStep = computeDraftStep(nextData);
-      await saveDraft(user.uid, { step: newStep, data: nextData });
       const draftObj = { step: newStep, data: nextData };
       const summary = draftSummary(draftObj);
-      const tail =
-        newStep === 'confirm'
-          ? 'إذا كل شيء تمام اكتب: /نشر\nأو اكتب: /إلغاء لإلغاء المسودة.\n\nيمكنك إضافة صور عبر زر 📷.'
-          : listingNextPrompt(newStep, draftObj);
-
-      return {
-        reply:
-          'تم تحديث مسودة الإعلان بناءً على كلامك ✅\n\n' +
-          (summary || '(لا تزال بعض التفاصيل ناقصة)') +
-          '\n\n' +
-          tail,
-      };
+      const responseText = 
+        '✅ تم تحديث المسودة بناءً على كلامك\n\n' +
+        (summary || '(لا تزال بعض التفاصيل ناقصة)') +
+        '\n\n' +
+        listingNextPrompt(newStep, draftObj);
+      
+      await saveDraft(user.uid, { 
+        step: newStep, 
+        data: nextData,
+        lastMessageHash: messageHash,
+        lastMessageTime: Date.now(),
+        lastResponse: responseText
+      });
+      
+      return { reply: responseText };
     }
   }
 
@@ -1462,36 +1694,58 @@ async function handleListingWizard({ user, message, meta }) {
       if (merged.length >= 8) break;
     }
 
-    await saveDraft(user.uid, { step, data: { ...data, images: merged } });
-    const updatedDraft = { step, data: { ...data, images: merged } };
-    return {
-      reply:
-        `تم إضافة ${Math.min(incomingImages.length, 8)} صورة للمسودة ✅\n\n` +
-        listingNextPrompt(step, updatedDraft),
-    };
+    const nextData = { ...data, images: merged };
+    const draftObj = { step, data: nextData };
+    const responseText = 
+      `✅ تم إضافة ${Math.min(incomingImages.length, 8)} صورة للمسودة\n\n` +
+      listingNextPrompt(step, draftObj);
+    
+    await saveDraft(user.uid, { 
+      step, 
+      data: nextData,
+      lastMessageHash: messageHash,
+      lastMessageTime: Date.now(),
+      lastResponse: responseText
+    });
+    
+    return { reply: responseText };
   }
 
   // لو المستخدم كتب "أضف إعلان" وهو داخل المسار بالفعل
   if (isStartCreateListing(msg)) {
-    await saveDraft(user.uid, { step: 'category', data: {} });
-    return {
-      reply:
-        'بدأنا من جديد ✅\n\n' +
-        'الخطوة 1/7: اختر القسم (اكتب اسم القسم):\n' +
-        categoriesHint() +
-        '\n\n(تقدر تلغي بأي وقت بكتابة: إلغاء)',
-    };
+    await saveDraft(user.uid, { 
+      step: 'category', 
+      data: {},
+      lastMessageHash: messageHash,
+      lastMessageTime: Date.now(),
+      lastResponse: null
+    });
+    
+    const responseText = listingNextPrompt('category', { step: 'category', data: {} });
+    
+    await saveDraft(user.uid, { 
+      step: 'category', 
+      data: {},
+      lastMessageHash: messageHash,
+      lastMessageTime: Date.now(),
+      lastResponse: responseText
+    });
+    
+    return { reply: responseText };
   }
 
   // نشر نهائي
   if (step === 'confirm') {
     if (!isConfirmPublish(msg)) {
-      return {
-        reply:
-          'هذه مسودة الإعلان الحالية:\n\n' +
-          draftSummary(draft) +
-          '\n\nإذا كل شيء تمام اكتب: نشر\nأو اكتب: إلغاء لإلغاء المسودة.',
-      };
+      const responseText = 
+        '📄 مسودة إعلانك الحالية:\n\n' +
+        draftSummary(draft) +
+        '\n\n' +
+        listingNextPrompt('confirm', draft);
+      
+      draft.lastResponse = responseText;
+      await saveDraft(user.uid, draft);
+      return { reply: responseText };
     }
 
     const rates = await getRatesServer();
@@ -1541,12 +1795,12 @@ async function handleListingWizard({ user, message, meta }) {
 
     return {
       reply:
-        'تم نشر الإعلان بنجاح! 🎉\n\n' +
-        `رابط الإعلان: /listing/${ref.id}\n\n` +
+        '🎉 تم نشر الإعلان بنجاح!\n\n' +
+        `🔗 رابط الإعلان: /listing/${ref.id}\n\n` +
         (Array.isArray(listing.images) && listing.images.length
-          ? `تم ربط ${listing.images.length} صورة بالإعلان ✅`
-          : 'إذا حبيت تضيف صور: استخدم زر 📷 داخل الشات قبل النشر أو من صفحة /add.') +
-        '\n\nنصائح لبيع أسرع:\n' +
+          ? `✅ تم ربط ${listing.images.length} صورة بالإعلان`
+          : '📸 يمكنك إضافة صور من صفحة الإعلان.') +
+        '\n\n💡 نصائح لبيع أسرع:\n' +
         '• رد بسرعة على الرسائل الواردة\n' +
         '• أضف المزيد من الصور من صفحة الإعلان\n' +
         '• شاهد إحصائيات الإعلان: /stats/' + ref.id,
@@ -1557,59 +1811,121 @@ async function handleListingWizard({ user, message, meta }) {
   if (step === 'category') {
     const cat = detectCategorySlug(msg);
     if (!cat) {
-      return {
-        reply:
-          'ما قدرت أحدد القسم من رسالتك 🤔\n' +
-          'اكتب اسم القسم (مثلاً: سيارات أو عقارات)\n\n' +
-          categoriesHint(),
-      };
+      const responseText = 
+        '❌ ما قدرت أحدد القسم من رسالتك\n' +
+        'اكتب اسم القسم (مثلاً: سيارات أو عقارات)\n\n' +
+        categoriesHint() +
+        '\n\n📋 الأوامر المتاحة:\n• عرض المسودة - إلغاء - تخطي\n• /نشر للإنهاء - /إلغاء للخروج';
+      
+      draft.lastResponse = responseText;
+      await saveDraft(user.uid, draft);
+      return { reply: responseText };
     }
-    await saveDraft(user.uid, { step: 'title', data: { ...data, category: cat } });
-    return { reply: `تمام ✅ القسم: ${categoryNameFromSlug(cat)}\n\nالخطوة 2/7: اكتب عنوان الإعلان.` };
+    
+    const nextData = { ...data, category: cat };
+    const responseText = `✅ القسم: ${categoryNameFromSlug(cat)}\n\n` + listingNextPrompt('title', { step: 'title', data: nextData });
+    
+    await saveDraft(user.uid, { 
+      step: 'title', 
+      data: nextData,
+      lastMessageHash: messageHash,
+      lastMessageTime: Date.now(),
+      lastResponse: responseText
+    });
+    
+    return { reply: responseText };
   }
 
   if (step === 'title') {
     const title = msg.trim();
-    if (!title || title.length < 5) {
-      return { reply: 'العنوان لازم يكون واضح (5 أحرف على الأقل). اكتب عنوان الإعلان الآن.' };
+    if (!title || title.length < 3 || title.split(/\s+/).length < 1) {
+      const responseText = '❌ العنوان لازم يكون واضح (3 أحرف على الأقل أو كلمة واحدة). اكتب عنوان الإعلان الآن.';
+      draft.lastResponse = responseText;
+      await saveDraft(user.uid, draft);
+      return { reply: responseText };
     }
-    await saveDraft(user.uid, { step: 'description', data: { ...data, title } });
-    return { reply: 'تمام ✅\n\nالخطوة 3/7: اكتب وصف الإعلان (على الأقل 10 أحرف).' };
+    
+    const nextData = { ...data, title };
+    const responseText = '✅\n\n' + listingNextPrompt('description', { step: 'description', data: nextData });
+    
+    await saveDraft(user.uid, { 
+      step: 'description', 
+      data: nextData,
+      lastMessageHash: messageHash,
+      lastMessageTime: Date.now(),
+      lastResponse: responseText
+    });
+    
+    return { reply: responseText };
   }
 
   if (step === 'description') {
     const description = msg.trim();
     if (!description || description.length < 10) {
-      return { reply: 'الوصف قصير. اكتب وصف أوضح (10 أحرف على الأقل).' };
+      const responseText = '❌ الوصف قصير. اكتب وصف أوضح (10 أحرف على الأقل).';
+      draft.lastResponse = responseText;
+      await saveDraft(user.uid, draft);
+      return { reply: responseText };
     }
-    await saveDraft(user.uid, { step: 'city', data: { ...data, description } });
-    return { reply: 'تمام ✅\n\nالخطوة 4/7: اكتب اسم المدينة.' };
+    
+    const nextData = { ...data, description };
+    const responseText = '✅\n\n' + listingNextPrompt('city', { step: 'city', data: nextData });
+    
+    await saveDraft(user.uid, { 
+      step: 'city', 
+      data: nextData,
+      lastMessageHash: messageHash,
+      lastMessageTime: Date.now(),
+      lastResponse: responseText
+    });
+    
+    return { reply: responseText };
   }
 
   if (step === 'city') {
     const city = msg.trim();
     if (!city || city.length < 2) {
-      return { reply: 'اكتب اسم المدينة بشكل صحيح (مثلاً: صنعاء).' };
+      const responseText = '❌ اكتب اسم المدينة بشكل صحيح (مثلاً: صنعاء).';
+      draft.lastResponse = responseText;
+      await saveDraft(user.uid, draft);
+      return { reply: responseText };
     }
-    await saveDraft(user.uid, { step: 'phone', data: { ...data, city } });
-    return { reply: 'تمام ✅\n\nالخطوة 5/7: اكتب رقم الجوال للتواصل (مثال: 777123456 أو +967777123456).' };
+    
+    const nextData = { ...data, city };
+    const responseText = '✅\n\n' + listingNextPrompt('phone', { step: 'phone', data: nextData });
+    
+    await saveDraft(user.uid, { 
+      step: 'phone', 
+      data: nextData,
+      lastMessageHash: messageHash,
+      lastMessageTime: Date.now(),
+      lastResponse: responseText
+    });
+    
+    return { reply: responseText };
   }
 
   if (step === 'phone') {
     const phone = normalizePhone(msg);
     if (!phone || !isValidPhone(phone)) {
-      return { reply: 'اكتب رقم جوال صحيح (مثال: 777123456 أو +967777123456).' };
+      const responseText = '❌ اكتب رقم جوال صحيح (مثال: 777123456 أو +967777123456).';
+      draft.lastResponse = responseText;
+      await saveDraft(user.uid, draft);
+      return { reply: responseText };
     }
-    await saveDraft(user.uid, { step: 'location', data: { ...data, phone } });
-    return {
-      reply:
-        'تمام ✅\n\n' +
-        'الخطوة 6/7: حدّد موقع الإعلان.\n' +
-        '• اضغط زر "📍 موقعي" داخل الشات لإرسال الإحداثيات تلقائياً\n' +
-        '• أو اكتب الإحداثيات بهذا الشكل: 15.3694, 44.1910\n' +
-        '• أو أرسل رابط خرائط\n\n' +
-        'تقدر أيضاً تكتب اسم الحي/المنطقة (مثال: صنعاء - حدة).',
-    };
+    
+    const nextData = { ...data, phone };
+    const responseText = '✅\n\n' + listingNextPrompt('location', { step: 'location', data: nextData });
+    
+    await saveDraft(user.uid, { 
+      step: 'location', 
+      data: nextData,
+      lastMessageHash: messageHash,
+      lastMessageTime: Date.now(),
+      lastResponse: responseText
+    });
+    
+    return { reply: responseText };
   }
 
   if (step === 'location') {
@@ -1621,77 +1937,119 @@ async function handleListingWizard({ user, message, meta }) {
       const lng = Number(metaLng);
       if (isFinite(lat) && isFinite(lng)) {
         const locationLabel = msg && msg !== '📍 هذا موقعي' ? String(msg).trim() : data.locationLabel || null;
-        await saveDraft(user.uid, { step: 'price', data: { ...data, lat, lng, locationLabel } });
-        return {
-          reply:
-            'تم حفظ موقعك ✅\n\n' +
-            'الخطوة 7/7: اكتب السعر (مثال: 100000) ويمكن تكتب العملة معها مثل: 100 USD أو 100 SAR.',
-        };
+        const nextData = { ...data, lat, lng, locationLabel };
+        const responseText = '✅ تم حفظ موقعك\n\n' + listingNextPrompt('price', { step: 'price', data: nextData });
+        
+        await saveDraft(user.uid, { 
+          step: 'price', 
+          data: nextData,
+          lastMessageHash: messageHash,
+          lastMessageTime: Date.now(),
+          lastResponse: responseText
+        });
+        
+        return { reply: responseText };
       }
     }
 
     // 2) parse lat,lng from text
     const parsed = extractLatLngFromText(msg);
     if (parsed) {
-      await saveDraft(user.uid, { step: 'price', data: { ...data, lat: parsed.lat, lng: parsed.lng, locationLabel: data.locationLabel || null } });
-      return {
-        reply:
-          'تمام ✅ تم حفظ الإحداثيات.\n\n' +
-          'الخطوة 7/7: اكتب السعر (مثال: 100000) ويمكن تكتب العملة معها مثل: 100 USD أو 100 SAR.',
-      };
+      const nextData = { ...data, lat: parsed.lat, lng: parsed.lng, locationLabel: data.locationLabel || null };
+      const responseText = '✅ تم حفظ الإحداثيات\n\n' + listingNextPrompt('price', { step: 'price', data: nextData });
+      
+      await saveDraft(user.uid, { 
+        step: 'price', 
+        data: nextData,
+        lastMessageHash: messageHash,
+        lastMessageTime: Date.now(),
+        lastResponse: responseText
+      });
+      
+      return { reply: responseText };
     }
 
     // 3) accept maps link or label
     if (msg && msg.length >= 2) {
       const link = extractMapsLink(msg);
       const locationLabel = link ? `رابط الموقع: ${link}` : msg;
-      await saveDraft(user.uid, { step: 'price', data: { ...data, locationLabel } });
-      return {
-        reply:
-          'تمام ✅ تم حفظ الموقع.\n\n' +
-          'الخطوة 7/7: اكتب السعر (مثال: 100000) ويمكن تكتب العملة معها مثل: 100 USD أو 100 SAR.',
-      };
+      const nextData = { ...data, locationLabel };
+      const responseText = '✅ تم حفظ الموقع\n\n' + listingNextPrompt('price', { step: 'price', data: nextData });
+      
+      await saveDraft(user.uid, { 
+        step: 'price', 
+        data: nextData,
+        lastMessageHash: messageHash,
+        lastMessageTime: Date.now(),
+        lastResponse: responseText
+      });
+      
+      return { reply: responseText };
     }
 
-    return {
-      reply:
-        'ما قدرت أحدد موقع واضح 🤔\n' +
-        'جرّب أحد الخيارات:\n' +
-        '• اضغط زر "📍 موقعي" داخل الشات\n' +
-        '• اكتب الإحداثيات: 15.3694, 44.1910\n' +
-        '• أرسل رابط خرائط\n' +
-        '• أو اكتب اسم الحي/المنطقة',
-    };
+    const responseText = 
+      '❌ ما قدرت أحدد موقع واضح\n' +
+      'جرّب أحد الخيارات:\n' +
+      '• اضغط زر "📍 موقعي" داخل الشات\n' +
+      '• اكتب الإحداثيات: 15.3694, 44.1910\n' +
+      '• أرسل رابط خرائط\n' +
+      '• أو اكتب اسم الحي/المنطقة';
+    
+    draft.lastResponse = responseText;
+    await saveDraft(user.uid, draft);
+    return { reply: responseText };
   }
 
   if (step === 'price') {
     const n = extractNumber(msg);
     if (!n || n <= 0) {
-      return { reply: 'ما فهمت السعر. اكتب رقم فقط (مثال: 100000) أو (100 USD).' };
+      const responseText = '❌ ما فهمت السعر. اكتب رقم فقط (مثال: 100000) أو (100 USD).';
+      draft.lastResponse = responseText;
+      await saveDraft(user.uid, draft);
+      return { reply: responseText };
     }
+    
     const originalCurrency = detectCurrency(msg);
-    await saveDraft(user.uid, {
-      step: 'confirm',
-      data: { ...data, originalPrice: n, originalCurrency },
+    const nextData = { ...data, originalPrice: n, originalCurrency };
+    const draftObj = { step: 'confirm', data: nextData };
+    const responseText = 
+      '✅ وصلنا للنهاية\n\n' +
+      '📄 مسودة إعلانك:\n\n' +
+      draftSummary(draftObj) +
+      '\n\n' +
+      listingNextPrompt('confirm', draftObj);
+    
+    await saveDraft(user.uid, { 
+      step: 'confirm', 
+      data: nextData,
+      lastMessageHash: messageHash,
+      lastMessageTime: Date.now(),
+      lastResponse: responseText
     });
-
-    const fakeDraft = { step: 'confirm', data: { ...data, originalPrice: n, originalCurrency } };
-    return {
-      reply:
-        'وصلنا للنهاية ✅ هذه مسودة إعلانك:\n\n' +
-        draftSummary(fakeDraft) +
-        '\n\nإذا كل شيء تمام اكتب: نشر\nأو اكتب: إلغاء لإلغاء المسودة.',
-    };
+    
+    return { reply: responseText };
   }
 
   // خطوة غير معروفة
-  await saveDraft(user.uid, { step: 'category', data: {} });
-  return {
-    reply:
-      'صار عندي لخبطة بسيطة 😅 خلّينا نبدأ من جديد.\n\n' +
-      'الخطوة 1/7: اختر القسم (اكتب اسم القسم):\n' +
-      categoriesHint(),
-  };
+  await saveDraft(user.uid, { 
+    step: 'category', 
+    data: {},
+    lastMessageHash: messageHash,
+    lastMessageTime: Date.now(),
+    lastResponse: null
+  });
+  
+  const responseText = '🔄 صار عندي لخبطة بسيطة، خلّينا نبدأ من جديد\n\n' + listingNextPrompt('category', { step: 'category', data: {} });
+  
+  await saveDraft(user.uid, { 
+    step: 'category', 
+    data: {},
+    lastMessageHash: messageHash,
+    lastMessageTime: Date.now(),
+    lastResponse: responseText
+  });
+  
+  return { reply: responseText };
 }
 
 // =========================
@@ -1726,32 +2084,14 @@ export async function POST(request) {
 
     const normalized = normalizeText(trimmedMessage);
 
-    // ✅ أولاً: التحقق من التفاعلات الاجتماعية (الأولوية العالية)
-    const socialInteraction = detectSocialInteraction(trimmedMessage);
-    if (socialInteraction) {
-      // إضافة رسالة ترحيبية إضافية لأول تفاعل
-      let additionalGreeting = '';
-      if (socialInteraction.type === 'greetings') {
-        additionalGreeting = '\n\nمرحباً بك في سوق اليمن! 🇾🇪\nكيف يمكنني مساعدتك اليوم؟';
-      } else if (socialInteraction.type === 'morning') {
-        additionalGreeting = '\n\nأتمنى لك يوماً سعيداً مليئاً بالنجاح 🌅\nهل تريد معرفة المزيد عن خدماتنا؟';
-      } else if (socialInteraction.type === 'evening') {
-        additionalGreeting = '\n\nأسعد الله مساءك 🌙\nهل هناك شيء يمكنني مساعدتك به؟';
-      }
-      
-      return NextResponse.json({ 
-        reply: socialInteraction.response + additionalGreeting 
-      });
-    }
-
     // ✅ إذا وصلت صور من الواجهة: نتعامل معها كجزء من مسار إضافة الإعلان
     const metaImages = normalizeImagesMeta(meta?.images);
     if (metaImages.length) {
       if (!user || user.error) {
         return NextResponse.json({
           reply:
-            'لرفع الصور وربطها بمسودة الإعلان لازم تسجل دخول أولاً ✅\n\n' +
-            'اذهب إلى: /login',
+            '📸 لرفع الصور وربطها بمسودة الإعلان لازم تسجل دخول أولاً\n\n' +
+            '🔗 اذهب إلى: /login',
         });
       }
 
@@ -1759,13 +2099,29 @@ export async function POST(request) {
       return NextResponse.json({ reply: res.reply });
     }
 
-    // 1) إلغاء مسودة (لو مسجل دخول)
+    // ✅ أولاً: تحميل المسودة الحالية إذا كان المستخدم مسجل دخول
+    const existingDraft = user && !user.error ? await loadDraft(user.uid) : null;
+
+    // ✅ إلغاء مسودة (لو مسجل دخول)
     if (user && !user.error && isCancel(normalized)) {
       const res = await handleListingWizard({ user, message: trimmedMessage, meta });
       return NextResponse.json({ reply: res.reply });
     }
 
-    // 2) إحصاءات: كم إعلان؟
+    // ✅ إذا كان هناك مسودة نشطة، نمنع التفاعلات الاجتماعية
+    if (existingDraft) {
+      const socialInteraction = detectSocialInteraction(trimmedMessage);
+      if (socialInteraction) {
+        // رد سريع مع استمرار المسار
+        const quickResponse = socialInteraction.response.split('\n')[0];
+        const prompt = listingNextPrompt(existingDraft.step, existingDraft);
+        return NextResponse.json({ 
+          reply: `${quickResponse} 😊\n\n${prompt}` 
+        });
+      }
+    }
+
+    // ✅ إحصاءات: كم إعلان؟
     const countIntent = extractCountIntent(normalized);
     if (countIntent) {
       const { category } = countIntent;
@@ -1790,20 +2146,19 @@ export async function POST(request) {
       return NextResponse.json({
         reply:
           `📊 عدد الإعلانات (المتاحة) في ${label}: ${numberText}\n` +
-          (category ? '' : '\nتقدر تحدد القسم مثل: سيارات أو عقارات.') +
+          (category ? '' : '\nيمكنك تحديد القسم مثل: سيارات أو عقارات.') +
           additionalInfo,
       });
     }
 
-    // 3) إضافة إعلان عبر الشات (يتطلب تسجيل الدخول)
-    const existingDraft = user && !user.error ? await loadDraft(user.uid) : null;
+    // ✅ إضافة إعلان عبر الشات (يتطلب تسجيل الدخول)
     const autoCreateFromDetails = user && !user.error ? looksLikeListingDetails(trimmedMessage, meta) : false;
 
     if (isStartCreateListing(normalized) || existingDraft || autoCreateFromDetails) {
       if (!user || user.error) {
         return NextResponse.json({
           reply:
-            'لإضافة إعلان عبر المساعد لازم تسجل دخول أولاً ✅\n\n' +
+            '📝 لإضافة إعلان عبر المساعد لازم تسجل دخول أولاً\n\n' +
             'بعد تسجيل الدخول اكتب: أضف إعلان\n' +
             'أو استخدم صفحة الإضافة مباشرة: /add',
         });
@@ -1813,13 +2168,13 @@ export async function POST(request) {
       return NextResponse.json({ reply: res.reply });
     }
 
-    // 4) FAQ موسع
+    // ✅ FAQ موسع
     const answer = findBestMatch(trimmedMessage);
     if (answer) {
       return NextResponse.json({ reply: answer });
     }
 
-    // 5) AI fallback مع تحليل النية
+    // ✅ AI fallback مع تحليل النية
     const analysis = await analyzeIntentAndSentiment(trimmedMessage);
     
     if (analysis.intents.isAskingForHelp) {
@@ -1837,7 +2192,7 @@ export async function POST(request) {
           return NextResponse.json({
             reply:
             `عدد الإعلانات (المتاحة) في ${label}: ${numberText}\n` +
-            (category ? '' : '\nتقدر تحدد القسم مثل: سيارات أو عقارات.'),
+            (category ? '' : '\nيمكنك تحديد القسم مثل: سيارات أو عقارات.'),
           });
         }
 
@@ -1845,7 +2200,7 @@ export async function POST(request) {
           if (!user || user.error) {
             return NextResponse.json({
               reply:
-                'لإضافة إعلان عبر المساعد لازم تسجل دخول أولاً ✅\n\n' +
+                '📝 لإضافة إعلان عبر المساعد لازم تسجل دخول أولاً\n\n' +
                 'بعد تسجيل الدخول اكتب: أضف إعلان\n' +
                 'أو استخدم صفحة الإضافة مباشرة: /add',
             });
@@ -1864,6 +2219,25 @@ export async function POST(request) {
       }
     }
 
+    // ✅ التفاعلات الاجتماعية العامة (فقط إذا لم يكن هناك مسودة نشطة)
+    if (!existingDraft) {
+      const socialInteraction = detectSocialInteraction(trimmedMessage);
+      if (socialInteraction) {
+        let additionalGreeting = '';
+        if (socialInteraction.type === 'greetings') {
+          additionalGreeting = '\n\nمرحباً بك في سوق اليمن! 🇾🇪\nكيف يمكنني مساعدتك اليوم؟';
+        } else if (socialInteraction.type === 'morning') {
+          additionalGreeting = '\n\nأتمنى لك يوماً سعيداً مليئاً بالنجاح 🌅\nهل تريد معرفة المزيد عن خدماتنا؟';
+        } else if (socialInteraction.type === 'evening') {
+          additionalGreeting = '\n\nأسعد الله مساءك 🌙\nهل هناك شيء يمكنني مساعدتك به؟';
+        }
+        
+        return NextResponse.json({ 
+          reply: socialInteraction.response + additionalGreeting 
+        });
+      }
+    }
+
     // رد افتراضي محسن مع تلميحات
     const suggestions = [
       '• كيف أضيف إعلان؟',
@@ -1876,7 +2250,7 @@ export async function POST(request) {
     
     return NextResponse.json({
       reply:
-        'ما فهمت سؤالك تماماً 🤔\n\n' +
+        '🤔 ما فهمت سؤالك تماماً\n\n' +
         'جرب أحد هذه الخيارات:\n' +
         suggestions.join('\n') +
         '\n\nأو اكتب سؤالك بشكل أوضح وسأساعدك 😊\n\n' +
@@ -1925,9 +2299,10 @@ export async function GET(request) {
     
     return NextResponse.json({
       status: 'active',
-      version: '2.0.0',
-      features: ['faq', 'listing_wizard', 'counts', 'ai_fallback', 'rate_limiting', 'caching', 'social_interactions'],
-      social_features: ['greetings', 'morning', 'evening', 'thanks', 'compliments', 'prayers', 'goodbye']
+      version: '2.1.0',
+      features: ['faq', 'listing_wizard', 'counts', 'ai_fallback', 'rate_limiting', 'caching', 'social_interactions', 'duplicate_prevention'],
+      social_features: ['greetings', 'morning', 'evening', 'thanks', 'compliments', 'prayers', 'goodbye'],
+      wizard_commands: ['عرض المسودة', 'إلغاء', 'رجوع', 'تخطي', 'تعديل [الحقل]', '/نشر', '/إلغاء']
     });
     
   } catch (error) {
