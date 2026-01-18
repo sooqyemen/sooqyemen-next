@@ -259,54 +259,18 @@ function pickImage(listing) {
   );
 }
 
-// ✅ حساب المسافة (Haversine) بالكيلومتر
-function distanceKm(a, b) {
-  const [lat1, lon1] = a;
-  const [lat2, lon2] = b;
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const s1 = Math.sin(dLat / 2) ** 2;
-  const s2 = Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-  const c = 2 * Math.asin(Math.min(1, Math.sqrt(s1 + s2)));
-  return R * c;
-}
-
 export default function HomeMapView({ listings = [] }) {
   const [seen, setSeen] = useState(() => new Set());
   const [map, setMap] = useState(null);
 
-  // فلتر الأقسام (Desktop فقط)
+  // فلتر الأقسام (Chips)
   const [activeCat, setActiveCat] = useState('all');
-
-  // ✅ اكتشاف الجوال
-  const [isMobile, setIsMobile] = useState(false);
-
-  // ✅ القريب مني
-  const [nearEnabled, setNearEnabled] = useState(false);
-  const [nearRadius, setNearRadius] = useState(10); // km
-  const [userPos, setUserPos] = useState(null); // [lat,lng]
-  const [geoError, setGeoError] = useState('');
 
   useEffect(() => {
     setSeen(readSeen());
   }, []);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const mq = window.matchMedia('(max-width: 520px)');
-    const onChange = () => setIsMobile(!!mq.matches);
-    onChange();
-    try {
-      mq.addEventListener('change', onChange);
-      return () => mq.removeEventListener('change', onChange);
-    } catch {
-      mq.addListener(onChange);
-      return () => mq.removeListener(onChange);
-    }
-  }, []);
-
-  // ✅ invalidateSize عشان الخريطة تظهر بكامل المساحة بعد الرندر/التبديل
+  // ✅ إصلاح: invalidateSize عشان الخريطة تظهر بكامل المساحة بعد الرندر/التبديل
   useEffect(() => {
     if (!map) return;
 
@@ -352,7 +316,7 @@ export default function HomeMapView({ listings = [] }) {
       .filter(Boolean);
   }, [listings]);
 
-  // ✅ كاش للأيقونات (عشان ما نعيد بناء icon لكل Marker كل رندر)
+  // ✅ كاش للأيقونات (أهم شي عشان ما نعيد بناء icon لكل Marker كل رندر)
   const iconCache = useMemo(() => new Map(), []);
 
   const getMarkerIcon = (categoryValue, isSeen) => {
@@ -377,7 +341,7 @@ export default function HomeMapView({ listings = [] }) {
     });
   };
 
-  // ✅ counts للأقسام المتاحة (Desktop)
+  // ✅ counts للأقسام المتاحة (للفلتر + الليجند)
   const catCounts = useMemo(() => {
     const m = new Map();
     for (const p of points) {
@@ -388,11 +352,12 @@ export default function HomeMapView({ listings = [] }) {
   }, [points]);
 
   const availableCats = useMemo(() => {
+    // ترتيب ثابت حسب CAT_STYLE
     const keys = Object.keys(CAT_STYLE);
     return keys.filter((k) => (catCounts.get(k) || 0) > 0);
   }, [catCounts]);
 
-  // ✅ Legend بسيط (يعرض فقط الأقسام الموجودة فعليًا)
+  // ✅ Legend بسيط (يعرض فقط الأقسام الموجودة فعليًا في البيانات)
   const legendItems = useMemo(() => {
     const arr = availableCats.slice(0, 12);
     return arr
@@ -400,76 +365,11 @@ export default function HomeMapView({ listings = [] }) {
       .sort((a, b) => String(a.label).localeCompare(String(b.label), 'ar'));
   }, [availableCats, catCounts]);
 
-  // ✅ فلترة الأقسام (تشتغل بالديسكتوب، وعلى الجوال تبقى "الكل")
-  const categoryFiltered = useMemo(() => {
+  // ✅ فلترة الـ markers
+  const filteredPoints = useMemo(() => {
     if (activeCat === 'all') return points;
     return points.filter((p) => p._catKey === activeCat);
   }, [points, activeCat]);
-
-  // ✅ طلب الموقع (مرة واحدة عند تفعيل القريب مني)
-  const requestMyLocation = () => {
-    setGeoError('');
-    if (typeof window === 'undefined') return;
-
-    if (!('geolocation' in navigator)) {
-      setGeoError('جهازك لا يدعم تحديد الموقع.');
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = pos?.coords?.latitude;
-        const lng = pos?.coords?.longitude;
-        if (Number.isFinite(lat) && Number.isFinite(lng)) {
-          const p = [lat, lng];
-          setUserPos(p);
-
-          // نقرّب الخريطة لموقع المستخدم
-          try {
-            if (map) map.flyTo(p, Math.max(12, map.getZoom()), { animate: true });
-          } catch {}
-        } else {
-          setGeoError('تعذر قراءة إحداثيات الموقع.');
-        }
-      },
-      (err) => {
-        const msg =
-          err?.code === 1
-            ? 'تم رفض إذن الموقع. فعّل الموقع من المتصفح.'
-            : err?.code === 2
-            ? 'الموقع غير متاح الآن.'
-            : 'تعذر تحديد الموقع.';
-        setGeoError(msg);
-      },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60_000 }
-    );
-  };
-
-  const toggleNearMe = () => {
-    setNearEnabled((prev) => {
-      const next = !prev;
-      if (next) requestMyLocation();
-      return next;
-    });
-  };
-
-  // ✅ فلترة القريب مني + ترتيب حسب المسافة
-  const filteredPoints = useMemo(() => {
-    const base = categoryFiltered;
-
-    if (!nearEnabled) return base;
-    if (!userPos) return base;
-
-    const arr = base
-      .map((p) => {
-        const d = distanceKm(userPos, p._coords);
-        return { ...p, _distKm: d };
-      })
-      .filter((p) => Number.isFinite(p._distKm) && p._distKm <= nearRadius)
-      .sort((a, b) => (a._distKm || 0) - (b._distKm || 0));
-
-    return arr;
-  }, [categoryFiltered, nearEnabled, userPos, nearRadius]);
 
   return (
     <div className="card" style={{ padding: 12 }}>
@@ -501,10 +401,9 @@ export default function HomeMapView({ listings = [] }) {
           border: '1px solid #e2e8f0',
         }}
       >
-        {/* ✅ Overlay: Desktop = Chips | Mobile = "القريبة مني" فقط */}
-        <div className="sooq-mapOverlay">
-          {/* Desktop chips */}
-          {!isMobile && availableCats.length > 0 ? (
+        {/* ✅ Chips Filter Overlay */}
+        {availableCats.length > 0 ? (
+          <div className="sooq-mapOverlay">
             <div className="sooq-chips" role="tablist" aria-label="فلترة الأقسام">
               <button
                 type="button"
@@ -532,57 +431,8 @@ export default function HomeMapView({ listings = [] }) {
                 );
               })}
             </div>
-          ) : null}
-
-          {/* Mobile: near me bar */}
-          {isMobile ? (
-            <div className="sooq-nearBar" role="group" aria-label="القريبة مني">
-              <button
-                type="button"
-                className={`sooq-nearBtn ${nearEnabled ? 'isActive' : ''}`}
-                onClick={toggleNearMe}
-                title="عرض الإعلانات القريبة من موقعك"
-              >
-                📍 الإعلانات القريبة مني
-              </button>
-
-              <div className="sooq-nearPills" aria-label="نطاق القرب">
-                {[5, 10, 25].map((km) => (
-                  <button
-                    key={km}
-                    type="button"
-                    className={`sooq-nearPill ${nearRadius === km ? 'isActive' : ''}`}
-                    onClick={() => setNearRadius(km)}
-                    title={`ضمن ${km} كم`}
-                  >
-                    {km} كم
-                  </button>
-                ))}
-
-                <button
-                  type="button"
-                  className={`sooq-nearPill ${!nearEnabled ? 'isActive' : ''}`}
-                  onClick={() => setNearEnabled(false)}
-                  title="عرض الكل"
-                >
-                  الكل
-                </button>
-              </div>
-
-              {nearEnabled ? (
-                <div className="sooq-nearMeta">
-                  {userPos ? (
-                    <span>✅ القريب: {filteredPoints.length}</span>
-                  ) : (
-                    <span>⏳ جارٍ تحديد موقعك…</span>
-                  )}
-                </div>
-              ) : null}
-
-              {geoError ? <div className="sooq-nearError">⚠️ {geoError}</div> : null}
-            </div>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
         <MapContainer
           whenCreated={setMap}
@@ -650,12 +500,6 @@ export default function HomeMapView({ listings = [] }) {
                       📍 {l.city || l.locationLabel || l.area || 'غير محدد'}
                     </div>
 
-                    {nearEnabled && userPos && Number.isFinite(l._distKm) ? (
-                      <div style={{ fontSize: 12, color: '#0f172a', marginBottom: 6 }}>
-                        📏 يبعد حوالي {Math.round(l._distKm)} كم
-                      </div>
-                    ) : null}
-
                     <div style={{ fontWeight: 900, marginBottom: 10 }}>💰 {fmtYER(price)}</div>
 
                     <Link
@@ -691,7 +535,7 @@ export default function HomeMapView({ listings = [] }) {
       <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
         {filteredPoints.length
           ? `✅ الظاهر على الخريطة: ${filteredPoints.length} إعلان (داخل اليمن)`
-          : 'لا توجد إعلانات مطابقة/أو لا توجد إعلانات لها موقع داخل اليمن.'}
+          : 'لا توجد إعلانات مطابقة للفلتر/أو لا توجد إعلانات لها موقع داخل اليمن.'}
       </div>
 
       <style jsx global>{`
@@ -709,7 +553,6 @@ export default function HomeMapView({ listings = [] }) {
           pointer-events: none;
         }
 
-        /* Desktop chips */
         .sooq-chips {
           pointer-events: auto;
           display: flex;
@@ -775,72 +618,6 @@ export default function HomeMapView({ listings = [] }) {
           border-radius: 999px;
           background: rgba(0, 0, 0, 0.06);
           font-size: 12px;
-          font-weight: 800;
-        }
-
-        /* ✅ Mobile Near Bar */
-        .sooq-nearBar {
-          pointer-events: auto;
-          display: grid;
-          gap: 8px;
-          padding: 10px;
-          border-radius: 14px;
-          background: rgba(255, 255, 255, 0.92);
-          backdrop-filter: blur(8px);
-          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.12);
-          border: 1px solid rgba(0, 0, 0, 0.08);
-        }
-
-        .sooq-nearBtn {
-          width: 100%;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          padding: 10px 12px;
-          border-radius: 12px;
-          border: 1px solid rgba(0, 0, 0, 0.10);
-          background: #fff;
-          font-weight: 900;
-          cursor: pointer;
-        }
-
-        .sooq-nearBtn.isActive {
-          border-color: rgba(0, 0, 0, 0.20);
-          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.10);
-        }
-
-        .sooq-nearPills {
-          display: flex;
-          gap: 8px;
-          overflow-x: auto;
-        }
-
-        .sooq-nearPill {
-          flex: 0 0 auto;
-          padding: 8px 10px;
-          border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.10);
-          background: #fff;
-          font-weight: 900;
-          font-size: 12px;
-          cursor: pointer;
-          white-space: nowrap;
-        }
-
-        .sooq-nearPill.isActive {
-          border-color: rgba(0, 0, 0, 0.22);
-          box-shadow: 0 8px 14px rgba(0, 0, 0, 0.10);
-        }
-
-        .sooq-nearMeta {
-          font-size: 12px;
-          color: #0f172a;
-          font-weight: 800;
-        }
-
-        .sooq-nearError {
-          font-size: 12px;
-          color: #b91c1c;
           font-weight: 800;
         }
 
@@ -936,7 +713,7 @@ export default function HomeMapView({ listings = [] }) {
             max-width: 100%;
           }
           .sooq-legend__label {
-            display: none;
+            display: none; /* بالجوال نخليها أيقونة فقط لتخفيف الزحمة */
           }
           .sooq-legend__item {
             padding: 4px 6px;
