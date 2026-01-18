@@ -2,13 +2,15 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/navigation';
 import { db, firebase, storage } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import { toYER, useRates } from '@/lib/rates';
 import Link from 'next/link';
 
-const LocationPicker = dynamic(() => import('@/components/Map/LocationPicker'), { ssr: false });
+const LocationPicker = dynamic(
+  () => import('@/components/Map/LocationPicker'),
+  { ssr: false }
+);
 
 // ✅ الأقسام الافتراضية (مطابقة تمامًا لمفاتيح Firestore عندك)
 const DEFAULT_CATEGORIES = [
@@ -31,13 +33,13 @@ const DEFAULT_CATEGORIES = [
 ];
 
 export default function AddPage() {
-  const router = useRouter();
   const { user, loading } = useAuth();
   const rates = useRates();
 
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [city, setCity] = useState('');
+  // ✅ مهم: لا يوجد قسم افتراضي
   const [category, setCategory] = useState('');
   const [phone, setPhone] = useState('');
   const [isWhatsapp, setIsWhatsapp] = useState(true);
@@ -47,7 +49,7 @@ export default function AddPage() {
 
   const [coords, setCoords] = useState(null); // [lat, lng]
   const [locationLabel, setLocationLabel] = useState('');
-  const [showMap, setShowMap] = useState(false);
+  const [showMap, setShowMap] = useState(false); // ✅ للتحميل عند الطلب
 
   const [images, setImages] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
@@ -63,14 +65,6 @@ export default function AddPage() {
   const [catsLoading, setCatsLoading] = useState(true);
   const [catsSource, setCatsSource] = useState('loading'); // loading | firestore | fallback
 
-  // ✅ السيناريو الأفضل: إذا ما فيه user → حوّل تلقائياً لصفحة الدخول مع next=/add
-  useEffect(() => {
-    if (loading) return;
-    if (!user) {
-      router.replace(`/login?next=${encodeURIComponent('/add')}`);
-    }
-  }, [loading, user, router]);
-
   // ✅ تحميل الأقسام من Firestore
   useEffect(() => {
     const unsub = db.collection('categories').onSnapshot(
@@ -79,25 +73,30 @@ export default function AddPage() {
           .map((d) => {
             const data = d.data() || {};
             return {
-              slug: d.id,
+              slug: d.id, // ✅ مفتاح القسم = id
               name: String(data.name || '').trim(),
               active: data.active,
             };
           })
           .filter((c) => c.slug && c.name && c.active !== false);
 
+        // ترتيب عربي لطيف
         arr.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
         if (arr.length) {
           setCats(arr);
           setCatsSource('firestore');
 
-          if (category && !arr.some((x) => x.slug === category)) setCategory('');
+          // ✅ إذا القسم الحالي غير موجود، صفّره
+          if (category && !arr.some((x) => x.slug === category)) {
+            setCategory('');
+          }
         } else {
           setCats(DEFAULT_CATEGORIES);
           setCatsSource('fallback');
-
-          if (category && !DEFAULT_CATEGORIES.some((x) => x.slug === category)) setCategory('');
+          if (category && !DEFAULT_CATEGORIES.some((x) => x.slug === category)) {
+            setCategory('');
+          }
         }
 
         setCatsLoading(false);
@@ -108,7 +107,9 @@ export default function AddPage() {
         setCatsLoading(false);
         setCatsSource('fallback');
 
-        if (category && !DEFAULT_CATEGORIES.some((x) => x.slug === category)) setCategory('');
+        if (category && !DEFAULT_CATEGORIES.some((x) => x.slug === category)) {
+          setCategory('');
+        }
       }
     );
 
@@ -159,6 +160,7 @@ export default function AddPage() {
 
     if (!city.trim()) newErrors.city = 'الرجاء إدخال المدينة';
 
+    // ✅ القسم إجباري
     if (!category) newErrors.category = 'الرجاء اختيار القسم';
 
     if (!price || isNaN(price) || Number(price) <= 0) newErrors.price = 'الرجاء إدخال سعر صحيح';
@@ -209,9 +211,8 @@ export default function AddPage() {
   const submit = async () => {
     setSubmitAttempted(true);
 
-    // ✅ احتياط: لو حصل ضغط قبل اكتمال redirect
     if (!user) {
-      router.replace(`/login?next=${encodeURIComponent('/add')}`);
+      alert('يرجى تسجيل الدخول أولاً');
       return;
     }
 
@@ -239,6 +240,7 @@ export default function AddPage() {
         description: desc.trim(),
         city: city.trim(),
 
+        // ✅ مهم جدًا: نخزّن key الإنجليزي المطابق لـ Firestore
         category: String(category || '').trim(),
 
         phone: phone.trim() || null,
@@ -249,6 +251,7 @@ export default function AddPage() {
         originalCurrency: currency,
         currencyBase: 'YER',
 
+        // ✅ نخزّن أكثر من صيغة لتضمن عمل الخريطة في كل مكان
         coords: lat != null && lng != null ? [lat, lng] : null,
         lat: lat != null ? lat : null,
         lng: lng != null ? lng : null,
@@ -303,32 +306,35 @@ export default function AddPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [price, currency, rates]);
 
-  // ✅ أثناء التحميل أو أثناء التحويل لصفحة الدخول
-  if (loading || (!loading && !user)) {
+  if (loading) {
     return (
       <div className="add-page-layout">
         <div className="loading-container">
           <div className="loading-spinner-large" />
-          <p>{loading ? 'جاري تحميل الصفحة...' : 'جارٍ تحويلك إلى صفحة تسجيل الدخول…'}</p>
+          <p>جاري تحميل الصفحة...</p>
+        </div>
+      </div>
+    );
+  }
 
-          {/* fallback فقط لو شخص أوقف الجافاسكربت أو حصل شيء */}
-          {!loading && !user ? (
-            <div style={{ marginTop: 12, textAlign: 'center' }}>
-              <Link
-                href={`/login?next=${encodeURIComponent('/add')}`}
-                className="btn-primary auth-btn"
-              >
-                تسجيل الدخول
-              </Link>
-              <div style={{ height: 10 }} />
-              <Link
-                href={`/register?next=${encodeURIComponent('/add')}`}
-                className="btn-secondary auth-btn"
-              >
-                إنشاء حساب جديد
-              </Link>
-            </div>
-          ) : null}
+  if (!loading && !user) {
+    return (
+      <div className="add-page-layout">
+        <div className="auth-required-card">
+          <div className="lock-icon-large">🔒</div>
+          <h2>تسجيل الدخول مطلوب</h2>
+          <p>يجب عليك تسجيل الدخول لإضافة إعلان جديد</p>
+          <div className="auth-actions">
+            <Link href="/login" className="btn-primary auth-btn">
+              تسجيل الدخول
+            </Link>
+            <Link href="/register" className="btn-secondary auth-btn">
+              إنشاء حساب جديد
+            </Link>
+            <Link href="/" className="back-home-btn">
+              ← العودة للرئيسية
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -422,7 +428,10 @@ export default function AddPage() {
                 }}
                 disabled={catsLoading}
               >
-                <option value="" disabled>اختر القسم</option>
+                <option value="" disabled>
+                  اختر القسم
+                </option>
+
                 {catsLoading ? (
                   <option>جاري تحميل الأقسام...</option>
                 ) : (
@@ -433,6 +442,7 @@ export default function AddPage() {
                   ))
                 )}
               </select>
+
               {errors.category && <div className="form-error">{errors.category}</div>}
             </div>
           </div>
@@ -629,24 +639,23 @@ export default function AddPage() {
 
           <div className="map-wrapper">
             {!showMap ? (
-              <div
-                className="map-placeholder"
-                style={{
-                  padding: '60px 20px',
-                  textAlign: 'center',
-                  background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
-                  borderRadius: '12px',
-                  border: '2px dashed #0ea5e9',
-                }}
-              >
-                <div style={{ fontSize: '48px', marginBottom: '16px' }} role="img" aria-label="أيقونة الخريطة">
-                  🗺️
-                </div>
+              <div className="map-placeholder" style={{
+                padding: '60px 20px',
+                textAlign: 'center',
+                background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                borderRadius: '12px',
+                border: '2px dashed #0ea5e9'
+              }}>
+                <div style={{ fontSize: '48px', marginBottom: '16px' }} role="img" aria-label="أيقونة الخريطة">🗺️</div>
                 <button
                   type="button"
                   onClick={() => setShowMap(true)}
                   className="btn btnPrimary"
-                  style={{ padding: '12px 24px', fontSize: '16px', fontWeight: 'bold' }}
+                  style={{
+                    padding: '12px 24px',
+                    fontSize: '16px',
+                    fontWeight: 'bold'
+                  }}
                   aria-label="تحميل الخريطة لتحديد الموقع"
                 >
                   <span role="img" aria-label="أيقونة موقع">📍</span> تحميل الخريطة
@@ -731,7 +740,581 @@ export default function AddPage() {
           margin: 0 auto;
           width: 100%;
         }
-        /* ... نفس الـ CSS الذي عندك بالكامل ... */
+
+        .cats-note{
+          margin: 10px 0 18px;
+          padding: 12px 14px;
+          border-radius: 12px;
+          border: 1px solid #fde68a;
+          background: #fffbeb;
+          color: #92400e;
+          font-weight: 700;
+          font-size: 13px;
+          line-height: 1.6;
+        }
+
+        .add-page-header {
+          text-align: center;
+          padding: 30px 20px;
+          background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+          color: white;
+          margin-bottom: 20px;
+          border-radius: 20px;
+          box-shadow: 0 8px 25px rgba(79, 70, 229, 0.2);
+        }
+
+        .add-page-header h1 {
+          font-size: 32px;
+          margin-bottom: 10px;
+          font-weight: 900;
+        }
+
+        .form-tips {
+          display: flex;
+          justify-content: center;
+          flex-wrap: wrap;
+          gap: 15px;
+          margin-bottom: 30px;
+          padding: 15px;
+          background: #f8fafc;
+          border-radius: 12px;
+          border: 1px solid #e2e8f0;
+        }
+
+        .tip-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 15px;
+          background: white;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 500;
+          color: #475569;
+          border: 1px solid #e2e8f0;
+        }
+
+        .tip-icon {
+          font-size: 16px;
+        }
+
+        .form-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 30px;
+          margin-bottom: 40px;
+        }
+
+        @media (max-width: 1024px) {
+          .form-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        .form-container {
+          background: white;
+          border-radius: 20px;
+          padding: 30px;
+          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+          border: 1px solid #e2e8f0;
+        }
+
+        .form-section-title {
+          font-size: 22px;
+          color: #1e293b;
+          margin-bottom: 25px;
+          padding-bottom: 15px;
+          border-bottom: 2px solid #f1f5f9;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .form-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 20px;
+          margin-bottom: 20px;
+        }
+
+        @media (max-width: 768px) {
+          .form-row {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        .form-label {
+          display: block;
+          margin-bottom: 8px;
+          font-weight: 600;
+          color: #1e293b;
+          font-size: 15px;
+        }
+
+        .form-label.required::after {
+          content: ' *';
+          color: #dc2626;
+        }
+
+        .form-input,
+        .form-textarea,
+        .form-select {
+          width: 100%;
+          padding: 14px 16px;
+          border: 2px solid #e2e8f0;
+          border-radius: 10px;
+          font-size: 16px;
+          transition: all 0.2s ease;
+          background: #f8fafc;
+          color: #1e293b;
+        }
+
+        .form-input:focus,
+        .form-textarea:focus,
+        .form-select:focus {
+          outline: none;
+          border-color: #4f46e5;
+          background: white;
+          box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+
+        .form-input.error,
+        .form-textarea.error,
+        .form-select.error {
+          border-color: #dc2626;
+          background: #fef2f2;
+        }
+
+        .form-helper {
+          display: flex;
+          justify-content: space-between;
+          margin-top: 6px;
+          font-size: 13px;
+          color: #64748b;
+        }
+
+        .char-count {
+          font-weight: 500;
+        }
+
+        .form-error {
+          color: #dc2626;
+          font-size: 13px;
+          margin-top: 6px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .form-error::before {
+          content: '⚠️';
+        }
+
+        .currency-selector {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .currency-btn {
+          padding: 10px 20px;
+          border: 2px solid #e2e8f0;
+          background: #f8fafc;
+          border-radius: 8px;
+          font-weight: 600;
+          color: #64748b;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          flex: 1;
+          text-align: center;
+          min-width: 80px;
+        }
+
+        .currency-btn.active {
+          background: #4f46e5;
+          color: white;
+          border-color: #4f46e5;
+        }
+
+        .price-conversion {
+          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+          padding: 15px 20px;
+          border-radius: 10px;
+          margin: 20px 0;
+          border: 1px solid #e2e8f0;
+        }
+
+        .conversion-label {
+          display: block;
+          font-weight: 600;
+          color: #475569;
+          margin-bottom: 8px;
+          font-size: 14px;
+        }
+
+        .converted-prices {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .converted-price {
+          color: #1e293b;
+          font-size: 15px;
+        }
+
+        .converted-price strong {
+          color: #4f46e5;
+        }
+
+        .communication-toggle {
+          display: flex;
+          gap: 10px;
+          margin-top: 8px;
+        }
+
+        .toggle-btn {
+          flex: 1;
+          padding: 12px 16px;
+          border: 2px solid #e2e8f0;
+          background: #f8fafc;
+          border-radius: 8px;
+          font-weight: 600;
+          color: #64748b;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        }
+
+        .toggle-btn.active {
+          background: #4f46e5;
+          color: white;
+          border-color: #4f46e5;
+        }
+
+        .toggle-icon {
+          font-size: 18px;
+        }
+
+        .image-upload-input {
+          display: none;
+        }
+
+        .image-upload-label {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 40px 20px;
+          border: 2px dashed #cbd5e1;
+          border-radius: 12px;
+          background: #f8fafc;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          text-align: center;
+        }
+
+        .upload-icon {
+          font-size: 40px;
+          margin-bottom: 10px;
+          opacity: 0.6;
+        }
+
+        .upload-hint {
+          font-size: 13px;
+          color: #94a3b8;
+          margin-top: 5px;
+        }
+
+        .image-previews {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+          gap: 10px;
+          margin-top: 15px;
+        }
+
+        .image-preview {
+          position: relative;
+          aspect-ratio: 1;
+          border-radius: 8px;
+          overflow: hidden;
+          border: 2px solid #e2e8f0;
+        }
+
+        .preview-img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .remove-image-btn {
+          position: absolute;
+          top: 5px;
+          left: 5px;
+          width: 24px;
+          height: 24px;
+          background: rgba(239, 68, 68, 0.9);
+          color: white;
+          border: none;
+          border-radius: 50%;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 16px;
+          font-weight: bold;
+        }
+
+        .image-number {
+          position: absolute;
+          bottom: 5px;
+          left: 5px;
+          background: rgba(0, 0, 0, 0.6);
+          color: white;
+          padding: 2px 8px;
+          border-radius: 10px;
+          font-size: 12px;
+        }
+
+        .auction-section {
+          background: #f8fafc;
+          padding: 20px;
+          border-radius: 12px;
+          margin-top: 30px;
+          border: 1px solid #e2e8f0;
+        }
+
+        .auction-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 15px;
+        }
+
+        .switch {
+          position: relative;
+          display: inline-block;
+          width: 60px;
+          height: 30px;
+        }
+
+        .switch input {
+          opacity: 0;
+          width: 0;
+          height: 0;
+        }
+
+        .slider {
+          position: absolute;
+          cursor: pointer;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: #cbd5e1;
+          transition: 0.4s;
+          border-radius: 34px;
+        }
+
+        .slider:before {
+          position: absolute;
+          content: '';
+          height: 22px;
+          width: 22px;
+          left: 4px;
+          bottom: 4px;
+          background-color: white;
+          transition: 0.4s;
+          border-radius: 50%;
+        }
+
+        input:checked + .slider {
+          background-color: #4f46e5;
+        }
+
+        input:checked + .slider:before {
+          transform: translateX(30px);
+        }
+
+        .map-container {
+          background: white;
+          border-radius: 20px;
+          padding: 30px;
+          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+          border: 1px solid #e2e8f0;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .map-wrapper {
+          flex: 1;
+          min-height: 400px;
+          border-radius: 12px;
+          overflow: hidden;
+          border: 1px solid #e2e8f0;
+          margin-bottom: 20px;
+        }
+
+        .mobile-submit-section {
+          display: none;
+          margin-top: 30px;
+        }
+
+        .desktop-submit-section {
+          margin-top: 40px;
+          padding-top: 30px;
+          border-top: 2px solid #f1f5f9;
+        }
+
+        @media (max-width: 1024px) {
+          .mobile-submit-section { display: block; }
+          .desktop-submit-section { display: none; }
+        }
+
+        .submit-btn-large {
+          width: 100%;
+          max-width: 400px;
+          padding: 18px 30px;
+          background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+          color: white;
+          border: none;
+          border-radius: 12px;
+          font-size: 18px;
+          font-weight: 700;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+        }
+
+        .submit-btn-large:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
+        }
+
+        .cancel-link {
+          color: #64748b;
+          text-decoration: none;
+          font-weight: 700;
+        }
+
+        .final-notes, .form-notes{
+          margin-top: 20px;
+          padding: 15px;
+          background: #f8fafc;
+          border-radius: 10px;
+          border: 1px solid #e2e8f0;
+        }
+
+        .note-item {
+          color: #475569;
+          font-size: 14px;
+          margin: 8px 0;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .loading-container {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-height: 300px;
+          gap: 20px;
+        }
+
+        .loading-spinner-large {
+          width: 60px;
+          height: 60px;
+          border: 4px solid #f1f5f9;
+          border-top-color: #4f46e5;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+
+        .loading-spinner-small {
+          width: 20px;
+          height: 20px;
+          border: 2px solid rgba(255, 255, 255, 0.3);
+          border-top-color: white;
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+
+        .auth-required-card {
+          max-width: 500px;
+          margin: 50px auto;
+          background: white;
+          padding: 40px;
+          border-radius: 20px;
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+          text-align: center;
+          border: 1px solid #e2e8f0;
+        }
+
+        .lock-icon-large {
+          font-size: 70px;
+          margin-bottom: 20px;
+          opacity: 0.7;
+        }
+
+        .auth-actions {
+          display: flex;
+          flex-direction: column;
+          gap: 15px;
+          margin-top: 25px;
+        }
+
+        .auth-btn {
+          padding: 14px;
+          border-radius: 10px;
+          text-decoration: none;
+          font-weight: 700;
+          text-align: center;
+        }
+
+        .btn-primary.auth-btn {
+          background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+          color: white;
+        }
+
+        .btn-secondary.auth-btn {
+          background: #f8fafc;
+          color: #4f46e5;
+          border: 2px solid #e2e8f0;
+        }
+
+        .back-home-btn {
+          color: #64748b;
+          text-decoration: none;
+          font-size: 14px;
+          margin-top: 10px;
+          display: inline-block;
+        }
+
+        @media (max-width: 768px) {
+          .add-page-header { padding: 25px 15px; border-radius: 16px; }
+          .add-page-header h1 { font-size: 24px; }
+          .form-container, .map-container { padding: 20px; border-radius: 16px; }
+          .form-section-title { font-size: 18px; }
+          .currency-btn { padding: 8px 12px; font-size: 14px; }
+        }
+
+        @media (max-width: 480px) {
+          .form-row { grid-template-columns: 1fr; gap: 15px; }
+          .currency-selector { flex-direction: column; }
+          .communication-toggle { flex-direction: column; }
+          .image-previews { grid-template-columns: repeat(3, 1fr); }
+        }
       `}</style>
     </div>
   );
