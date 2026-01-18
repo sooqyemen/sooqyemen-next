@@ -1,20 +1,91 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/useAuth';
 import { storage } from '@/lib/firebaseClient';
+
+function makeSessionId() {
+  const rnd = Math.random().toString(36).slice(2);
+  return `sess_${Date.now()}_${rnd}`;
+}
+
+function renderTextWithLinks(text) {
+  const t = String(text || '');
+  const urlRe = /(https?:\/\/[^\s]+)/g;
+  const pathRe = /(^|\s)(\/[A-Za-z0-9_\-\/?=&%#.]+)/g;
+
+  const parts = t.split(urlRe);
+  const out = [];
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (part == null || part === '') continue;
+
+    // part might be a URL
+    if (part.startsWith('http://') || part.startsWith('https://')) {
+      out.push(
+        <a key={`u-${i}`} href={part} target="_blank" rel="noreferrer" className="chat-link">
+          {part}
+        </a>
+      );
+      continue;
+    }
+
+    // otherwise, convert /path links
+    const chunks = [];
+    let last = 0;
+    const matches = [...part.matchAll(pathRe)];
+    if (!matches.length) {
+      out.push(<span key={`t-${i}`}>{part}</span>);
+      continue;
+    }
+
+    for (let m = 0; m < matches.length; m++) {
+      const match = matches[m];
+      const idx = match.index || 0;
+      const full = match[0] || '';
+      const pref = match[1] || '';
+      const path = match[2] || '';
+
+      // add text before the match
+      chunks.push(part.slice(last, idx));
+
+      // keep leading space (if any) as text
+      if (pref) chunks.push(pref);
+
+      chunks.push(
+        <a key={`p-${i}-${idx}`} href={path} className="chat-link">
+          {path}
+        </a>
+      );
+
+      last = idx + full.length;
+    }
+
+    chunks.push(part.slice(last));
+    out.push(<span key={`c-${i}`}>{chunks}</span>);
+  }
+
+  return out.length ? out : t;
+}
 
 export default function ChatBot() {
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
-    { role: 'assistant', text: 'مرحباً بك في سوق اليمن! 🇾🇪 كيف يمكنني مساعدتك في العثور على عقار أو سيارة اليوم؟' }
+    {
+      role: 'assistant',
+      text:
+        'مرحباً بك في سوق اليمن 🇾🇪\nأنا أساعدك في: إضافة إعلان عبر الشات، أو العثور على الإعلانات القريبة، أو أي سؤال عن الأقسام.'
+    }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [locationBusy, setLocationBusy] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [sessionId, setSessionId] = useState('');
+
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const speechRef = useRef(null);
@@ -24,6 +95,15 @@ export default function ChatBot() {
     latestInputRef.current = input;
   }, [input]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const key = 'sooqyemen_chat_session_v1';
+    const existing = window.localStorage.getItem(key);
+    const sid = existing || makeSessionId();
+    if (!existing) window.localStorage.setItem(key, sid);
+    setSessionId(sid);
+  }, []);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -32,7 +112,7 @@ export default function ChatBot() {
     scrollToBottom();
   }, [messages, isOpen]);
 
-  // ✅ تحويل الكلام إلى نص (Voice to Text) عبر Web Speech API (في المتصفحات المدعومة)
+  // Voice to Text (Web Speech API)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -64,13 +144,8 @@ export default function ChatBot() {
       }
     };
 
-    recognition.onerror = () => {
-      setIsRecording(false);
-    };
-
-    recognition.onend = () => {
-      setIsRecording(false);
-    };
+    recognition.onerror = () => setIsRecording(false);
+    recognition.onend = () => setIsRecording(false);
 
     return () => {
       try {
@@ -87,20 +162,23 @@ export default function ChatBot() {
 
     const userMessage = { role: 'user', text: messageText };
     const history = messages.slice(-10).map((msg) => ({ role: msg.role, content: msg.text }));
+
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
     try {
-      // ✅ إذا المستخدم مسجل دخول: نرسل الـ ID Token للمساعد
       let token = '';
       try {
-        if (user && typeof user.getIdToken === 'function') {
-          token = await user.getIdToken();
-        }
+        if (user && typeof user.getIdToken === 'function') token = await user.getIdToken();
       } catch (e1) {
-        // لا نوقف المساعد إذا فشل جلب التوكن
         console.warn('[ChatBot] getIdToken failed', e1);
       }
+
+      const payloadMeta = {
+        ...(meta || {}),
+        sessionId: sessionId || null,
+        clientTs: Date.now(),
+      };
 
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -108,15 +186,19 @@ export default function ChatBot() {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ message: messageText, history, meta: meta || null }),
+        body: JSON.stringify({ message: messageText, history, meta: payloadMeta }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
-      if (response.ok) {
-        setMessages((prev) => [...prev, { role: 'assistant', text: data.reply }]);
+      if (response.ok && data?.ok !== false) {
+        const replyText = String(data?.reply || data?.message || '');
+        setMessages((prev) => [...prev, { role: 'assistant', text: replyText || 'تم ✅' }]);
       } else {
-        setMessages((prev) => [...prev, { role: 'assistant', text: 'عذراً، حدث خطأ في الاتصال.' }]);
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', text: String(data?.message || 'عذراً، حدث خطأ في الاتصال.') },
+        ]);
       }
     } catch (error) {
       setMessages((prev) => [...prev, { role: 'assistant', text: 'عذراً، لا يمكنني الرد حالياً.' }]);
@@ -179,7 +261,7 @@ export default function ChatBot() {
           accuracy: isFinite(accuracy) ? accuracy : null,
         },
       });
-    } catch (e) {
+    } catch {
       await sendText('لم يتم السماح بالموقع. اكتب الإحداثيات (lat, lng) أو أرسل رابط خرائط.');
     } finally {
       setLocationBusy(false);
@@ -201,7 +283,7 @@ export default function ChatBot() {
         return;
       }
       recognition.start();
-    } catch (e) {
+    } catch {
       setIsRecording(false);
     }
   };
@@ -222,7 +304,6 @@ export default function ChatBot() {
       return;
     }
 
-    // حد أقصى 8 صور
     const picked = files.slice(0, 8);
 
     setUploadBusy(true);
@@ -250,7 +331,7 @@ export default function ChatBot() {
         return;
       }
 
-      await sendText(`📷 تم رفع ${uploaded.length} صورة. سأضيفها لمسودة الإعلان (إن وجدت).`, {
+      await sendText(`📷 تم رفع ${uploaded.length} صورة.`, {
         images: uploaded,
       });
     } catch (err) {
@@ -263,7 +344,6 @@ export default function ChatBot() {
 
   return (
     <>
-      {/* زر العائم */}
       {!isOpen && (
         <button className="chat-toggle-btn" onClick={() => setIsOpen(true)}>
           <span className="icon">🤖</span>
@@ -271,10 +351,8 @@ export default function ChatBot() {
         </button>
       )}
 
-      {/* نافذة الشات */}
       {isOpen && (
         <div className="chat-window">
-          {/* الرأس */}
           <div className="chat-header">
             <div className="header-info">
               <span className="icon">🤖</span>
@@ -285,10 +363,11 @@ export default function ChatBot() {
                 </span>
               </div>
             </div>
-            <button className="close-btn" onClick={() => setIsOpen(false)}>✕</button>
+            <button className="close-btn" onClick={() => setIsOpen(false)}>
+              ✕
+            </button>
           </div>
 
-          {/* رفع صور (مخفي) */}
           <input
             ref={fileInputRef}
             type="file"
@@ -298,10 +377,18 @@ export default function ChatBot() {
             onChange={handleImagePicked}
           />
 
-          {/* أزرار سريعة (بعد إزالة أيقونتي الصور والصوت) */}
           <div className="quick-actions">
             <button type="button" className="chip" onClick={() => quickAsk('أضف إعلان')} disabled={isLoading}>
               ➕ إضافة إعلان
+            </button>
+            <button type="button" className="chip" onClick={() => quickAsk('ملخص')} disabled={isLoading}>
+              🧾 المسودة
+            </button>
+            <button type="button" className="chip" onClick={() => quickAsk('رجوع')} disabled={isLoading}>
+              ⬅️ رجوع
+            </button>
+            <button type="button" className="chip" onClick={() => quickAsk('إلغاء')} disabled={isLoading}>
+              ❌ إلغاء
             </button>
             <button type="button" className="chip" onClick={() => goTo('/add')}>
               📝 صفحة الإضافة
@@ -309,34 +396,35 @@ export default function ChatBot() {
             <button type="button" className="chip" onClick={() => goTo('/contact')}>
               📞 تواصل
             </button>
-            <button type="button" className="chip chip-location" onClick={shareMyLocation} disabled={isLoading || locationBusy}>
+            <button
+              type="button"
+              className="chip chip-location"
+              onClick={shareMyLocation}
+              disabled={isLoading || locationBusy}
+            >
               📍 {locationBusy ? 'جارٍ تحديد…' : 'موقعي'}
             </button>
             <button type="button" className="chip" onClick={() => goTo('/listings?view=map')} disabled={isLoading}>
-              🗺️ عرض الإعلانات على الخريطة
+              🗺️ الإعلانات القريبة مني
             </button>
           </div>
 
-          {/* الرسائل */}
           <div className="messages-area">
             {messages.map((msg, index) => (
               <div key={index} className={`message-row ${msg.role === 'user' ? 'user-row' : 'bot-row'}`}>
                 <div className={`message-bubble ${msg.role === 'user' ? 'user-bubble' : 'bot-bubble'}`}>
-                  {msg.text}
+                  {renderTextWithLinks(msg.text)}
                 </div>
               </div>
             ))}
             {isLoading && (
               <div className="message-row bot-row">
-                <div className="message-bubble bot-bubble">
-                  جاري الكتابة...
-                </div>
+                <div className="message-bubble bot-bubble">جاري الكتابة...</div>
               </div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
-          {/* الإدخال (الأيقونات موجودة هنا فقط) */}
           <form className="input-area" onSubmit={sendMessage}>
             <button
               type="button"
@@ -359,7 +447,7 @@ export default function ChatBot() {
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="اكتب استفسارك هنا..."
+              placeholder="اكتب رسالتك هنا..."
               disabled={isLoading}
             />
             <button type="submit" disabled={isLoading}>
@@ -384,20 +472,22 @@ export default function ChatBot() {
           gap: 8px;
           align-items: center;
           cursor: pointer;
-          box-shadow: 0 10px 25px rgba(0,0,0,0.18);
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.18);
           font-weight: 700;
         }
-        .chat-toggle-btn .icon { font-size: 18px; }
+        .chat-toggle-btn .icon {
+          font-size: 18px;
+        }
         .chat-window {
           position: fixed;
           bottom: 20px;
           right: 20px;
           width: 360px;
-          height: 520px;
+          height: 540px;
           z-index: 9999;
           background: white;
           border-radius: 14px;
-          box-shadow: 0 18px 40px rgba(0,0,0,0.22);
+          box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
           overflow: hidden;
           display: flex;
           flex-direction: column;
@@ -410,11 +500,32 @@ export default function ChatBot() {
           justify-content: space-between;
           align-items: center;
         }
-        .header-info { display: flex; align-items: center; gap: 10px; }
-        .header-info h3 { margin: 0; font-size: 14px; }
-        .header-info .icon { font-size: 18px; }
-        .status { font-size: 12px; opacity: 0.9; display: flex; align-items: center; gap: 6px; }
-        .dot { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; display: inline-block; }
+        .header-info {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .header-info h3 {
+          margin: 0;
+          font-size: 14px;
+        }
+        .header-info .icon {
+          font-size: 18px;
+        }
+        .status {
+          font-size: 12px;
+          opacity: 0.9;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .dot {
+          width: 8px;
+          height: 8px;
+          background: #22c55e;
+          border-radius: 50%;
+          display: inline-block;
+        }
         .close-btn {
           background: transparent;
           border: none;
@@ -428,7 +539,6 @@ export default function ChatBot() {
           overflow-y: auto;
           background: #f8fafc;
         }
-
         .quick-actions {
           padding: 10px 10px 8px;
           display: flex;
@@ -437,7 +547,6 @@ export default function ChatBot() {
           background: #ffffff;
           border-bottom: 1px solid #e2e8f0;
         }
-
         .chip {
           border: 1px solid #e2e8f0;
           background: #f8fafc;
@@ -449,16 +558,28 @@ export default function ChatBot() {
           font-weight: 700;
           transition: transform 0.05s ease;
         }
-        .chip:active { transform: scale(0.98); }
+        .chip:active {
+          transform: scale(0.98);
+        }
         .chip:disabled {
           opacity: 0.6;
           cursor: not-allowed;
         }
-        .chip-location { background: #0f172a; color: #fff; border-color: #0f172a; }
-        .chip-recording { background: #fee2e2; color: #991b1b; border-color: #ef4444; }
-        .message-row { display: flex; margin: 8px 0; }
-        .user-row { justify-content: flex-end; }
-        .bot-row { justify-content: flex-start; }
+        .chip-location {
+          background: #0f172a;
+          color: #fff;
+          border-color: #0f172a;
+        }
+        .message-row {
+          display: flex;
+          margin: 8px 0;
+        }
+        .user-row {
+          justify-content: flex-end;
+        }
+        .bot-row {
+          justify-content: flex-start;
+        }
         .message-bubble {
           max-width: 78%;
           padding: 10px 12px;
@@ -466,9 +587,19 @@ export default function ChatBot() {
           font-size: 13px;
           line-height: 1.6;
           white-space: pre-wrap;
+          word-break: break-word;
         }
-        .user-bubble { background: #2563eb; color: white; border-bottom-right-radius: 4px; }
-        .bot-bubble { background: white; color: #0f172a; border: 1px solid #e2e8f0; border-bottom-left-radius: 4px; }
+        .user-bubble {
+          background: #2563eb;
+          color: white;
+          border-bottom-right-radius: 4px;
+        }
+        .bot-bubble {
+          background: white;
+          color: #0f172a;
+          border: 1px solid #e2e8f0;
+          border-bottom-left-radius: 4px;
+        }
         .input-area {
           padding: 10px;
           display: flex;
@@ -493,8 +624,10 @@ export default function ChatBot() {
           cursor: pointer;
           font-weight: 700;
         }
-        .input-area button:disabled { background: #94a3b8; cursor: not-allowed; }
-
+        .input-area button:disabled {
+          background: #94a3b8;
+          cursor: not-allowed;
+        }
         .icon-btn {
           border: 1px solid #e2e8f0;
           background: #f8fafc;
@@ -510,21 +643,31 @@ export default function ChatBot() {
           align-items: center;
           justify-content: center;
         }
-        .icon-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .icon-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
         .icon-btn-recording {
           border-color: #ef4444;
           background: #fee2e2;
         }
-
+        .chat-link {
+          color: #2563eb;
+          text-decoration: underline;
+          font-weight: 700;
+        }
         @media (max-width: 480px) {
           .chat-window {
             width: 100%;
             right: 0;
             bottom: 0;
-            height: 70vh;
+            height: 72vh;
             border-radius: 0;
           }
-          .chat-toggle-btn { right: 14px; bottom: 14px; }
+          .chat-toggle-btn {
+            right: 14px;
+            bottom: 14px;
+          }
         }
       `}</style>
     </>
