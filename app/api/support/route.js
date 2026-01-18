@@ -1,4 +1,3 @@
-// app/api/support/route.js
 import { NextResponse } from 'next/server';
 import admin, { adminAuth, adminDb } from '@/lib/firebaseAdmin';
 
@@ -36,7 +35,6 @@ async function tryGetUserFromAuthHeader(request) {
   }
 }
 
-// فحص سريع
 export async function GET() {
   return NextResponse.json({ ok: true, endpoint: 'support', adminReady: !!adminDb });
 }
@@ -44,7 +42,11 @@ export async function GET() {
 export async function POST(request) {
   if (!adminDb) {
     return NextResponse.json(
-      { ok: false, error: 'admin_not_configured', message: 'Firebase Admin غير مفعّل في بيئة الاستضافة.' },
+      {
+        ok: false,
+        error: 'admin_not_configured',
+        message: 'Firebase Admin غير مفعّل في بيئة الاستضافة.',
+      },
       { status: 503 }
     );
   }
@@ -58,21 +60,28 @@ export async function POST(request) {
 
   if (!name || !email || !subject || !message) {
     return NextResponse.json(
-      { ok: false, error: 'missing_fields', message: 'الاسم والبريد والموضوع والرسالة مطلوبة.' },
+      {
+        ok: false,
+        error: 'missing_fields',
+        message: 'الاسم والبريد والموضوع والرسالة مطلوبة.',
+      },
       { status: 400 }
     );
   }
 
   if (!isValidEmail(email)) {
     return NextResponse.json(
-      { ok: false, error: 'invalid_email', message: 'البريد الإلكتروني غير صحيح.' },
+      {
+        ok: false,
+        error: 'invalid_email',
+        message: 'البريد الإلكتروني غير صحيح.',
+      },
       { status: 400 }
     );
   }
 
   const user = await tryGetUserFromAuthHeader(request);
 
-  // خذ أول IP فقط (أحياناً يجي قائمة)
   const xff = request.headers.get('x-forwarded-for') || '';
   const ip =
     (String(xff).split(',')[0] || '').trim() ||
@@ -102,7 +111,11 @@ export async function POST(request) {
   } catch (e) {
     console.error('[support] failed to save message', e);
     return NextResponse.json(
-      { ok: false, error: 'save_failed', message: 'تعذر حفظ الرسالة. حاول لاحقاً.' },
+      {
+        ok: false,
+        error: 'save_failed',
+        message: 'تعذر حفظ الرسالة. حاول لاحقاً.',
+      },
       { status: 500 }
     );
   }
