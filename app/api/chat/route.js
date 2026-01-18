@@ -15,6 +15,114 @@ const LRU_CACHE = new Map();
 const CACHE_TTL = 60000; // 1 دقيقة
 
 // =========================
+// قاعدة بيانات المدن اليمنية بالإحداثيات
+// =========================
+
+const yemenCities = {
+  // المحافظات الرئيسية
+  'صنعاء': { lat: 15.3694, lng: 44.1910, districts: ['حدة', 'السبعين', 'الروضة', 'الشهداء', 'الواحدي', 'التحرير'] },
+  'عدن': { lat: 12.7855, lng: 45.0187, districts: ['خور مكسر', 'التواهي', 'المعلا', 'صيرة', 'الشيخ عثمان', 'المنصورة'] },
+  'تعز': { lat: 13.5789, lng: 44.0080, districts: ['القاهرة', 'المدينة', 'صالة', 'المظفر', 'المسراخ', 'شرعب'] },
+  'الحديدة': { lat: 14.8022, lng: 42.9511, districts: ['الحالي', 'الحوك', 'المراوعة', 'التحيتا', 'الزهرة', 'باجل'] },
+  'حضرموت': { lat: 16.9300, lng: 49.6500, districts: ['المكلا', 'سيئون', 'الشحر', 'الريان', 'الديس', 'غيل باوزير'] },
+  'إب': { lat: 13.9667, lng: 44.1833, districts: ['المدينة', 'يريم', 'العرش', 'الظهار', 'السبر', 'ذي السفال'] },
+  'ذمار': { lat: 14.5575, lng: 44.4017, districts: ['المدينة', 'جهران', 'وصاب', 'أنس', 'الحدا', 'مغرب عنس'] },
+  'المكلا': { lat: 14.5300, lng: 49.1314, districts: ['الغويضة', 'بورسعيد', 'الميناء', 'الرملة', 'الشحر القديم'] },
+  'سيئون': { lat: 15.9631, lng: 48.7875, districts: ['المدينة', 'تريم', 'شبام', 'القف', 'ساه'] },
+  'شبوة': { lat: 14.3667, lng: 47.0167, districts: ['عتق', 'بيحان', 'ميفعة', 'روضة بن عامر', 'الطف', 'مرخة'] },
+  'حجة': { lat: 15.7000, lng: 43.6000, districts: ['المدينة', 'كحلان', 'شحن', 'المغربة', 'بكيل المير', 'واشعة'] },
+  'المهرة': { lat: 16.7000, lng: 53.0833, districts: ['الغيضة', 'قشن', 'حوف', 'منعر', 'سقطرى'] },
+  'الجوف': { lat: 16.2000, lng: 44.8000, districts: ['الحزم', 'الخب والشعف', 'برط العنان', 'المطمة', 'الغيل'] },
+  'البيضاء': { lat: 13.9833, lng: 45.5667, districts: ['المدينة', 'الرضمة', 'الصومعة', 'الطف', 'مكيراس', 'الشرية'] },
+  'أبين': { lat: 13.1667, lng: 45.3333, districts: ['زنجبار', 'خنفر', 'لودر', 'رصد', 'سرار', 'المحفد'] },
+  'لحج': { lat: 13.0500, lng: 44.8833, districts: ['الحوطة', 'تبن', 'ردفان', 'يهر', 'المضاربة والعارة', 'حبيل جبر'] },
+  'الضالع': { lat: 13.9667, lng: 44.7333, districts: ['المدينة', 'دمت', 'الضالع', 'الحشاء', 'الأزارق', 'جبن'] },
+  'عمران': { lat: 15.6594, lng: 43.9439, districts: ['المدينة', 'ريدة', 'ثلا', 'السودة', 'السوادية', 'بني صريم'] },
+  'ريمة': { lat: 14.6333, lng: 43.6000, districts: ['الجبين', 'مزهر', 'بلاد الطعام', 'كسمة', 'الجعفرية'] },
+  'صعدة': { lat: 16.9400, lng: 43.7600, districts: ['المدينة', 'سحار', 'غمر', 'كتاف', 'منبة', 'رازح'] },
+  'المحويت': { lat: 15.4667, lng: 43.5500, districts: ['المدينة', 'حفاش', 'الطويلة', 'ملحان', 'خبت', 'بني سعد'] },
+  'عمران': { lat: 15.6594, lng: 43.9439, districts: ['المدينة', 'ريدة', 'ثلا', 'السودة', 'السوادية', 'بني صريم'] },
+  
+  // مناطق في صنعاء مع إحداثيات دقيقة
+  'حدة': { lat: 15.3911, lng: 44.2206, parent: 'صنعاء' },
+  'السبعين': { lat: 15.3200, lng: 44.2100, parent: 'صنعاء' },
+  'الروضة': { lat: 15.3783, lng: 44.2400, parent: 'صنعاء' },
+  'الشهداء': { lat: 15.3500, lng: 44.1950, parent: 'صنعاء' },
+  'التحرير': { lat: 15.3400, lng: 44.2050, parent: 'صنعاء' },
+  'الواحدي': { lat: 15.3650, lng: 44.2150, parent: 'صنعاء' },
+  
+  // مناطق في عدن
+  'خور مكسر': { lat: 12.8000, lng: 45.0333, parent: 'عدن' },
+  'التواهي': { lat: 12.7833, lng: 44.9833, parent: 'عدن' },
+  'المعلا': { lat: 12.7833, lng: 45.0000, parent: 'عدن' },
+  'صيرة': { lat: 12.7833, lng: 45.0167, parent: 'عدن' },
+  
+  // مناطق في تعز
+  'القاهرة': { lat: 13.5833, lng: 44.0167, parent: 'تعز' },
+  'المدينة': { lat: 13.5667, lng: 44.0167, parent: 'تعز' },
+  'صالة': { lat: 13.6000, lng: 44.0167, parent: 'تعز' },
+  
+  // مدن إضافية
+  'يريم': { lat: 14.3500, lng: 44.3833, parent: 'إب' },
+  'زبيد': { lat: 14.2000, lng: 43.3167, parent: 'الحديدة' },
+  'بيت الفقيه': { lat: 14.5167, lng: 43.2667, parent: 'الحديدة' },
+  'التحيتا': { lat: 14.4333, lng: 43.2500, parent: 'الحديدة' },
+  'المراوعة': { lat: 14.8333, lng: 43.1500, parent: 'الحديدة' },
+  'باجل': { lat: 15.0667, lng: 43.2833, parent: 'الحديدة' },
+  'الزهرة': { lat: 15.7167, lng: 42.7333, parent: 'الحديدة' },
+  'الشحر': { lat: 14.7667, lng: 49.6167, parent: 'حضرموت' },
+  'تريم': { lat: 16.0667, lng: 49.0000, parent: 'حضرموت' },
+  'شبام': { lat: 15.9667, lng: 48.6333, parent: 'حضرموت' },
+  'غيل باوزير': { lat: 14.8000, lng: 49.3667, parent: 'حضرموت' },
+  'الريان': { lat: 14.6333, lng: 49.3667, parent: 'حضرموت' },
+  'المسيلة': { lat: 14.5500, lng: 49.1333, parent: 'حضرموت' },
+  'يريم': { lat: 14.3500, lng: 44.3833, parent: 'إب' },
+  'ذمار المدينة': { lat: 14.5575, lng: 44.4017, parent: 'ذمار' },
+  'جهران': { lat: 14.5167, lng: 44.4000, parent: 'ذمار' },
+  'الحدا': { lat: 14.3000, lng: 44.2833, parent: 'ذمار' },
+  'ميفعة': { lat: 14.3500, lng: 46.8667, parent: 'شبوة' },
+  'روضة بن عامر': { lat: 14.4833, lng: 47.0833, parent: 'شبوة' },
+  'عتق': { lat: 14.5500, lng: 46.8333, parent: 'شبوة' },
+  'بيحان': { lat: 14.8000, lng: 45.7333, parent: 'شبوة' },
+  'الحزم': { lat: 16.1667, lng: 44.7833, parent: 'الجوف' },
+  'الخب والشعف': { lat: 16.2333, lng: 44.8667, parent: 'الجوف' },
+  'زنجبار': { lat: 13.1333, lng: 45.3833, parent: 'أبين' },
+  'خنفر': { lat: 13.4167, lng: 45.7167, parent: 'أبين' },
+  'لودر': { lat: 13.8833, lng: 45.8667, parent: 'أبين' },
+  'الحوطة': { lat: 13.0667, lng: 44.8833, parent: 'لحج' },
+  'تبن': { lat: 13.5833, lng: 44.8667, parent: 'لحج' },
+  'يهر': { lat: 13.5833, lng: 45.8833, parent: 'لحج' },
+  'ردفان': { lat: 13.4333, lng: 45.0667, parent: 'لحج' },
+  'الغيضة': { lat: 16.2333, lng: 52.1667, parent: 'المهرة' },
+  'قشن': { lat: 16.1667, lng: 51.1333, parent: 'المهرة' },
+  'سقطرى': { lat: 12.5000, lng: 53.9167, parent: 'المهرة', districts: ['حديبو', 'قلنسية', 'عبد الكوري'] },
+  'سحار': { lat: 16.9667, lng: 43.7667, parent: 'صعدة' },
+  'غمر': { lat: 17.1000, lng: 43.6667, parent: 'صعدة' },
+  'رازح': { lat: 16.8333, lng: 43.5667, parent: 'صعدة' },
+  'حفاش': { lat: 15.4167, lng: 43.4167, parent: 'المحويت' },
+  'الطويلة': { lat: 15.3667, lng: 43.8333, parent: 'المحويت' },
+  'ملحان': { lat: 15.2333, lng: 43.3333, parent: 'المحويت' },
+  'ريدة': { lat: 15.7167, lng: 43.9833, parent: 'عمران' },
+  'ثلا': { lat: 15.5833, lng: 43.9167, parent: 'عمران' },
+  'السودة': { lat: 15.7833, lng: 44.0667, parent: 'عمران' },
+  'الرضمة': { lat: 14.2000, lng: 45.1667, parent: 'البيضاء' },
+  'الصومعة': { lat: 13.8333, lng: 45.8000, parent: 'البيضاء' },
+  'المضاربة والعارة': { lat: 12.9333, lng: 44.8833, parent: 'لحج' },
+  'حبيل جبر': { lat: 13.0167, lng: 44.8833, parent: 'لحج' },
+  'دمت': { lat: 14.0833, lng: 44.7833, parent: 'الضالع' },
+  'جبن': { lat: 13.9167, lng: 44.8333, parent: 'الضالع' },
+  'الجعفرية': { lat: 14.5333, lng: 43.6667, parent: 'ريمة' },
+  'مزهر': { lat: 14.7167, lng: 43.7500, parent: 'ريمة' },
+  'الجبين': { lat: 14.7000, lng: 43.6000, parent: 'ريمة' },
+  'بلاد الطعام': { lat: 14.6500, lng: 43.7000, parent: 'ريمة' },
+  'كحلان': { lat: 15.7000, lng: 43.5833, parent: 'حجة' },
+  'شحن': { lat: 16.1833, lng: 43.4167, parent: 'حجة' },
+  'المغربة': { lat: 15.7167, lng: 43.5333, parent: 'حجة' },
+  'بكيل المير': { lat: 15.7333, lng: 43.6167, parent: 'حجة' },
+  'واشعة': { lat: 15.7667, lng: 43.5833, parent: 'حجة' },
+};
+
+// =========================
 // قاعدة معرفية موسعة (FAQ)
 // =========================
 
@@ -186,6 +294,93 @@ function detectCategorySlug(raw) {
     }
   }
 
+  return null;
+}
+
+// =========================
+// دالة لتحويل الأرقام العربية إلى لاتينية
+// =========================
+function convertArabicNumbers(text) {
+  const arabicToLatin = {
+    '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
+    '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9'
+  };
+  
+  return String(text).replace(/[٠١٢٣٤٥٦٧٨٩]/g, (match) => arabicToLatin[match] || match);
+}
+
+// =========================
+// دالة لإيجاد المدينة والمنطقة من النص
+// =========================
+function findCityAndDistrict(text) {
+  const normalized = normalizeText(text);
+  let foundCity = null;
+  let foundDistrict = null;
+  
+  // البحث عن المدينة أولاً
+  for (const city in yemenCities) {
+    const cityNorm = normalizeText(city);
+    if (normalized.includes(cityNorm)) {
+      foundCity = city;
+      
+      // البحث عن منطقة فرعية إذا كانت المدينة تحتوي على مناطق
+      if (yemenCities[city].districts) {
+        for (const district of yemenCities[city].districts) {
+          const districtNorm = normalizeText(district);
+          if (normalized.includes(districtNorm)) {
+            foundDistrict = district;
+            break;
+          }
+        }
+      }
+      break;
+    }
+  }
+  
+  // إذا لم نجد مدينة رئيسية، نبحث عن المناطق الفرعية
+  if (!foundCity) {
+    for (const location in yemenCities) {
+      const locationNorm = normalizeText(location);
+      if (normalized.includes(locationNorm)) {
+        // إذا كانت هذه المنطقة تابعة لمدينة رئيسية
+        if (yemenCities[location].parent) {
+          foundCity = yemenCities[location].parent;
+          foundDistrict = location;
+        } else {
+          foundCity = location;
+        }
+        break;
+      }
+    }
+  }
+  
+  return { city: foundCity, district: foundDistrict };
+}
+
+// =========================
+// دالة للحصول على إحداثيات المدينة/المنطقة
+// =========================
+function getCoordinates(city, district = null) {
+  if (!city) return null;
+  
+  // إذا كانت هناك منطقة محددة ولها إحداثيات خاصة
+  if (district && yemenCities[district]) {
+    return {
+      lat: yemenCities[district].lat,
+      lng: yemenCities[district].lng,
+      label: `${district}, ${city}`
+    };
+  }
+  
+  // إذا كانت المدينة موجودة في قاعدة البيانات
+  if (yemenCities[city]) {
+    return {
+      lat: yemenCities[city].lat,
+      lng: yemenCities[city].lng,
+      label: city
+    };
+  }
+  
   return null;
 }
 
@@ -426,7 +621,9 @@ function normalizeImagesMeta(metaImages) {
 }
 
 function extractNumber(messageRaw) {
-  const t = String(messageRaw || '').replace(/[,،]/g, '');
+  // تحويل الأرقام العربية أولاً
+  const converted = convertArabicNumbers(String(messageRaw || ''));
+  const t = converted.replace(/[,،]/g, '');
   const m = t.match(/(\d+(?:\.\d+)?)/);
   return m ? Number(m[1]) : null;
 }
@@ -439,7 +636,9 @@ function detectCurrency(messageRaw) {
 }
 
 function normalizePhone(raw) {
-  const s = String(raw || '')
+  // تحويل الأرقام العربية أولاً
+  const converted = convertArabicNumbers(String(raw || ''));
+  const s = converted
     .trim()
     .replace(/[\s\-()]/g, '')
     .replace(/[^0-9+]/g, '');
@@ -580,7 +779,7 @@ function listingNextPrompt(step, draft) {
   }
 
   if (step === 'city') {
-    return 'الخطوة 4/7: اكتب اسم المدينة.';
+    return 'الخطوة 4/7: اكتب اسم المدينة (مثال: صنعاء).';
   }
 
   if (step === 'phone') {
@@ -591,9 +790,9 @@ function listingNextPrompt(step, draft) {
     return (
       'الخطوة 6/7: حدّد موقع الإعلان.\n' +
       '• اضغط زر "📍 موقعي" داخل الشات لإرسال الإحداثيات تلقائياً\n' +
+      '• أو اكتب اسم المدينة والمنطقة (مثال: صنعاء - حدة) وسأحدد الإحداثيات تلقائياً\n' +
       '• أو اكتب الإحداثيات بهذا الشكل: 15.3694, 44.1910\n' +
-      '• أو أرسل رابط خرائط جوجل\n\n' +
-      'تقدر أيضاً تكتب اسم الحي/المنطقة (مثال: صنعاء - حدة).'
+      '• أو أرسل رابط خرائط جوجل'
     );
   }
 
@@ -638,7 +837,9 @@ function safeJsonParse(text) {
 // =========================
 
 function extractFirstPhone(messageRaw) {
-  const t = String(messageRaw || '');
+  // تحويل الأرقام العربية أولاً
+  const converted = convertArabicNumbers(String(messageRaw || ''));
+  const t = converted;
   // Grab likely phone sequences: +digits or long digit groups
   const candidates = t.match(/\+?\d[\d\s\-()]{6,}\d/g) || [];
   for (const c of candidates) {
@@ -808,7 +1009,7 @@ async function runListingExtractorGemini(message) {
     'أنت مستخرج بيانات لإعلانات في موقع سوق اليمن.\n' +
     'مهمتك: اقرأ نص المستخدم واستخرج (فقط مما ذُكر) بيانات الإعلان في JSON.\n' +
     'لا تخترع معلومات غير موجودة. إذا غير مذكور ضع null.\n' +
-    'حوّل الأرقام العربية مثل "100 الف" إلى رقم 100000 إن أمكن.\n' +
+    'حوّل الأرقام العربية مثل "١٠٠ الف" إلى رقم 100000 إن أمكن.\n' +
     'العملة: استخدم واحداً من YER أو SAR أو USD إن أمكن، وإلا null.\n' +
     'categorySlug: اختر أقرب تصنيف من القائمة التالية (اكتب الـ slug فقط) أو null.\n' +
     'إذا لم يوجد عنوان صريح، اصنع عنواناً قصيراً (مستند على النص) بدون اختراع مواصفات.\n' +
@@ -908,6 +1109,31 @@ async function extractListingDetailsFromMessage(messageRaw, meta) {
   if (!out.phone) {
     const p = extractFirstPhone(raw);
     if (p) out.phone = p;
+  }
+
+  // البحث عن المدينة وتحديد إحداثياتها
+  if (!out.city) {
+    const { city, district } = findCityAndDistrict(raw);
+    if (city) {
+      out.city = city;
+      // الحصول على إحداثيات المدينة/المنطقة
+      const coords = getCoordinates(city, district);
+      if (coords) {
+        out.lat = coords.lat;
+        out.lng = coords.lng;
+        out.locationLabel = coords.label;
+      }
+    }
+  } else {
+    // إذا كانت المدينة موجودة ولكن ليس هناك إحداثيات
+    if (!out.lat || !out.lng) {
+      const coords = getCoordinates(out.city);
+      if (coords) {
+        out.lat = coords.lat;
+        out.lng = coords.lng;
+        out.locationLabel = out.locationLabel || coords.label;
+      }
+    }
   }
 
   // location from meta first
@@ -1189,7 +1415,18 @@ async function startDraftFromAi(user, listing) {
   if (category) data.category = category;
   if (listing?.title) data.title = String(listing.title).trim();
   if (listing?.description) data.description = String(listing.description).trim();
-  if (listing?.city) data.city = String(listing.city).trim();
+  
+  // البحث عن المدينة وإحداثياتها
+  if (listing?.city) {
+    data.city = String(listing.city).trim();
+    const coords = getCoordinates(data.city);
+    if (coords && !listing.lat && !listing.lng) {
+      data.lat = coords.lat;
+      data.lng = coords.lng;
+      data.locationLabel = coords.label;
+    }
+  }
+  
   if (listing?.locationLabel) data.locationLabel = String(listing.locationLabel).trim();
   if (listing?.lat != null && listing?.lng != null) {
     const lat = Number(listing.lat);
@@ -1360,7 +1597,7 @@ async function handleListingWizard({ user, message, meta }) {
     };
   }
 
-  // نشر نهائي
+  // نشر نهائي - التحقق من جميع الحقول الإلزامية
   if (step === 'confirm') {
     if (!isConfirmPublish(msg)) {
       return {
@@ -1369,6 +1606,36 @@ async function handleListingWizard({ user, message, meta }) {
           draftSummary(draft) +
           '\n\nإذا كل شيء تمام اكتب: نشر\nأو اكتب: إلغاء لإلغاء المسودة.',
       };
+    }
+
+    // التحقق من جميع الحقول الإلزامية
+    const requiredFields = ['category', 'title', 'description', 'city', 'phone', 'originalPrice'];
+    const missingFields = [];
+    
+    for (const field of requiredFields) {
+      if (!data[field]) {
+        missingFields.push(field);
+      }
+    }
+    
+    if (missingFields.length > 0) {
+      return {
+        reply: `❌ الحقول التالية مطلوبة:\n${missingFields.map(f => `• ${f}`).join('\n')}\n\nيرجى إكمال هذه الحقول قبل النشر.`
+      };
+    }
+    
+    // إذا لم يكن هناك موقع محدد، نحاول استخدام إحداثيات المدينة
+    if (!data.lat || !data.lng) {
+      const coords = getCoordinates(data.city);
+      if (coords) {
+        data.lat = coords.lat;
+        data.lng = coords.lng;
+        data.locationLabel = data.locationLabel || coords.label;
+      } else {
+        return {
+          reply: '❌ لم يتم تحديد الموقع. يرجى تحديد المدينة والمنطقة للحصول على الإحداثيات.'
+        };
+      }
     }
 
     const rates = await getRatesServer();
@@ -1460,7 +1727,7 @@ async function handleListingWizard({ user, message, meta }) {
       return { reply: 'الوصف قصير. اكتب وصف أوضح (10 أحرف على الأقل).' };
     }
     await saveDraft(user.uid, { step: 'city', data: { ...data, description } });
-    return { reply: 'تمام ✅\n\nالخطوة 4/7: اكتب اسم المدينة.' };
+    return { reply: 'تمام ✅\n\nالخطوة 4/7: اكتب اسم المدينة (مثال: صنعاء).' };
   }
 
   if (step === 'city') {
@@ -1468,8 +1735,28 @@ async function handleListingWizard({ user, message, meta }) {
     if (!city || city.length < 2) {
       return { reply: 'اكتب اسم المدينة بشكل صحيح (مثلاً: صنعاء).' };
     }
-    await saveDraft(user.uid, { step: 'phone', data: { ...data, city } });
-    return { reply: 'تمام ✅\n\nالخطوة 5/7: اكتب رقم الجوال للتواصل (مثال: 777123456 أو +967777123456).' };
+    
+    // البحث عن المدينة وإحداثياتها
+    const { city: foundCity, district } = findCityAndDistrict(city);
+    const actualCity = foundCity || city;
+    const coords = getCoordinates(actualCity, district);
+    
+    let newData = { ...data, city: actualCity };
+    if (coords) {
+      newData.lat = coords.lat;
+      newData.lng = coords.lng;
+      newData.locationLabel = coords.label;
+    }
+    
+    await saveDraft(user.uid, { step: 'phone', data: newData });
+    
+    let reply = `تمام ✅ المدينة: ${actualCity}`;
+    if (coords) {
+      reply += `\nتم تحديد الإحداثيات تلقائياً: ${coords.lat}, ${coords.lng}`;
+    }
+    reply += '\n\nالخطوة 5/7: اكتب رقم الجوال للتواصل (مثال: 777123456 أو +967777123456).';
+    
+    return { reply };
   }
 
   if (step === 'phone') {
@@ -1483,14 +1770,14 @@ async function handleListingWizard({ user, message, meta }) {
         'تمام ✅\n\n' +
         'الخطوة 6/7: حدّد موقع الإعلان.\n' +
         '• اضغط زر "📍 موقعي" داخل الشات لإرسال الإحداثيات تلقائياً\n' +
+        '• أو اكتب اسم المدينة والمنطقة (مثال: صنعاء - حدة) وسأحدد الإحداثيات تلقائياً\n' +
         '• أو اكتب الإحداثيات بهذا الشكل: 15.3694, 44.1910\n' +
-        '• أو أرسل رابط خرائط\n\n' +
-        'تقدر أيضاً تكتب اسم الحي/المنطقة (مثال: صنعاء - حدة).',
+        '• أو أرسل رابط خرائط',
     };
   }
 
   if (step === 'location') {
-    // 1) meta location from client
+    // 1) meta location from client (زر موقعي)
     const metaLat = meta?.location?.lat;
     const metaLng = meta?.location?.lng;
     if (metaLat != null && metaLng != null) {
@@ -1507,7 +1794,31 @@ async function handleListingWizard({ user, message, meta }) {
       }
     }
 
-    // 2) parse lat,lng from text
+    // 2) إذا كتب اسم مدينة/منطقة، نبحث عن إحداثياتها
+    if (msg && msg.length >= 2) {
+      const { city, district } = findCityAndDistrict(msg);
+      if (city) {
+        const coords = getCoordinates(city, district);
+        if (coords) {
+          await saveDraft(user.uid, { 
+            step: 'price', 
+            data: { 
+              ...data, 
+              lat: coords.lat, 
+              lng: coords.lng, 
+              locationLabel: coords.label || msg 
+            } 
+          });
+          return {
+            reply:
+              `تم تحديد موقع ${coords.label} ✅\n\n` +
+              'الخطوة 7/7: اكتب السعر (مثال: 100000) ويمكن تكتب العملة معها مثل: 100 USD أو 100 SAR.',
+          };
+        }
+      }
+    }
+
+    // 3) parse lat,lng from text
     const parsed = extractLatLngFromText(msg);
     if (parsed) {
       await saveDraft(user.uid, { step: 'price', data: { ...data, lat: parsed.lat, lng: parsed.lng, locationLabel: data.locationLabel || null } });
@@ -1518,7 +1829,7 @@ async function handleListingWizard({ user, message, meta }) {
       };
     }
 
-    // 3) accept maps link or label
+    // 4) accept maps link or label
     if (msg && msg.length >= 2) {
       const link = extractMapsLink(msg);
       const locationLabel = link ? `رابط الموقع: ${link}` : msg;
@@ -1535,6 +1846,7 @@ async function handleListingWizard({ user, message, meta }) {
         'ما قدرت أحدد موقع واضح 🤔\n' +
         'جرّب أحد الخيارات:\n' +
         '• اضغط زر "📍 موقعي" داخل الشات\n' +
+        '• اكتب اسم المدينة والمنطقة (مثال: صنعاء - حدة)\n' +
         '• اكتب الإحداثيات: 15.3694, 44.1910\n' +
         '• أرسل رابط خرائط\n' +
         '• أو اكتب اسم الحي/المنطقة',
@@ -1803,7 +2115,7 @@ export async function GET(request) {
     return NextResponse.json({
       status: 'active',
       version: '2.0.0',
-      features: ['faq', 'listing_wizard', 'counts', 'ai_fallback', 'rate_limiting', 'caching']
+      features: ['faq', 'listing_wizard', 'counts', 'ai_fallback', 'rate_limiting', 'caching', 'yemen_cities_coordinates']
     });
     
   } catch (error) {
