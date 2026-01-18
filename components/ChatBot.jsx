@@ -298,16 +298,10 @@ export default function ChatBot() {
             onChange={handleImagePicked}
           />
 
-          {/* أزرار سريعة */}
+          {/* أزرار سريعة (بعد إزالة أيقونتي الصور والصوت) */}
           <div className="quick-actions">
             <button type="button" className="chip" onClick={() => quickAsk('أضف إعلان')} disabled={isLoading}>
               ➕ إضافة إعلان
-            </button>
-            <button type="button" className="chip" onClick={openImagePicker} disabled={isLoading || uploadBusy}>
-              📷 صور
-            </button>
-            <button type="button" className={`chip ${isRecording ? 'chip-recording' : ''}`} onClick={toggleRecording} disabled={isLoading}>
-              🎙️ {isRecording ? 'إيقاف' : 'صوت'}
             </button>
             <button type="button" className="chip" onClick={() => goTo('/add')}>
               📝 صفحة الإضافة
@@ -342,7 +336,7 @@ export default function ChatBot() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* الإدخال */}
+          {/* الإدخال (الأيقونات موجودة هنا فقط) */}
           <form className="input-area" onSubmit={sendMessage}>
             <button
               type="button"
