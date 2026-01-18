@@ -266,28 +266,8 @@ export default function HomeMapView({ listings = [] }) {
   // فلتر الأقسام (Chips)
   const [activeCat, setActiveCat] = useState('all');
 
-  // ✅ جديد: وضع الجوال + لوحة "المزيد"
-  const [isMobile, setIsMobile] = useState(false);
-  const [showAllCats, setShowAllCats] = useState(false);
-
   useEffect(() => {
     setSeen(readSeen());
-  }, []);
-
-  // ✅ تحديد الجوال بالـ matchMedia (بدون مكتبات)
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const mq = window.matchMedia('(max-width: 520px)');
-    const onChange = () => setIsMobile(!!mq.matches);
-    onChange();
-    try {
-      mq.addEventListener('change', onChange);
-      return () => mq.removeEventListener('change', onChange);
-    } catch {
-      // Safari old
-      mq.addListener(onChange);
-      return () => mq.removeListener(onChange);
-    }
   }, []);
 
   // ✅ إصلاح: invalidateSize عشان الخريطة تظهر بكامل المساحة بعد الرندر/التبديل
@@ -311,16 +291,6 @@ export default function HomeMapView({ listings = [] }) {
       window.removeEventListener('resize', tick);
     };
   }, [map]);
-
-  // ✅ إغلاق لوحة المزيد بالـ ESC
-  useEffect(() => {
-    if (!showAllCats) return;
-    const onKey = (e) => {
-      if (e.key === 'Escape') setShowAllCats(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [showAllCats]);
 
   const points = useMemo(() => {
     return (listings || [])
@@ -401,16 +371,6 @@ export default function HomeMapView({ listings = [] }) {
     return points.filter((p) => p._catKey === activeCat);
   }, [points, activeCat]);
 
-  // ✅ جديد: على الجوال نعرض عدد محدود من الأيقونات + زر "المزيد"
-  const MAX_MOBILE_CHIPS = 6;
-  const mobileCats = useMemo(() => availableCats.slice(0, MAX_MOBILE_CHIPS), [availableCats]);
-  const moreCount = Math.max(0, availableCats.length - mobileCats.length);
-
-  const setCatAndClose = (k) => {
-    setActiveCat(k);
-    setShowAllCats(false);
-  };
-
   return (
     <div className="card" style={{ padding: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
@@ -444,152 +404,33 @@ export default function HomeMapView({ listings = [] }) {
         {/* ✅ Chips Filter Overlay */}
         {availableCats.length > 0 ? (
           <div className="sooq-mapOverlay">
-            {/* Desktop / Normal */}
-            {!isMobile ? (
-              <div className="sooq-chips" role="tablist" aria-label="فلترة الأقسام">
-                <button
-                  type="button"
-                  className={`sooq-chip ${activeCat === 'all' ? 'isActive' : ''}`}
-                  onClick={() => setActiveCat('all')}
-                >
-                  الكل <span className="sooq-chipCount">{points.length}</span>
-                </button>
-
-                {availableCats.map((k) => {
-                  const s = CAT_STYLE[k] || CAT_STYLE.other;
-                  const c = catCounts.get(k) || 0;
-                  return (
-                    <button
-                      key={k}
-                      type="button"
-                      className={`sooq-chip ${activeCat === k ? 'isActive' : ''}`}
-                      onClick={() => setActiveCat(k)}
-                      title={s.label}
-                    >
-                      <span className="sooq-chipDot" style={{ background: s.color }} />
-                      <span className="sooq-chipText">{s.label}</span>
-                      <span className="sooq-chipCount">{c}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              /* ✅ Mobile: Icons only + More */
-              <div className="sooq-chips sooq-chips--mobile" role="tablist" aria-label="فلترة الأقسام (جوال)">
-                {/* All */}
-                <button
-                  type="button"
-                  className={`sooq-chipMini ${activeCat === 'all' ? 'isActive' : ''}`}
-                  onClick={() => setCatAndClose('all')}
-                  aria-label={`الكل (${points.length})`}
-                  title={`الكل (${points.length})`}
-                >
-                  <span className="sooq-chipMiniIcon" aria-hidden="true">
-                    ⭐
-                  </span>
-                  <span className="sooq-chipMiniCount" aria-hidden="true">
-                    {points.length}
-                  </span>
-                </button>
-
-                {/* First few categories */}
-                {mobileCats.map((k) => {
-                  const s = CAT_STYLE[k] || CAT_STYLE.other;
-                  const c = catCounts.get(k) || 0;
-                  return (
-                    <button
-                      key={k}
-                      type="button"
-                      className={`sooq-chipMini ${activeCat === k ? 'isActive' : ''}`}
-                      onClick={() => setCatAndClose(k)}
-                      aria-label={`${s.label} (${c})`}
-                      title={`${s.label} (${c})`}
-                      style={{ background: 'rgba(255,255,255,0.95)' }}
-                    >
-                      <span className="sooq-chipMiniBadge" style={{ background: s.color }} aria-hidden="true" />
-                      <span className="sooq-chipMiniIcon" aria-hidden="true">
-                        {s.icon}
-                      </span>
-                      <span className="sooq-chipMiniCount" aria-hidden="true">
-                        {c}
-                      </span>
-                    </button>
-                  );
-                })}
-
-                {/* More button */}
-                {moreCount > 0 ? (
-                  <button
-                    type="button"
-                    className={`sooq-chipMini sooq-chipMiniMore ${showAllCats ? 'isActive' : ''}`}
-                    onClick={() => setShowAllCats(true)}
-                    aria-label={`المزيد (${moreCount})`}
-                    title={`المزيد (${moreCount})`}
-                  >
-                    <span className="sooq-chipMiniIcon" aria-hidden="true">
-                      ⋯
-                    </span>
-                    <span className="sooq-chipMiniCount" aria-hidden="true">
-                      {moreCount}
-                    </span>
-                  </button>
-                ) : null}
-              </div>
-            )}
-
-            {/* ✅ Mobile panel: all categories */}
-            {isMobile && showAllCats ? (
-              <div
-                className="sooq-catPanelBackdrop"
-                role="dialog"
-                aria-modal="true"
-                aria-label="كل الأقسام"
-                onClick={() => setShowAllCats(false)}
+            <div className="sooq-chips" role="tablist" aria-label="فلترة الأقسام">
+              <button
+                type="button"
+                className={`sooq-chip ${activeCat === 'all' ? 'isActive' : ''}`}
+                onClick={() => setActiveCat('all')}
               >
-                <div className="sooq-catPanel" onClick={(e) => e.stopPropagation()}>
-                  <div className="sooq-catPanelHeader">
-                    <div style={{ fontWeight: 900 }}>كل الأقسام</div>
-                    <button type="button" className="sooq-catPanelClose" onClick={() => setShowAllCats(false)}>
-                      إغلاق ✕
-                    </button>
-                  </div>
+                الكل <span className="sooq-chipCount">{points.length}</span>
+              </button>
 
-                  <div className="sooq-catGrid">
-                    <button
-                      type="button"
-                      className={`sooq-catTile ${activeCat === 'all' ? 'isActive' : ''}`}
-                      onClick={() => setCatAndClose('all')}
-                    >
-                      <span className="sooq-catTileIcon" aria-hidden="true">
-                        ⭐
-                      </span>
-                      <span className="sooq-catTileLabel">الكل</span>
-                      <span className="sooq-catTileCount">{points.length}</span>
-                    </button>
-
-                    {availableCats.map((k) => {
-                      const s = CAT_STYLE[k] || CAT_STYLE.other;
-                      const c = catCounts.get(k) || 0;
-                      return (
-                        <button
-                          key={k}
-                          type="button"
-                          className={`sooq-catTile ${activeCat === k ? 'isActive' : ''}`}
-                          onClick={() => setCatAndClose(k)}
-                        >
-                          <span className="sooq-catTileDot" style={{ background: s.color }} aria-hidden="true" />
-                          <span className="sooq-catTileIcon" aria-hidden="true">
-                            {s.icon}
-                          </span>
-                          <span className="sooq-catTileLabel">{s.label}</span>
-                          <span className="sooq-catTileCount">{c}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            ) : null}
+              {availableCats.map((k) => {
+                const s = CAT_STYLE[k] || CAT_STYLE.other;
+                const c = catCounts.get(k) || 0;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    className={`sooq-chip ${activeCat === k ? 'isActive' : ''}`}
+                    onClick={() => setActiveCat(k)}
+                    title={s.label}
+                  >
+                    <span className="sooq-chipDot" style={{ background: s.color }} />
+                    <span className="sooq-chipText">{s.label}</span>
+                    <span className="sooq-chipCount">{c}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         ) : null}
 
@@ -778,172 +619,6 @@ export default function HomeMapView({ listings = [] }) {
           background: rgba(0, 0, 0, 0.06);
           font-size: 12px;
           font-weight: 800;
-        }
-
-        /* ✅ Mobile chips (icons only) */
-        .sooq-chips--mobile {
-          gap: 10px;
-          padding: 8px 10px;
-          border-radius: 16px;
-        }
-
-        .sooq-chipMini {
-          position: relative;
-          width: 44px;
-          height: 44px;
-          border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.10);
-          background: rgba(255, 255, 255, 0.92);
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          box-shadow: 0 8px 14px rgba(0, 0, 0, 0.10);
-          transition: transform 0.08s ease, box-shadow 0.12s ease, border-color 0.12s ease;
-        }
-
-        .sooq-chipMini:active {
-          transform: scale(0.98);
-        }
-
-        .sooq-chipMini.isActive {
-          border-color: rgba(0, 0, 0, 0.22);
-          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.14);
-        }
-
-        .sooq-chipMiniIcon {
-          font-size: 18px;
-          line-height: 1;
-        }
-
-        .sooq-chipMiniBadge {
-          position: absolute;
-          left: 6px;
-          top: 6px;
-          width: 10px;
-          height: 10px;
-          border-radius: 50%;
-          border: 2px solid rgba(255, 255, 255, 0.95);
-        }
-
-        .sooq-chipMiniCount {
-          position: absolute;
-          right: -6px;
-          top: -6px;
-          min-width: 18px;
-          height: 18px;
-          padding: 0 5px;
-          border-radius: 999px;
-          background: rgba(0, 0, 0, 0.70);
-          color: #fff;
-          font-size: 11px;
-          font-weight: 900;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          border: 2px solid rgba(255, 255, 255, 0.95);
-        }
-
-        .sooq-chipMiniMore .sooq-chipMiniIcon {
-          font-size: 22px;
-          transform: translateY(-1px);
-        }
-
-        /* ✅ Mobile panel */
-        .sooq-catPanelBackdrop {
-          pointer-events: auto;
-          position: fixed;
-          inset: 0;
-          z-index: 2000;
-          background: rgba(0, 0, 0, 0.25);
-          backdrop-filter: blur(6px);
-          display: flex;
-          align-items: flex-end;
-          justify-content: center;
-          padding: 14px;
-        }
-
-        .sooq-catPanel {
-          width: min(560px, 100%);
-          background: #fff;
-          border-radius: 16px;
-          border: 1px solid rgba(0, 0, 0, 0.08);
-          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.22);
-          overflow: hidden;
-        }
-
-        .sooq-catPanelHeader {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-          padding: 12px 12px;
-          border-bottom: 1px solid #e2e8f0;
-          background: #f8fafc;
-        }
-
-        .sooq-catPanelClose {
-          border: 1px solid rgba(0, 0, 0, 0.10);
-          background: #fff;
-          padding: 8px 10px;
-          border-radius: 10px;
-          cursor: pointer;
-          font-weight: 900;
-        }
-
-        .sooq-catGrid {
-          padding: 12px;
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 10px;
-          max-height: 62vh;
-          overflow: auto;
-        }
-
-        .sooq-catTile {
-          display: grid;
-          grid-template-columns: 10px 28px 1fr auto;
-          align-items: center;
-          gap: 8px;
-          padding: 10px 10px;
-          border-radius: 14px;
-          border: 1px solid rgba(0, 0, 0, 0.10);
-          background: #fff;
-          cursor: pointer;
-          text-align: right;
-        }
-
-        .sooq-catTile.isActive {
-          border-color: rgba(0, 0, 0, 0.22);
-          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.12);
-        }
-
-        .sooq-catTileDot {
-          width: 10px;
-          height: 10px;
-          border-radius: 50%;
-        }
-
-        .sooq-catTileIcon {
-          font-size: 18px;
-          line-height: 1;
-        }
-
-        .sooq-catTileLabel {
-          font-weight: 900;
-        }
-
-        .sooq-catTileCount {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          min-width: 26px;
-          height: 20px;
-          padding: 0 8px;
-          border-radius: 999px;
-          background: rgba(0, 0, 0, 0.06);
-          font-size: 12px;
-          font-weight: 900;
         }
 
         /* Marker */
