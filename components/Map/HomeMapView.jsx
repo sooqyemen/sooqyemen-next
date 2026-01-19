@@ -270,9 +270,22 @@ export default function HomeMapView({ listings = [] }) {
   const [nearbyOn, setNearbyOn] = useState(false);
   const [nearbyBounds, setNearbyBounds] = useState(null); // [[south, west],[north,east]]
 
+  // ✅ ملء الشاشة للجوال/الكل
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   useEffect(() => {
     setSeen(readSeen());
   }, []);
+
+  // ✅ عند ملء الشاشة: امنع تمرير الصفحة خلف الخريطة
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev || '';
+    };
+  }, [isFullscreen]);
 
   // ✅ إصلاح: invalidateSize عشان الخريطة تظهر بكامل المساحة بعد الرندر/التبديل
   useEffect(() => {
@@ -295,6 +308,25 @@ export default function HomeMapView({ listings = [] }) {
       window.removeEventListener('resize', tick);
     };
   }, [map]);
+
+  // ✅ بعد فتح/إغلاق ملء الشاشة: نعمل invalidateSize
+  useEffect(() => {
+    if (!map) return;
+    const t1 = setTimeout(() => {
+      try {
+        map.invalidateSize();
+      } catch {}
+    }, 50);
+    const t2 = setTimeout(() => {
+      try {
+        map.invalidateSize();
+      } catch {}
+    }, 250);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [isFullscreen, map]);
 
   const points = useMemo(() => {
     return (listings || [])
@@ -431,17 +463,28 @@ export default function HomeMapView({ listings = [] }) {
       </div>
 
       <div
-        className="sooq-mapWrap"
+        className={`sooq-mapWrap ${isFullscreen ? 'isFullscreen' : ''}`}
         style={{
           width: '100%',
-          height: 'min(520px, 70vh)',
-          minHeight: 360,
-          borderRadius: 14,
+          height: isFullscreen ? '100dvh' : 'min(520px, 70vh)',
+          minHeight: isFullscreen ? '100dvh' : 360,
+          borderRadius: isFullscreen ? 0 : 14,
           overflow: 'hidden',
-          border: '1px solid #e2e8f0',
+          border: isFullscreen ? '0' : '1px solid #e2e8f0',
         }}
       >
-        {/* ✅ Chips Filter Overlay + زر قريب من هنا */}
+        {/* ✅ شريط علوي أثناء ملء الشاشة */}
+        {isFullscreen ? (
+          <div className="sooq-fsTopBar" role="presentation">
+            <button type="button" className="sooq-fsCloseBtn" onClick={() => setIsFullscreen(false)} aria-label="إغلاق ملء الشاشة">
+              ✕ إغلاق
+            </button>
+            <div className="sooq-fsTitle">الخريطة</div>
+            <div style={{ width: 70 }} />
+          </div>
+        ) : null}
+
+        {/* ✅ Chips Filter Overlay + زر قريب من هنا + زر ملء الشاشة */}
         {availableCats.length > 0 ? (
           <div className="sooq-mapOverlay">
             <div className="sooq-chips" role="tablist" aria-label="فلترة الأقسام">
@@ -471,7 +514,6 @@ export default function HomeMapView({ listings = [] }) {
                 );
               })}
 
-              {/* ✅ زر "قريب من هنا" (بدون كم) */}
               <span className="sooq-chipSpacer" />
 
               {!nearbyOn ? (
@@ -483,6 +525,16 @@ export default function HomeMapView({ listings = [] }) {
                   عرض الكل
                 </button>
               )}
+
+              {/* ✅ زر ملء الشاشة */}
+              <button
+                type="button"
+                className="sooq-chip sooq-chipAction sooq-fullBtn"
+                onClick={() => setIsFullscreen((v) => !v)}
+                title="ملء الشاشة (مفيد للجوال)"
+              >
+                {isFullscreen ? 'تصغير' : 'ملء الشاشة'}
+              </button>
             </div>
           </div>
         ) : null}
@@ -513,70 +565,39 @@ export default function HomeMapView({ listings = [] }) {
             return (
               <Marker key={l._id} position={l._coords} icon={getMarkerIcon(l._categoryValue || l._catKey, isSeen)}>
                 <Popup>
-                  <div style={{ width: 230 }}>
+                  <div className="sooq-popup">
                     {img ? (
                       <img
+                        className="sooq-popupImg"
                         src={img}
                         alt={l.title || 'صورة'}
-                        style={{
-                          width: '100%',
-                          height: 110,
-                          objectFit: 'cover',
-                          borderRadius: 10,
-                          marginBottom: 8,
-                        }}
+                        loading="lazy"
                       />
                     ) : null}
 
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <div style={{ fontWeight: 800 }}>{l.title || 'بدون عنوان'}</div>
-                      <div
-                        title={cat.label}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          padding: '4px 8px',
-                          borderRadius: 999,
-                          background: '#f1f5f9',
-                          border: '1px solid #e2e8f0',
-                          fontSize: 12,
-                          fontWeight: 800,
-                        }}
-                      >
+                    <div className="sooq-popupRow">
+                      <div className="sooq-popupTitle">{l.title || 'بدون عنوان'}</div>
+
+                      <div className="sooq-popupCat" title={cat.label}>
                         <span aria-hidden="true">{cat.icon}</span>
                         <span>{cat.label}</span>
                       </div>
                     </div>
 
-                    <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, marginTop: 6 }}>
-                      📍 {l.city || l.locationLabel || l.area || 'غير محدد'}
-                    </div>
+                    <div className="sooq-popupMeta">📍 {l.city || l.locationLabel || l.area || 'غير محدد'}</div>
 
-                    <div style={{ fontWeight: 900, marginBottom: 10 }}>💰 {fmtYER(price)}</div>
+                    <div className="sooq-popupPrice">💰 {fmtYER(price)}</div>
 
                     <Link
                       href={`/listing/${l._id}`}
                       onClick={() => markSeen(l._id)}
-                      style={{
-                        display: 'inline-flex',
-                        width: '100%',
-                        justifyContent: 'center',
-                        padding: '8px 10px',
-                        borderRadius: 10,
-                        background: isSeen ? '#64748b' : cat.color,
-                        color: '#fff',
-                        textDecoration: 'none',
-                        fontWeight: 700,
-                        fontSize: 13,
-                      }}
+                      className="sooq-popupBtn"
+                      style={{ '--btn': isSeen ? '#64748b' : cat.color }}
                     >
                       فتح الإعلان
                     </Link>
 
-                    <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>
-                      {isSeen ? '✅ تمت المشاهدة' : '🆕 جديد'}
-                    </div>
+                    <div className="sooq-popupState">{isSeen ? '✅ تمت المشاهدة' : '🆕 جديد'}</div>
                   </div>
                 </Popup>
               </Marker>
@@ -592,18 +613,68 @@ export default function HomeMapView({ listings = [] }) {
       </div>
 
       <style jsx global>{`
-        /* Overlay */
+        /* ====== Map wrapper ====== */
         .sooq-mapWrap {
           position: relative;
+          background: #fff;
         }
 
+        /* ✅ Fullscreen mode */
+        .sooq-mapWrap.isFullscreen {
+          position: fixed;
+          inset: 0;
+          width: 100vw !important;
+          height: 100dvh !important;
+          min-height: 100dvh !important;
+          z-index: 99999;
+        }
+
+        .sooq-fsTopBar {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          z-index: 1005;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 10px 12px;
+          background: rgba(255, 255, 255, 0.88);
+          backdrop-filter: blur(10px);
+          border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        .sooq-fsTitle {
+          font-weight: 900;
+        }
+
+        .sooq-fsCloseBtn {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 10px;
+          border-radius: 999px;
+          border: 1px solid rgba(0, 0, 0, 0.12);
+          background: #fff;
+          cursor: pointer;
+          font-weight: 900;
+          font-size: 13px;
+        }
+
+        /* ====== Overlay Chips ====== */
         .sooq-mapOverlay {
           position: absolute;
           top: 10px;
           left: 10px;
           right: 10px;
-          z-index: 999;
+          z-index: 1004;
           pointer-events: none;
+        }
+
+        /* أثناء ملء الشاشة ننزّل الشيبس تحت الـ topbar */
+        .sooq-mapWrap.isFullscreen .sooq-mapOverlay {
+          top: calc(env(safe-area-inset-top, 0px) + 58px);
         }
 
         .sooq-chips {
@@ -619,6 +690,14 @@ export default function HomeMapView({ listings = [] }) {
           align-items: center;
         }
 
+        .sooq-chips::-webkit-scrollbar {
+          height: 6px;
+        }
+        .sooq-chips::-webkit-scrollbar-thumb {
+          background: rgba(0, 0, 0, 0.15);
+          border-radius: 999px;
+        }
+
         .sooq-chipSpacer {
           flex: 1 1 auto;
           min-width: 6px;
@@ -628,12 +707,8 @@ export default function HomeMapView({ listings = [] }) {
           font-weight: 900;
         }
 
-        .sooq-chips::-webkit-scrollbar {
-          height: 6px;
-        }
-        .sooq-chips::-webkit-scrollbar-thumb {
-          background: rgba(0, 0, 0, 0.15);
-          border-radius: 999px;
+        .sooq-fullBtn {
+          border-color: rgba(0, 0, 0, 0.18);
         }
 
         .sooq-chip {
@@ -684,7 +759,97 @@ export default function HomeMapView({ listings = [] }) {
           font-weight: 800;
         }
 
-        /* Marker */
+        /* ====== Popup Card (smaller on mobile) ====== */
+        .sooq-popup {
+          width: 230px;
+        }
+
+        .sooq-popupImg {
+          width: 100%;
+          height: 110px;
+          object-fit: cover;
+          border-radius: 10px;
+          margin-bottom: 8px;
+          display: block;
+        }
+
+        .sooq-popupRow {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+        }
+
+        .sooq-popupTitle {
+          font-weight: 900;
+          font-size: 14px;
+        }
+
+        .sooq-popupCat {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 4px 8px;
+          border-radius: 999px;
+          background: #f1f5f9;
+          border: 1px solid #e2e8f0;
+          font-size: 12px;
+          font-weight: 800;
+          flex: 0 0 auto;
+        }
+
+        .sooq-popupMeta {
+          font-size: 12px;
+          color: #64748b;
+          margin: 6px 0;
+        }
+
+        .sooq-popupPrice {
+          font-weight: 900;
+          margin-bottom: 10px;
+        }
+
+        .sooq-popupBtn {
+          display: inline-flex;
+          width: 100%;
+          justify-content: center;
+          padding: 8px 10px;
+          border-radius: 10px;
+          background: var(--btn);
+          color: #fff;
+          text-decoration: none;
+          font-weight: 900;
+          font-size: 13px;
+        }
+
+        .sooq-popupState {
+          margin-top: 8px;
+          font-size: 11px;
+          color: #94a3b8;
+        }
+
+        /* ✅ تصغير أكبر للجوال */
+        @media (max-width: 520px) {
+          .sooq-popup {
+            width: 190px;
+          }
+          .sooq-popupImg {
+            height: 88px;
+          }
+          .sooq-popupTitle {
+            font-size: 13px;
+          }
+          .sooq-popupBtn {
+            font-size: 12px;
+            padding: 7px 10px;
+          }
+          /* تقليل هوامش popup الافتراضية */
+          .leaflet-popup-content {
+            margin: 10px 12px !important;
+          }
+        }
+
+        /* ====== Marker ====== */
         .sooq-marker {
           background: transparent !important;
           border: 0 !important;
@@ -739,7 +904,7 @@ export default function HomeMapView({ listings = [] }) {
           filter: grayscale(0.25);
         }
 
-        /* Legend */
+        /* ====== Legend ====== */
         .sooq-legend {
           display: flex;
           flex-wrap: wrap;
