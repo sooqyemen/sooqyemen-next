@@ -48,6 +48,46 @@ function normalizeSlug(v) {
     .replace(/-+/g, '_');
 }
 
+// ✅ لتفادي ظهور أقسام "فاضية" بسبب اختلافات حفظ قيمة category في الإعلانات القديمة
+// نجلب نفس القسم بعدة قيم محتملة (حتى 10 قيم - حد Firestore لــ in)
+function categoryVariants(single) {
+  const s = normalizeSlug(single);
+  if (!s) return [];
+
+  const variantsMap = {
+    realestate: ['realestate', 'real_estate', 'real-estate', 'real estate', 'عقارات', 'العقارات'],
+    cars: ['cars', 'car', 'سيارات', 'السيارات'],
+    phones: ['phones', 'phone', 'mobiles', 'mobile', 'جوالات', 'الجوالات', 'موبايلات'],
+    electronics: ['electronics', 'electronic', 'إلكترونيات', 'الكترونيات', 'الإلكترونيات'],
+    motorcycles: ['motorcycles', 'motorcycle', 'دراجات', 'دراجات نارية', 'دراجات_نارية'],
+    heavy_equipment: ['heavy_equipment', 'heavy-equipment', 'heavy equipment', 'heavyequipment', 'معدات ثقيلة', 'معدات_ثقيلة'],
+    solar: ['solar', 'طاقة شمسية', 'طاقة_شمسية'],
+    networks: ['networks', 'network', 'net', 'شبكات', 'نت وشبكات', 'نت_وشبكات', 'نت_و_شبكات'],
+    maintenance: ['maintenance', 'صيانة'],
+    furniture: ['furniture', 'أثاث', 'اثاث'],
+    home_tools: ['home_tools', 'home tools', 'hometools', 'أدوات منزلية', 'ادوات منزلية', 'أدوات_منزلية', 'ادوات_منزلية'],
+    clothes: ['clothes', 'ملابس'],
+    animals: ['animals', 'animals_birds', 'animals-birds', 'حيوانات', 'حيوانات وطيور', 'حيوانات_وطيور'],
+    jobs: ['jobs', 'وظائف'],
+    services: ['services', 'خدمات'],
+    other: ['other', 'أخرى', 'اخرى'],
+  };
+
+  const list = variantsMap[s] || [s];
+  // Normalize + remove duplicates + keep max 10
+  const uniq = [];
+  const seen = new Set();
+  for (const v of list) {
+    const nv = normalizeSlug(v);
+    if (!nv) continue;
+    if (seen.has(nv)) continue;
+    seen.add(nv);
+    uniq.push(nv);
+    if (uniq.length >= 10) break;
+  }
+  return uniq.length ? uniq : [s];
+}
+
 export default function CategoryListings({ category }) {
   const PAGE_SIZE = 20;
 
@@ -78,6 +118,7 @@ export default function CategoryListings({ category }) {
   const catsRaw = Array.isArray(category) ? category : [category];
   const cats = catsRaw.map(normalizeSlug).filter(Boolean);
   const single = cats.length === 1 ? cats[0] : '';
+  const variants = useMemo(() => categoryVariants(single), [single]);
 
   const filtered = useMemo(() => {
     const s = String(q || '').trim().toLowerCase();
@@ -116,7 +157,7 @@ export default function CategoryListings({ category }) {
     try {
       const ref = db
         .collection('listings')
-        .where('category', '==', single)
+        .where('category', variants.length > 1 ? 'in' : '==', variants.length > 1 ? variants : single)
         .orderBy('createdAt', 'desc')
         .limit(PAGE_SIZE);
 
@@ -160,7 +201,7 @@ export default function CategoryListings({ category }) {
     try {
       const ref = db
         .collection('listings')
-        .where('category', '==', single)
+        .where('category', variants.length > 1 ? 'in' : '==', variants.length > 1 ? variants : single)
         .orderBy('createdAt', 'desc')
         .startAfter(lastDoc)
         .limit(PAGE_SIZE);
