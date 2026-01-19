@@ -7,6 +7,14 @@ import { useAuth } from '@/lib/useAuth';
 import { toYER, useRates } from '@/lib/rates';
 import Link from 'next/link';
 
+// ✅ Taxonomy (تصنيف هرمي للفروع)
+import {
+  CAR_MAKES,
+  PHONE_BRANDS,
+  DEAL_TYPES,
+  PROPERTY_TYPES,
+} from '@/lib/taxonomy';
+
 const LocationPicker = dynamic(
   () => import('@/components/Map/LocationPicker'),
   { ssr: false }
@@ -41,6 +49,14 @@ export default function AddPage() {
   const [city, setCity] = useState('');
   // ✅ مهم: لا يوجد قسم افتراضي
   const [category, setCategory] = useState('');
+  // ✅ فروع الأقسام (هرمية)
+  const [carMake, setCarMake] = useState(''); // cars
+  const [carMakeText, setCarMakeText] = useState('');
+  const [phoneBrand, setPhoneBrand] = useState(''); // phones
+  const [phoneBrandText, setPhoneBrandText] = useState('');
+  const [dealType, setDealType] = useState(''); // realestate: sale/rent
+  const [propertyType, setPropertyType] = useState(''); // realestate: land/house...
+  const [propertyTypeText, setPropertyTypeText] = useState('');
   const [phone, setPhone] = useState('');
   const [isWhatsapp, setIsWhatsapp] = useState(true);
 
@@ -117,7 +133,20 @@ export default function AddPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ معاينة الصور
+  
+  // ✅ عند تغيير القسم: صفّر الفروع
+  useEffect(() => {
+    setCarMake('');
+    setCarMakeText('');
+    setPhoneBrand('');
+    setPhoneBrandText('');
+    setDealType('');
+    setPropertyType('');
+    setPropertyTypeText('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category]);
+
+// ✅ معاينة الصور
   useEffect(() => {
     if (images.length === 0) {
       setImagePreviews([]);
@@ -165,8 +194,28 @@ export default function AddPage() {
 
     if (!price || isNaN(price) || Number(price) <= 0) newErrors.price = 'الرجاء إدخال سعر صحيح';
 
-    if (phone && !/^[0-9]{9,15}$/.test(phone.replace(/\D/g, ''))) {
+    const phoneDigits = phone.replace(/\D/g, '');
+    if (!phoneDigits) {
+      newErrors.phone = 'رقم التواصل مطلوب';
+    } else if (!/^[0-9]{9,15}$/.test(phoneDigits)) {
       newErrors.phone = 'رقم الهاتف غير صحيح';
+    }
+
+    // ✅ فروع الأقسام (للمستقبل + الخريطة)
+    if (category === 'cars') {
+      if (!carMake) newErrors.carMake = 'اختر ماركة السيارة';
+      if (carMake === 'other' && !carMakeText.trim()) newErrors.carMakeText = 'اكتب ماركة السيارة';
+    }
+
+    if (category === 'phones') {
+      if (!phoneBrand) newErrors.phoneBrand = 'اختر ماركة الجوال';
+      if (phoneBrand === 'other' && !phoneBrandText.trim()) newErrors.phoneBrandText = 'اكتب ماركة الجوال';
+    }
+
+    if (category === 'realestate') {
+      if (!dealType) newErrors.dealType = 'اختر (بيع / إيجار)';
+      if (!propertyType) newErrors.propertyType = 'اختر نوع العقار';
+      if (propertyType === 'other' && !propertyTypeText.trim()) newErrors.propertyTypeText = 'اكتب نوع العقار';
     }
 
     if (auctionEnabled && (!auctionMinutes || Number(auctionMinutes) < 1)) {
@@ -242,6 +291,18 @@ export default function AddPage() {
 
         // ✅ مهم جدًا: نخزّن key الإنجليزي المطابق لـ Firestore
         category: String(category || '').trim(),
+
+        // ✅ فروع الأقسام (Taxonomy)
+        carMake: category === 'cars' ? (carMake || null) : null,
+        carMakeText: category === 'cars' && carMake === 'other' ? (carMakeText.trim() || null) : null,
+
+        phoneBrand: category === 'phones' ? (phoneBrand || null) : null,
+        phoneBrandText: category === 'phones' && phoneBrand === 'other' ? (phoneBrandText.trim() || null) : null,
+
+        dealType: category === 'realestate' ? (dealType || null) : null,
+        propertyType: category === 'realestate' ? (propertyType || null) : null,
+        propertyTypeText:
+          category === 'realestate' && propertyType === 'other' ? (propertyTypeText.trim() || null) : null,
 
         phone: phone.trim() || null,
         isWhatsapp: !!isWhatsapp,
@@ -447,6 +508,164 @@ export default function AddPage() {
             </div>
           </div>
 
+
+          {/* ✅ فرع القسم (هرمي) */}
+          {category === 'cars' && (
+            <div className="form-group">
+              <label className="form-label required">ماركة السيارة</label>
+              <select
+                className={`form-select ${errors.carMake ? 'error' : ''}`}
+                value={carMake}
+                onChange={(e) => {
+                  setCarMake(e.target.value);
+                  if (submitAttempted) setErrors((prev) => ({ ...prev, carMake: undefined, carMakeText: undefined }));
+                }}
+              >
+                <option value="" disabled>
+                  اختر الماركة
+                </option>
+                {CAR_MAKES.map((m) => (
+                  <option key={m.key} value={m.key}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+              {errors.carMake && <div className="form-error">{errors.carMake}</div>}
+
+              {carMake === 'other' && (
+                <div style={{ marginTop: 10 }}>
+                  <input
+                    className={`form-input ${errors.carMakeText ? 'error' : ''}`}
+                    value={carMakeText}
+                    onChange={(e) => {
+                      setCarMakeText(e.target.value);
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, carMakeText: undefined }));
+                    }}
+                    placeholder="اكتب الماركة"
+                    maxLength={40}
+                  />
+                  {errors.carMakeText && <div className="form-error">{errors.carMakeText}</div>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {category === 'phones' && (
+            <div className="form-group">
+              <label className="form-label required">ماركة الجوال</label>
+              <select
+                className={`form-select ${errors.phoneBrand ? 'error' : ''}`}
+                value={phoneBrand}
+                onChange={(e) => {
+                  setPhoneBrand(e.target.value);
+                  if (submitAttempted)
+                    setErrors((prev) => ({ ...prev, phoneBrand: undefined, phoneBrandText: undefined }));
+                }}
+              >
+                <option value="" disabled>
+                  اختر الماركة
+                </option>
+                {PHONE_BRANDS.map((m) => (
+                  <option key={m.key} value={m.key}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+              {errors.phoneBrand && <div className="form-error">{errors.phoneBrand}</div>}
+
+              {phoneBrand === 'other' && (
+                <div style={{ marginTop: 10 }}>
+                  <input
+                    className={`form-input ${errors.phoneBrandText ? 'error' : ''}`}
+                    value={phoneBrandText}
+                    onChange={(e) => {
+                      setPhoneBrandText(e.target.value);
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, phoneBrandText: undefined }));
+                    }}
+                    placeholder="اكتب ماركة الجوال"
+                    maxLength={40}
+                  />
+                  {errors.phoneBrandText && <div className="form-error">{errors.phoneBrandText}</div>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {category === 'realestate' && (
+            <div className="card" style={{ padding: 12, marginBottom: 12, border: '1px solid #e2e8f0' }}>
+              <div style={{ fontWeight: 900, marginBottom: 10 }}>تفاصيل العقار</div>
+
+              {/* بيع / إيجار */}
+              <div className="form-row" style={{ marginBottom: 0 }}>
+                <div className="form-group">
+                  <label className="form-label required">نوع العملية</label>
+                  <select
+                    className={`form-select ${errors.dealType ? 'error' : ''}`}
+                    value={dealType}
+                    onChange={(e) => {
+                      setDealType(e.target.value);
+                      setPropertyType('');
+                      setPropertyTypeText('');
+                      if (submitAttempted)
+                        setErrors((prev) => ({ ...prev, dealType: undefined, propertyType: undefined, propertyTypeText: undefined }));
+                    }}
+                  >
+                    <option value="" disabled>
+                      اختر (بيع / إيجار)
+                    </option>
+                    {DEAL_TYPES.map((d) => (
+                      <option key={d.key} value={d.key}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.dealType && <div className="form-error">{errors.dealType}</div>}
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label required">نوع العقار</label>
+                  <select
+                    className={`form-select ${errors.propertyType ? 'error' : ''}`}
+                    value={propertyType}
+                    onChange={(e) => {
+                      setPropertyType(e.target.value);
+                      if (submitAttempted)
+                        setErrors((prev) => ({ ...prev, propertyType: undefined, propertyTypeText: undefined }));
+                    }}
+                    disabled={!dealType}
+                    title={!dealType ? 'اختر بيع/إيجار أولاً' : ''}
+                  >
+                    <option value="" disabled>
+                      اختر نوع العقار
+                    </option>
+                    {PROPERTY_TYPES.map((p) => (
+                      <option key={p.key} value={p.key}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.propertyType && <div className="form-error">{errors.propertyType}</div>}
+
+                  {propertyType === 'other' && (
+                    <div style={{ marginTop: 10 }}>
+                      <input
+                        className={`form-input ${errors.propertyTypeText ? 'error' : ''}`}
+                        value={propertyTypeText}
+                        onChange={(e) => {
+                          setPropertyTypeText(e.target.value);
+                          if (submitAttempted) setErrors((prev) => ({ ...prev, propertyTypeText: undefined }));
+                        }}
+                        placeholder="اكتب نوع العقار"
+                        maxLength={50}
+                      />
+                      {errors.propertyTypeText && <div className="form-error">{errors.propertyTypeText}</div>}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* السعر والعملة */}
           <div className="form-row">
             <div className="form-group">
@@ -499,7 +718,7 @@ export default function AddPage() {
           {/* رقم الهاتف وواتساب */}
           <div className="form-row">
             <div className="form-group">
-              <label className="form-label">رقم الهاتف</label>
+              <label className="form-label required">رقم التواصل</label>
               <input
                 className={`form-input ${errors.phone ? 'error' : ''}`}
                 value={phone}
