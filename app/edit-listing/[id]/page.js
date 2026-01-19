@@ -6,6 +6,14 @@ import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+// ✅ Taxonomy (تصنيف هرمي للفروع)
+import {
+  CAR_MAKES,
+  PHONE_BRANDS,
+  DEAL_TYPES,
+  PROPERTY_TYPES,
+} from '@/lib/taxonomy';
+
 import { db, firebase, storage } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import { toYER, useRates } from '@/lib/rates';
@@ -19,6 +27,36 @@ const LocationPicker = dynamic(
 const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
 
 const MAX_IMAGES = 10;
+
+function normalizeCatKey(v) {
+  const raw = String(v || '').trim();
+  if (!raw) return '';
+  const lowered = raw.toLowerCase();
+  const norm = lowered.replace(/\s+/g, '_').replace(/-+/g, '_').replace(/__+/g, '_');
+
+  const map = {
+    real_estate: 'realestate',
+    'real estate': 'realestate',
+    realestate: 'realestate',
+    cars: 'cars',
+    car: 'cars',
+    phones: 'phones',
+    phone: 'phones',
+    mobiles: 'phones',
+    mobile: 'phones',
+
+    // عربي
+    'عقارات': 'realestate',
+    'العقارات': 'realestate',
+    'سيارات': 'cars',
+    'السيارات': 'cars',
+    'جوالات': 'phones',
+    'الجوالات': 'phones',
+    'موبايلات': 'phones',
+  };
+
+  return map[norm] || map[raw] || norm;
+}
 
 export default function EditListingPage() {
   const { id } = useParams();
@@ -42,6 +80,19 @@ export default function EditListingPage() {
   const [desc, setDesc] = useState('');
   const [city, setCity] = useState('');
   const [category, setCategory] = useState('solar');
+
+  // ✅ فروع الأقسام (هرمية)
+  const [carMake, setCarMake] = useState('');
+  const [carMakeText, setCarMakeText] = useState('');
+  const [phoneBrand, setPhoneBrand] = useState('');
+  const [phoneBrandText, setPhoneBrandText] = useState('');
+  const [dealType, setDealType] = useState('');
+  const [propertyType, setPropertyType] = useState('');
+  const [propertyTypeText, setPropertyTypeText] = useState('');
+
+  // ✅ لتصفير الفروع فقط عند تغيير القسم "بعد التحميل"
+  const [didInitCategory, setDidInitCategory] = useState(false);
+
   const [phone, setPhone] = useState('');
   const [isWhatsapp, setIsWhatsapp] = useState(true);
 
@@ -89,6 +140,17 @@ export default function EditListingPage() {
         setDesc(String(d.description || ''));
         setCity(String(d.city || ''));
         setCategory(String(d.category || 'solar'));
+
+        // ✅ فروع الأقسام (Taxonomy)
+        setCarMake(String(d.carMake || ''));
+        setCarMakeText(String(d.carMakeText || ''));
+        setPhoneBrand(String(d.phoneBrand || ''));
+        setPhoneBrandText(String(d.phoneBrandText || ''));
+        setDealType(String(d.dealType || ''));
+        setPropertyType(String(d.propertyType || ''));
+        setPropertyTypeText(String(d.propertyTypeText || ''));
+
+        setDidInitCategory(true);
         setPhone(String(d.phone || ''));
         setIsWhatsapp(d.isWhatsapp !== false);
 
@@ -129,7 +191,21 @@ export default function EditListingPage() {
     };
   }, [id, router]);
 
-  // ====== Previews for new images ======
+  
+  // ✅ عند تغيير القسم: صفّر الفروع (بعد التحميل فقط)
+  useEffect(() => {
+    if (!didInitCategory) return;
+    setCarMake('');
+    setCarMakeText('');
+    setPhoneBrand('');
+    setPhoneBrandText('');
+    setDealType('');
+    setPropertyType('');
+    setPropertyTypeText('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category]);
+
+// ====== Previews for new images ======
   useEffect(() => {
     if (!newImages.length) {
       setNewPreviews([]);
@@ -160,9 +236,32 @@ export default function EditListingPage() {
 
     if (!price || isNaN(price) || Number(price) <= 0) e.price = 'الرجاء إدخال سعر صحيح';
 
-    if (phone && !/^[0-9]{9,15}$/.test(String(phone).replace(/\D/g, ''))) {
+    const phoneDigits = String(phone || '').replace(/\D/g, '');
+    if (!phoneDigits) {
+      e.phone = 'رقم التواصل مطلوب';
+    } else if (!/^[0-9]{9,15}$/.test(phoneDigits)) {
       e.phone = 'رقم الهاتف غير صحيح';
     }
+
+    // ✅ فروع الأقسام (لثبات الخريطة/الأقسام)
+    const catKey = normalizeCatKey(category);
+
+    if (catKey === 'cars') {
+      if (!carMake) e.carMake = 'اختر ماركة السيارة';
+      if (carMake === 'other' && !carMakeText.trim()) e.carMakeText = 'اكتب ماركة السيارة';
+    }
+
+    if (catKey === 'phones') {
+      if (!phoneBrand) e.phoneBrand = 'اختر ماركة الجوال';
+      if (phoneBrand === 'other' && !phoneBrandText.trim()) e.phoneBrandText = 'اكتب ماركة الجوال';
+    }
+
+    if (catKey === 'realestate') {
+      if (!dealType) e.dealType = 'اختر (بيع / إيجار)';
+      if (!propertyType) e.propertyType = 'اختر نوع العقار';
+      if (propertyType === 'other' && !propertyTypeText.trim()) e.propertyTypeText = 'اكتب نوع العقار';
+    }
+
 
     const keptExisting = existingImages.length;
     const total = keptExisting + newImages.length;
@@ -247,6 +346,7 @@ export default function EditListingPage() {
     setSaving(true);
     try {
       const priceYER = toYER(price, currency, rates);
+      const phoneDigits = String(phone || '').replace(/\D/g, '');
 
       const uploaded = await uploadNewImages();
       const finalImages = [...existingImages, ...uploaded].slice(0, MAX_IMAGES);
@@ -256,7 +356,22 @@ export default function EditListingPage() {
         description: desc.trim(),
         city: city.trim(),
         category: String(category || 'solar'),
-        phone: phone.trim() || null,
+
+        // ✅ فروع الأقسام (Taxonomy)
+        carMake: normalizeCatKey(category) === 'cars' ? (carMake || null) : null,
+        carMakeText: normalizeCatKey(category) === 'cars' && carMake === 'other' ? (carMakeText.trim() || null) : null,
+
+        phoneBrand: normalizeCatKey(category) === 'phones' ? (phoneBrand || null) : null,
+        phoneBrandText: normalizeCatKey(category) === 'phones' && phoneBrand === 'other' ? (phoneBrandText.trim() || null) : null,
+
+        dealType: normalizeCatKey(category) === 'realestate' ? (dealType || null) : null,
+        propertyType: normalizeCatKey(category) === 'realestate' ? (propertyType || null) : null,
+        propertyTypeText:
+          normalizeCatKey(category) === 'realestate' && propertyType === 'other'
+            ? (propertyTypeText.trim() || null)
+            : null,
+
+        phone: phoneDigits || null,
         isWhatsapp: !!isWhatsapp,
 
         priceYER: Number(priceYER),
@@ -517,7 +632,7 @@ export default function EditListingPage() {
 
           <div className="row2">
             <div className="field">
-              <label className="label">رقم الجوال</label>
+              <label className="label req">رقم التواصل</label>
               <input
                 className={`input ${errors.phone ? 'err' : ''}`}
                 value={phone}
