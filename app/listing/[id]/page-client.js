@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/useAuth';
 import { logListingView } from '@/lib/analytics';
 import { makeChatId } from '@/lib/chatId';
 import { ensureChatDoc } from '@/lib/chatService';
+import { getCategoryHref, getCategoryIcon, getCategoryLabel, normalizeCategoryKey } from '@/lib/categories';
 
 // Components
 import Price from '@/components/Price';
@@ -247,24 +248,11 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
     return null;
   }, [listing]);
 
-  const categoryIcon = (category) => {
-    const icons = {
-      cars: '🚗',
-      real_estate: '🏡',
-      mobiles: '📱',
-      electronics: '💻',
-      motorcycles: '🏍️',
-      heavy_equipment: '🚜',
-      solar: '☀️',
-      networks: '📡',
-      maintenance: '🛠️',
-      furniture: '🛋️',
-      animals: '🐑',
-      jobs: '💼',
-      services: '🧰',
-    };
-    return icons[category] || '📋';
-  };
+  // ✅ توحيد عرض القسم (حتى لو تم حفظه كسلاج / عربي / اختلافات)
+  const categoryRaw = listing?.categoryName || listing?.categorySlug || listing?.category || '';
+  const categoryKey = normalizeCategoryKey(categoryRaw);
+  const categoryLabel = getCategoryLabel(categoryRaw);
+  const categoryHref = getCategoryHref(categoryRaw);
 
   if (loading) {
     return (
@@ -373,7 +361,7 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
 
   const breadcrumbItems = [
     { name: 'الرئيسية', url: '/' },
-    ...(listing.category ? [{ name: listing.category, url: `/${listing.category}` }] : []),
+    ...(categoryKey ? [{ name: categoryLabel || categoryKey, url: categoryHref }] : []),
     { name: listing.title || 'إعلان', url: `/listing/${listing.id}` },
   ];
 
@@ -408,9 +396,9 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
 
                   <div className="listing-meta">
                     <span>📅 {formatDate(listing.createdAt)}</span>
-                    {listing.category && (
+                    {categoryKey && (
                       <span>
-                        {categoryIcon(listing.category)} {listing.category}
+                        {getCategoryIcon(categoryRaw)} {categoryLabel || categoryKey}
                       </span>
                     )}
                   </div>
