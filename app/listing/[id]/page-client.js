@@ -12,6 +12,15 @@ import { makeChatId } from '@/lib/chatId';
 import { ensureChatDoc } from '@/lib/chatService';
 import { getCategoryHref, getCategoryIcon, getCategoryLabel, normalizeCategoryKey } from '@/lib/categories';
 
+// ✅ Taxonomy (الفروع الهرمية)
+import {
+  inferListingTaxonomy,
+  carMakeLabel,
+  phoneBrandLabel,
+  dealTypeLabel,
+  propertyTypeLabel,
+} from '@/lib/taxonomy';
+
 // Components
 import Price from '@/components/Price';
 import ImageGallery from '@/components/ImageGallery';
@@ -254,6 +263,51 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
   const categoryLabel = getCategoryLabel(categoryRaw);
   const categoryHref = getCategoryHref(categoryRaw);
 
+
+  // ✅ استنتاج الفروع (للإعلانات القديمة التي لا تحتوي الحقول الجديدة)
+  const taxonomy = useMemo(() => {
+    try {
+      return inferListingTaxonomy(listing || {}, categoryKey);
+    } catch {
+      return { root: categoryKey };
+    }
+  }, [listing, categoryKey]);
+
+  // ✅ Chips لعرض الفروع بشكل فخم تحت العنوان
+  const taxonomyChips = useMemo(() => {
+    const chips = [];
+    const catKey = String(categoryKey || '').trim();
+
+    if (catKey === 'cars') {
+      const k = String(listing?.carMake || taxonomy?.carMake || '').trim();
+      const t = String(listing?.carMakeText || '').trim();
+      const label = k === 'other' ? (t || 'أخرى') : (carMakeLabel(k) || t || '');
+      if (label) chips.push({ kind: 'make', icon: '🚗', text: label });
+    }
+
+    if (catKey === 'phones') {
+      const k = String(listing?.phoneBrand || taxonomy?.phoneBrand || '').trim();
+      const t = String(listing?.phoneBrandText || '').trim();
+      const label = k === 'other' ? (t || 'أخرى') : (phoneBrandLabel(k) || t || '');
+      if (label) chips.push({ kind: 'phone', icon: '📱', text: label });
+    }
+
+    if (catKey === 'realestate') {
+      const deal = String(listing?.dealType || taxonomy?.dealType || '').trim();
+      const prop = String(listing?.propertyType || taxonomy?.propertyType || '').trim();
+      const propText = String(listing?.propertyTypeText || '').trim();
+
+      const dealLabel = dealTypeLabel(deal) || '';
+      const propLabel = prop === 'other' ? (propText || 'أخرى') : (propertyTypeLabel(prop) || propText || '');
+
+      if (dealLabel) chips.push({ kind: 'deal', icon: '🏷️', text: dealLabel });
+      if (propLabel) chips.push({ kind: 'prop', icon: '🏡', text: propLabel });
+    }
+
+    return chips;
+  }, [listing, taxonomy, categoryKey]);
+
+
   if (loading) {
     return (
       <div className="listing-details-page">
@@ -391,6 +445,14 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                     <h1 className="listing-title">{listing.title}</h1>
                     {listing.auctionEnabled && <span className="listing-badge">⚡ مزاد</span>}
                   </div>
+
+                  {taxonomyChips && taxonomyChips.length > 0 && (
+                    <div className="taxo-chips" aria-label="تفاصيل القسم">
+                      {taxonomyChips.map((c, idx) => (
+                        <span key={idx} className={`taxo-chip ${c.kind || ''}`}> {c.icon} {c.text}</span>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="listing-location">📍 {listing.city || listing.locationLabel || 'غير محدد'}</div>
 
@@ -609,6 +671,44 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
           padding: 10px;
           border-radius: 8px;
           margin-bottom: 10px;
+        }
+
+        /* ====== Taxonomy chips ====== */
+        .taxo-chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin: 10px 0 6px;
+        }
+        .taxo-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 10px;
+          border-radius: 999px;
+          background: #f1f5f9;
+          border: 1px solid rgba(0, 0, 0, 0.08);
+          font-weight: 900;
+          font-size: 13px;
+          line-height: 1;
+          color: #0f172a;
+          user-select: none;
+        }
+        .taxo-chip.make {
+          background: #eff6ff;
+          border-color: rgba(59, 130, 246, 0.28);
+        }
+        .taxo-chip.phone {
+          background: #faf5ff;
+          border-color: rgba(168, 85, 247, 0.25);
+        }
+        .taxo-chip.deal {
+          background: #ecfeff;
+          border-color: rgba(20, 184, 166, 0.28);
+        }
+        .taxo-chip.prop {
+          background: #f0fdf4;
+          border-color: rgba(34, 197, 94, 0.25);
         }
       `}</style>
     </>
