@@ -1,6 +1,4 @@
-from pathlib import Path
-
-code = r"""// components/Map/HomeMapView.jsx
+// components/Map/HomeMapView.jsx
 'use client';
 
 import Link from 'next/link';
@@ -586,7 +584,7 @@ export default function HomeMapView({ listings = [] }) {
   };
 
   // ✅ فتح ملء الشاشة للجوال دائماً عند النقر على الخريطة (بدون مانع / بدون openedOnce)
-  const openFullscreenFromMap = (e) => {
+  const openFullscreenFromMap = () => {
     if (!isMobile) return;
     if (isFullscreen) return;
     setIsFullscreen(true);
@@ -630,7 +628,7 @@ export default function HomeMapView({ listings = [] }) {
           <>
             <button
               type="button"
-              className={`sooq-chip ${activeRoot === 'all' ? 'isActive' : ''}`}
+              className={`sooq-chip isActive`}
               onClick={() => chooseRoot('all')}
             >
               الكل <span className="sooq-chipCount">{nearbyFilteredPoints.length}</span>
@@ -643,7 +641,7 @@ export default function HomeMapView({ listings = [] }) {
                 <button
                   key={k}
                   type="button"
-                  className={`sooq-chip ${activeRoot === k ? 'isActive' : ''}`}
+                  className="sooq-chip"
                   onClick={() => chooseRoot(k)}
                   title={s.label}
                 >
@@ -1145,7 +1143,3 @@ export default function HomeMapView({ listings = [] }) {
     </div>
   );
 }
-"""
-path = Path("/mnt/data/HomeMapView.jsx")
-path.write_text(code, encoding="utf-8")
-str(path)
