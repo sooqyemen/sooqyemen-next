@@ -171,20 +171,12 @@ export default function Header() {
               </Link>
 
               <Link href="/listings" className="nav-link">
-                الإعلانات
+                جميع الإعلانات
               </Link>
 
-              <Link href="/notifications" className="nav-link">
-                🔔 الإشعارات
-              </Link>
-
-              <Link href={AFFILIATE_CREATE_PATH} className="nav-link">
-                💸 برنامج العمولة
-              </Link>
-
-              {isAdmin && (
-                <Link href="/admin" className="nav-link admin-link">
-                  لوحة الإدارة
+              {!loading && !user && (
+                <Link href={AFFILIATE_CREATE_PATH} className="nav-link">
+                  💸 برنامج العمولة
                 </Link>
               )}
             </nav>
@@ -222,6 +214,12 @@ export default function Header() {
                       <Link href={AFFILIATE_CREATE_PATH} className="dropdown-item">
                         💸 برنامج العمولة
                       </Link>
+
+                      {isAdmin && (
+                        <Link href="/admin" className="dropdown-item">
+                          🛡️ لوحة الإدارة
+                        </Link>
+                      )}
 
                       <div className="dropdown-divider" />
 
@@ -319,9 +317,23 @@ export default function Header() {
                   <span className="item-icon">📄</span>
                   <span className="item-text">جميع الإعلانات</span>
                 </Link>
+              </div>
 
-                {!loading && user && (
+              <div className="menu-section">
+                <h3 className="section-title">حسابك</h3>
+
+                {loading ? (
+                  <div className="loading-item">
+                    <span className="loading-spinner" />
+                    <span>جاري التحميل…</span>
+                  </div>
+                ) : user ? (
                   <>
+                    <Link href="/profile" className="menu-item" onClick={() => closeMenu(true)}>
+                      <span className="item-icon">👤</span>
+                      <span className="item-text">الملف الشخصي</span>
+                    </Link>
+
                     <Link href="/my-listings" className="menu-item" onClick={() => closeMenu(true)}>
                       <span className="item-icon">📋</span>
                       <span className="item-text">إعلاناتي</span>
@@ -339,31 +351,18 @@ export default function Header() {
                         {hasUnreadMessages && <span className="unread-dot" />}
                       </span>
                     </Link>
-                  </>
-                )}
 
-                {isAdmin && (
-                  <Link href="/admin" className="menu-item admin-menu-item" onClick={() => closeMenu(true)}>
-                    <span className="item-icon">🛡️</span>
-                    <span className="item-text">لوحة الإدارة</span>
-                  </Link>
-                )}
-              </div>
-
-              <div className="menu-section">
-                <h3 className="section-title">حسابك</h3>
-
-                {loading ? (
-                  <div className="loading-item">
-                    <span className="loading-spinner" />
-                    <span>جاري التحميل…</span>
-                  </div>
-                ) : user ? (
-                  <>
-                    <Link href="/profile" className="menu-item" onClick={() => closeMenu(true)}>
-                      <span className="item-icon">👤</span>
-                      <span className="item-text">الملف الشخصي</span>
+                    <Link href={AFFILIATE_CREATE_PATH} className="menu-item" onClick={() => closeMenu(true)}>
+                      <span className="item-icon">💸</span>
+                      <span className="item-text">برنامج العمولة</span>
                     </Link>
+
+                    {isAdmin && (
+                      <Link href="/admin" className="menu-item" onClick={() => closeMenu(true)}>
+                        <span className="item-icon">🛡️</span>
+                        <span className="item-text">لوحة الإدارة</span>
+                      </Link>
+                    )}
 
                     <button className="menu-item logout-menu-item" onClick={handleLogout} disabled={isLoggingOut}>
                       <span className="item-icon">{isLoggingOut ? '⏳' : '🚪'}</span>
@@ -388,10 +387,12 @@ export default function Header() {
               <div className="menu-section">
                 <h3 className="section-title">المزيد</h3>
 
-                <Link href={AFFILIATE_CREATE_PATH} className="menu-item" onClick={() => closeMenu(true)}>
-                  <span className="item-icon">💸</span>
-                  <span className="item-text">برنامج العمولة</span>
-                </Link>
+                {!loading && !user && (
+                  <Link href={AFFILIATE_CREATE_PATH} className="menu-item" onClick={() => closeMenu(true)}>
+                    <span className="item-icon">💸</span>
+                    <span className="item-text">برنامج العمولة</span>
+                  </Link>
+                )}
 
                 <Link href="/help" className="menu-item" onClick={() => closeMenu(true)}>
                   <span className="item-icon">❓</span>
