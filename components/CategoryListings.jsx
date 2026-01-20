@@ -127,6 +127,86 @@ function pickTaxonomy(listing, categoryKey) {
   return out;
 }
 
+
+// ====== Presets (عرض فخم حتى لو العدد = 0) ======
+const CAR_MAKES_PRESET = [
+  { key: 'toyota', label: 'تويوتا' },
+  { key: 'nissan', label: 'نيسان' },
+  { key: 'hyundai', label: 'هيونداي' },
+  { key: 'kia', label: 'كيا' },
+  { key: 'honda', label: 'هوندا' },
+  { key: 'mazda', label: 'مازدا' },
+  { key: 'mitsubishi', label: 'ميتسوبيشي' },
+  { key: 'isuzu', label: 'ايسوزو' },
+  { key: 'chevrolet', label: 'شفروليه' },
+  { key: 'ford', label: 'فورد' },
+  { key: 'suzuki', label: 'سوزوكي' },
+  { key: 'lexus', label: 'لكزس' },
+  { key: 'mercedes', label: 'مرسيدس' },
+  { key: 'bmw', label: 'BMW' },
+  { key: 'audi', label: 'Audi' },
+  { key: 'volkswagen', label: 'Volkswagen' },
+  // شائعة في اليمن
+  { key: 'mg', label: 'MG' },
+  { key: 'haval', label: 'هافال' },
+  // طلبك (باص/شاص) — نخليها كخيارات جاهزة (لو ما لها نتائج تكون 0)
+  { key: 'bus', label: 'باص' },
+  { key: 'shas', label: 'شاص' },
+  { key: 'other', label: 'أخرى' },
+];
+
+const PHONE_BRANDS_PRESET = [
+  { key: 'iphone', label: 'آيفون' },
+  { key: 'samsung', label: 'سامسونج' },
+  { key: 'xiaomi', label: 'ريدمي/شاومي' },
+  { key: 'huawei', label: 'هواوي' },
+  { key: 'oppo', label: 'أوبو' },
+  { key: 'realme', label: 'ريلمي' },
+  { key: 'infinix', label: 'إنفنكس' },
+  { key: 'tecno', label: 'تكنو' },
+  { key: 'nokia', label: 'نوكيا' },
+  { key: 'other', label: 'أخرى' },
+];
+
+// ✅ أنواع العقار + ألوان (تظهر حتى لو 0)
+const PROPERTY_TYPES_PRESET = [
+  { key: 'land', label: 'أرض', color: '#0ea5e9' },
+  { key: 'apartment', label: 'شقة', color: '#7c3aed' },
+  { key: 'house', label: 'بيت', color: '#16a34a' },
+  { key: 'villa', label: 'فيلا', color: '#f97316' },
+  { key: 'building', label: 'عمارة', color: '#a16207' },
+  { key: 'farm', label: 'مزرعة', color: '#84cc16' },
+  { key: 'shop', label: 'محل', color: '#db2777' },
+  { key: 'warehouse', label: 'مستودع', color: '#64748b' },
+  { key: 'office', label: 'مكتب', color: '#334155' },
+  { key: 'room', label: 'غرفة', color: '#14b8a6' },
+  { key: 'other', label: 'أخرى', color: '#475569' },
+];
+
+function presetMergeWithCounts(preset, countsMap) {
+  const used = new Set();
+  const out = [];
+
+  // 1) preset in desired order
+  for (const p of preset) {
+    const k = safeStr(p.key);
+    if (!k) continue;
+    used.add(k);
+    const c = countsMap.get(k) || 0;
+    out.push({ key: k, label: p.label, count: c, color: p.color });
+  }
+
+  // 2) add any extra keys discovered in data but not in preset
+  for (const [k, c] of countsMap.entries()) {
+    const kk = safeStr(k);
+    if (!kk || used.has(kk)) continue;
+    used.add(kk);
+    out.push({ key: kk, label: kk, count: c });
+  }
+
+  return out;
+}
+
 export default function CategoryListings({ category, initialListings = [] }) {
   const PAGE_SIZE = 24;
 
@@ -428,18 +508,16 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const showRealTax = single === 'realestate' && taxonomyCounts.dealTypes.size > 0;
 
   const carMakeOptions = useMemo(() => {
-    return Array.from(taxonomyCounts.carMakes.entries())
-      .filter(([k]) => !!safeStr(k))
-      .sort((a, b) => (b[1] || 0) - (a[1] || 0))
-      .slice(0, 24);
+    const merged = presetMergeWithCounts(CAR_MAKES_PRESET, taxonomyCounts.carMakes);
+    // نعرض حتى 0 عشان تبقى واجهة فخمة وثابتة
+    return merged.slice(0, 40);
   }, [taxonomyCounts.carMakes]);
 
   const phoneBrandOptions = useMemo(() => {
-    return Array.from(taxonomyCounts.phoneBrands.entries())
-      .filter(([k]) => !!safeStr(k))
-      .sort((a, b) => (b[1] || 0) - (a[1] || 0))
-      .slice(0, 24);
+    const merged = presetMergeWithCounts(PHONE_BRANDS_PRESET, taxonomyCounts.phoneBrands);
+    return merged.slice(0, 40);
   }, [taxonomyCounts.phoneBrands]);
+
 
   const dealTypeOptions = useMemo(() => {
     return Array.from(taxonomyCounts.dealTypes.entries())
@@ -449,13 +527,12 @@ export default function CategoryListings({ category, initialListings = [] }) {
   }, [taxonomyCounts.dealTypes]);
 
   const propertyTypeOptions = useMemo(() => {
-    return Array.from(taxonomyCounts.propertyTypes.entries())
-      .filter(([k]) => !!safeStr(k))
-      .sort((a, b) => (b[1] || 0) - (a[1] || 0))
-      .slice(0, 32);
+    const merged = presetMergeWithCounts(PROPERTY_TYPES_PRESET, taxonomyCounts.propertyTypes);
+    return merged.slice(0, 60);
   }, [taxonomyCounts.propertyTypes]);
 
-  // ====== Taxonomy Chips (نفس ستايل شريط الخريطة) ======
+
+  // ====== UI Chips (ستايل احترافي مثل الخريطة) ======
   const CAT_COLOR = useMemo(() => {
     if (single === 'cars') return '#2563eb';
     if (single === 'phones') return '#7c3aed';
@@ -463,20 +540,25 @@ export default function CategoryListings({ category, initialListings = [] }) {
     return '#475569';
   }, [single]);
 
-  const Chip = ({ active, onClick, text, count, dotColor, title }) => (
+  const Chip = ({ active, disabled, onClick, icon, text, count, dotColor, title }) => (
     <button
       type="button"
-      className={`sooq-chip ${active ? 'isActive' : ''}`}
-      onClick={onClick}
+      className={`sooq-chip ${active ? 'isActive' : ''} ${disabled ? 'isDisabled' : ''}`}
+      onClick={disabled ? undefined : onClick}
+      disabled={!!disabled}
       title={title || text}
-      role="tab"
-      aria-selected={active}
     >
       <span className="sooq-chipDot" style={{ background: dotColor || CAT_COLOR }} />
+      {icon ? (
+        <span className="sooq-chipIcon" aria-hidden="true">
+          {icon}
+        </span>
+      ) : null}
       <span className="sooq-chipText">{text}</span>
       {typeof count === 'number' ? <span className="sooq-chipCount">{count}</span> : null}
     </button>
   );
+
 
   const TaxonomyBar = () => {
     if (!single) return null;
@@ -484,12 +566,23 @@ export default function CategoryListings({ category, initialListings = [] }) {
     // سيارات
     if (showCarsTax) {
       return (
-        <div className="sooq-chipBar" aria-label="فلترة الماركات">
+        <div className="sooq-taxWrap" aria-label="فلترة ماركة السيارة">
+          <div className="sooq-taxTitle">🚗 اختر الماركة</div>
           <div className="sooq-chips" role="tablist" aria-label="ماركات السيارات">
             <Chip active={!carMake} onClick={() => setCarMake('')} text="الكل" count={itemsWithTax.length} />
             {carMakeOptions.map(([k, c]) => {
               const label = k === 'other' ? 'أخرى' : (carMakeLabel(k) || k);
-              return <Chip key={k} active={carMake === k} onClick={() => setCarMake(k)} text={label} count={c} />;
+              return (
+                <Chip
+                  key={k}
+                  active={carMake === k}
+                  onClick={() => setCarMake(k)}
+                  text={label}
+                  count={c}
+                  icon="🚗"
+                  dotColor={CAT_COLOR}
+                />
+              );
             })}
           </div>
         </div>
@@ -499,12 +592,23 @@ export default function CategoryListings({ category, initialListings = [] }) {
     // جوالات
     if (showPhonesTax) {
       return (
-        <div className="sooq-chipBar" aria-label="فلترة ماركات الجوالات">
+        <div className="sooq-taxWrap" aria-label="فلترة ماركة الجوال">
+          <div className="sooq-taxTitle">📱 اختر الماركة</div>
           <div className="sooq-chips" role="tablist" aria-label="ماركات الجوالات">
             <Chip active={!phoneBrand} onClick={() => setPhoneBrand('')} text="الكل" count={itemsWithTax.length} />
             {phoneBrandOptions.map(([k, c]) => {
               const label = k === 'other' ? 'أخرى' : (phoneBrandLabel(k) || k);
-              return <Chip key={k} active={phoneBrand === k} onClick={() => setPhoneBrand(k)} text={label} count={c} />;
+              return (
+                <Chip
+                  key={k}
+                  active={phoneBrand === k}
+                  onClick={() => setPhoneBrand(k)}
+                  text={label}
+                  count={c}
+                  icon="📱"
+                  dotColor={CAT_COLOR}
+                />
+              );
             })}
           </div>
         </div>
@@ -515,87 +619,68 @@ export default function CategoryListings({ category, initialListings = [] }) {
     if (showRealTax) {
       const hasDeal = !!safeStr(dealType);
 
-      // لون مختلف (بيع/إيجار) مثل شريط الخريطة
-      const dealDot = (k) => (k === 'sale' ? '#0ea5e9' : k === 'rent' ? '#f59e0b' : CAT_COLOR);
-      const dealLabel = (k) => dealTypeLabel(k) || (k === 'sale' ? 'بيع' : k === 'rent' ? 'إيجار' : k);
-
-      // ✅ إذا اخترت بيع نخفي إيجار والعكس (كما طلبت)
+      // ✅ إذا اخترت (بيع) نخفي (إيجار) والعكس — مثل طلبك
       const visibleDealOptions = hasDeal ? dealTypeOptions.filter(([k]) => k === dealType) : dealTypeOptions;
 
-      return (
-        <div className="sooq-chipBar" aria-label="فلترة العقارات">
-          <div className="sooq-chips" role="tablist" aria-label="فلترة العقارات">
-            {!hasDeal ? (
-              <>
-                <Chip
-                  active={!dealType}
-                  onClick={() => {
-                    setDealType('');
-                    setPropertyType('');
-                  }}
-                  text="الكل"
-                  count={itemsWithTax.length}
-                />
-                {visibleDealOptions.map(([k, c]) => (
-                  <Chip
-                    key={k}
-                    active={dealType === k}
-                    onClick={() => {
-                      setDealType(k);
-                      setPropertyType('');
-                    }}
-                    text={dealLabel(k)}
-                    count={c}
-                    dotColor={dealDot(k)}
-                  />
-                ))}
-              </>
-            ) : (
-              <>
-                {/* رجوع لاختيار (بيع/إيجار) */}
-                <Chip
-                  active={false}
-                  onClick={() => {
-                    setDealType('');
-                    setPropertyType('');
-                  }}
-                  text="↩ رجوع"
-                  dotColor="#64748b"
-                />
-                <Chip
-                  active={true}
-                  onClick={() => {}}
-                  text={dealLabel(dealType)}
-                  dotColor={dealDot(dealType)}
-                />
+      const dealDot = (k) => (k === 'sale' ? '#0ea5e9' : k === 'rent' ? '#f59e0b' : CAT_COLOR);
 
-                {propertyTypeOptions.length > 0 ? (
-                  <>
-                    <Chip active={!propertyType} onClick={() => setPropertyType('')} text="كل الأنواع" />
-                    {propertyTypeOptions.map(([k, c]) => {
-                      const label = k === 'other' ? 'أخرى' : (propertyTypeLabel(k) || k);
-                      return (
-                        <Chip
-                          key={k}
-                          active={propertyType === k}
-                          onClick={() => setPropertyType(k)}
-                          text={label}
-                          count={c}
-                        />
-                      );
-                    })}
-                  </>
-                ) : null}
-              </>
-            )}
+      return (
+        <div className="sooq-taxWrap" aria-label="فلترة العقارات">
+          <div className="sooq-taxTitle">🏡 فلترة العقارات</div>
+
+          <div className="sooq-taxSub">نوع العملية</div>
+          <div className="sooq-chips" role="tablist" aria-label="بيع أو إيجار">
+            <Chip
+              active={!dealType}
+              onClick={() => { setDealType(''); setPropertyType(''); }}
+              text="الكل"
+              count={itemsWithTax.length}
+            />
+
+            {visibleDealOptions.map(([k, c]) => {
+              const label = dealTypeLabel(k) || (k === 'sale' ? 'بيع' : k === 'rent' ? 'إيجار' : k);
+              return (
+                <Chip
+                  key={k}
+                  active={dealType === k}
+                  onClick={() => { setDealType(k); setPropertyType(''); }}
+                  text={label}
+                  count={c}
+                  icon="🏷️"
+                  dotColor={dealDot(k)}
+                />
+              );
+            })}
           </div>
+
+          {hasDeal && propertyTypeOptions.length > 0 ? (
+            <>
+              <div className="sooq-taxSub" style={{ marginTop: 10 }}>نوع العقار</div>
+              <div className="sooq-chips" role="tablist" aria-label="نوع العقار">
+                <Chip active={!propertyType} onClick={() => setPropertyType('')} text="كل الأنواع" />
+                {propertyTypeOptions.map(([k, c]) => {
+                  const label = k === 'other' ? 'أخرى' : (propertyTypeLabel(k) || k);
+                  return (
+                    <Chip
+                      key={k}
+                      active={propertyType === k}
+                      onClick={() => setPropertyType(k)}
+                      text={label}
+                      count={c}
+                      icon="🏡"
+                      dotColor={CAT_COLOR}
+                    />
+                  );
+                })}
+              </div>
+            </>
+          ) : null}
         </div>
       );
     }
 
     return null;
   };
-
 
 
   if (loading) {
@@ -736,13 +821,29 @@ export default function CategoryListings({ category, initialListings = [] }) {
           font-size: 12px;
           font-weight: 900;
         }
-          .sooq-chips { padding: 6px; }
-          .sooq-chip { padding: 8px 9px; font-size: 12px; }
-        }
 
-        /* ====== Taxonomy chips (نفس ستايل الخريطة) ====== */
-        .sooq-chipBar {
+        /* ====== Taxonomy bar (مثل الخريطة) ====== */
+        .sooq-taxWrap {
           margin-bottom: 12px;
+          padding: 10px 10px;
+          border-radius: 14px;
+          background: rgba(255, 255, 255, 0.86);
+          backdrop-filter: blur(8px);
+          border: 1px solid #e2e8f0;
+          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.08);
+        }
+        .sooq-taxTitle {
+          font-weight: 900;
+          margin-bottom: 8px;
+          display: flex;
+          gap: 8px;
+          align-items: center;
+        }
+        .sooq-taxSub {
+          font-size: 12px;
+          font-weight: 900;
+          opacity: 0.85;
+          margin: 6px 0 6px;
         }
 
         .sooq-chips {
@@ -751,9 +852,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
           overflow-x: auto;
           padding: 8px;
           border-radius: 14px;
-          background: rgba(255, 255, 255, 0.86);
-          backdrop-filter: blur(8px);
-          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.10);
+          background: rgba(255, 255, 255, 0.55);
+          backdrop-filter: blur(6px);
           align-items: center;
         }
 
@@ -763,31 +863,43 @@ export default function CategoryListings({ category, initialListings = [] }) {
           gap: 8px;
           padding: 8px 10px;
           border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.08);
+          border: 1px solid rgba(0, 0, 0, 0.10);
           background: #fff;
           font-size: 13px;
           line-height: 1;
           cursor: pointer;
           white-space: nowrap;
           user-select: none;
-          font-weight: 800;
+          font-weight: 900;
+        }
+        .sooq-chip.isDisabled {
+          opacity: 0.55;
+          filter: grayscale(0.15);
+          cursor: not-allowed;
+        }
+        .sooq-chip:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
         }
 
         .sooq-chip.isActive {
-          border-color: rgba(0, 0, 0, 0.18);
-          box-shadow: 0 8px 14px rgba(0, 0, 0, 0.12);
+          border-color: rgba(0, 0, 0, 0.20);
+          box-shadow: 0 8px 14px rgba(0, 0, 0, 0.10);
         }
 
         .sooq-chipDot {
           width: 10px;
           height: 10px;
           border-radius: 50%;
+          flex: 0 0 10px;
         }
-
+        .sooq-chipIcon {
+          font-size: 14px;
+          line-height: 1;
+        }
         .sooq-chipText {
           font-weight: 900;
         }
-
         .sooq-chipCount {
           display: inline-flex;
           align-items: center;
@@ -798,10 +910,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
           border-radius: 999px;
           background: rgba(0, 0, 0, 0.06);
           font-size: 12px;
-          font-weight: 800;
+          font-weight: 900;
         }
 
         @media (max-width: 520px) {
+          .sooq-taxWrap { padding: 10px 8px; }
           .sooq-chips { padding: 6px; }
           .sooq-chip { padding: 8px 9px; font-size: 12px; }
         }
