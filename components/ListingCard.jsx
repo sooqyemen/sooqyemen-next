@@ -31,7 +31,9 @@ function getCategoryLabel(listing) {
   return CATEGORY_LABELS[raw] || raw;
 }
 
-export default function ListingCard({ listing, variant = 'grid' }) {
+export default function ListingCard({ listing, variant = 'grid', view }) {
+  // ✅ توافق: بعض الصفحات قد ترسل view بدل variant
+  const mode = (view || variant || 'grid');
   const img = (Array.isArray(listing?.images) && listing.images[0]) || listing?.image || null;
 
   // المدينة (إن وجدت)
@@ -62,9 +64,9 @@ export default function ListingCard({ listing, variant = 'grid' }) {
   const href = `/listing/${listing?.id}`;
 
   // ✅ وضع القائمة: كرت أفقي (مناسب للجوال)
-  if (variant === 'list') {
+  if (mode === 'list') {
     return (
-      <Link href={href} className="card lc-list" style={{ display: 'flex', flexDirection: 'column', textDecoration: 'none' }}>
+      <Link href={href} className="card lc-list" style={{ textDecoration: 'none' }}>
         <div className="row lc-list-row" style={{ gap: 12, alignItems: 'center' }}>
           {/* صورة */}
           <div className="lc-thumb">
@@ -85,10 +87,22 @@ export default function ListingCard({ listing, variant = 'grid' }) {
 
           {/* محتوى */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="lc-title">
-              {listing?.title || 'بدون عنوان'}
+            {/* عنوان + سعر (سطر واحد محترم) */}
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+              <div className="lc-title" style={{ flex: 1, minWidth: 0 }}>
+                {listing?.title || 'بدون عنوان'}
+              </div>
+
+              <div className="lc-price" aria-label="السعر">
+                <Price
+                  priceYER={Number(priceYER) || 0}
+                  originalPrice={listing?.originalPrice}
+                  originalCurrency={listing?.originalCurrency || 'YER'}
+                />
+              </div>
             </div>
 
+            {/* سطر معلومات خفيف */}
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
               <span className="muted" style={{ fontSize: 12 }}>
                 {city ? `📍 ${city}` : '📍 —'}
@@ -98,22 +112,28 @@ export default function ListingCard({ listing, variant = 'grid' }) {
               </span>
             </div>
 
-            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+            {/* القسم */}
+            <div style={{ marginTop: 8 }}>
               <span className="badge">{getCategoryLabel(listing)}</span>
-              <div style={{ fontWeight: 800 }}>
-                <Price
-                  priceYER={Number(priceYER) || 0}
-                  originalPrice={listing?.originalPrice}
-                  originalCurrency={listing?.originalCurrency || 'YER'}
-                />
-              </div>
             </div>
 
+            {/* وصف مختصر (سطرين) */}
             <div className="muted lc-desc" style={{ marginTop: 8 }}>{shortDesc || ""}</div>
           </div>
         </div>
 
         <style jsx>{`
+          .lc-list{
+            display: block;
+            border-radius: 14px;
+            transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+            border: 1px solid rgba(226,232,240,0.95);
+          }
+          .lc-list:hover{
+            transform: translateY(-1px);
+            box-shadow: 0 12px 22px rgba(0,0,0,0.10);
+            border-color: rgba(148,163,184,0.6);
+          }
           .lc-list-row { flex-wrap: nowrap; }
           .lc-thumb {
             width: 120px;
@@ -149,6 +169,13 @@ export default function ListingCard({ listing, variant = 'grid' }) {
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
             overflow: hidden;
+          }
+          .lc-price{
+            font-weight: 950;
+            white-space: nowrap;
+            font-size: 14px;
+            line-height: 1.1;
+            padding-top: 2px;
           }
           .lc-desc{
             font-size: 13px;
@@ -227,6 +254,14 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           display: flex;
           flex-direction: column;
           height: 100%;
+          border-radius: 14px;
+          transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+          border: 1px solid rgba(226,232,240,0.95);
+        }
+        .lc-grid:hover{
+          transform: translateY(-1px);
+          box-shadow: 0 12px 22px rgba(0,0,0,0.10);
+          border-color: rgba(148,163,184,0.6);
         }
         .lc-body{
           flex: 1;
