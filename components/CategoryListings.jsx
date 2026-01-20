@@ -106,6 +106,20 @@ function categoryVariants(single) {
 function safeStr(v) {
   return String(v || '').trim();
 }
+// ✅ ألوان ثابتة للفلاتر (ماركات/موديلات) - توزيع تلقائي من Palette
+const TAX_PALETTE = [
+  '#2563eb', '#16a34a', '#7c3aed', '#0ea5e9', '#f59e0b', '#f97316',
+  '#ef4444', '#db2777', '#8b5cf6', '#14b8a6', '#84cc16', '#a16207', '#64748b'
+];
+
+function colorForKey(key) {
+  const s = safeStr(key).toLowerCase();
+  if (!s) return '#64748b';
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return TAX_PALETTE[h % TAX_PALETTE.length];
+}
+
 
 function pickTaxonomy(listing, categoryKey) {
   const inferred = inferListingTaxonomy(listing || {}, categoryKey) || {};
@@ -154,6 +168,148 @@ const CAR_MAKES_PRESET = [
   { key: 'shas', label: 'شاص' },
   { key: 'other', label: 'أخرى' },
 ];
+// ✅ موديلات شائعة لكل ماركة (قابل للتوسع لاحقاً)
+const CAR_MODELS_BY_MAKE = {
+  toyota: [
+    { key: 'hilux', label: 'هايلوكس' },
+    { key: 'shas', label: 'شاص' },
+    { key: 'land_cruiser', label: 'لاندكروزر' },
+    { key: 'prado', label: 'برادو' },
+    { key: 'camry', label: 'كامري' },
+    { key: 'corolla', label: 'كورولا' },
+    { key: 'yaris', label: 'يارس' },
+    { key: 'fortuner', label: 'فورتشنر' },
+    { key: 'rav4', label: 'راف 4' },
+    { key: 'hiace', label: 'هايس' },
+    { key: 'coaster', label: 'كوستر' },
+  ],
+  nissan: [
+    { key: 'patrol', label: 'باترول' },
+    { key: 'sunny', label: 'صني' },
+    { key: 'altima', label: 'التيما' },
+    { key: 'sentra', label: 'سنترا' },
+    { key: 'xtrail', label: 'اكستريل' },
+    { key: 'navara', label: 'نافارا' },
+    { key: 'tiida', label: 'تيدا' },
+    { key: 'urvan', label: 'أورفان' },
+  ],
+  hyundai: [
+    { key: 'accent', label: 'اكسنت' },
+    { key: 'elantra', label: 'النترا' },
+    { key: 'sonata', label: 'سوناتا' },
+    { key: 'tucson', label: 'توسان' },
+    { key: 'santafe', label: 'سنتافي' },
+    { key: 'h1', label: 'H1 / ستاركس' },
+    { key: 'creta', label: 'كريتا' },
+  ],
+  kia: [
+    { key: 'rio', label: 'ريو' },
+    { key: 'cerato', label: 'سيراتو' },
+    { key: 'k5', label: 'K5' },
+    { key: 'sportage', label: 'سبورتاج' },
+    { key: 'sorento', label: 'سورينتو' },
+    { key: 'picanto', label: 'بيكانتو' },
+    { key: 'carnival', label: 'كرنفال' },
+  ],
+  honda: [
+    { key: 'civic', label: 'سيفيك' },
+    { key: 'accord', label: 'أكورد' },
+    { key: 'crv', label: 'CR‑V' },
+    { key: 'pilot', label: 'بايلوت' },
+  ],
+  mazda: [
+    { key: 'mazda3', label: 'مازدا 3' },
+    { key: 'mazda6', label: 'مازدا 6' },
+    { key: 'cx5', label: 'CX‑5' },
+    { key: 'bt50', label: 'BT‑50' },
+  ],
+  mitsubishi: [
+    { key: 'l200', label: 'L200' },
+    { key: 'pajero', label: 'باجيرو' },
+    { key: 'outlander', label: 'أوتلاندر' },
+    { key: 'lancer', label: 'لانسر' },
+    { key: 'canter', label: 'كانتر' },
+  ],
+  isuzu: [
+    { key: 'dmax', label: 'دي‑ماكس' },
+    { key: 'elf', label: 'إلف' },
+  ],
+  bus: [
+    { key: 'coaster', label: 'كوستر' },
+    { key: 'hiace', label: 'هايس' },
+  ],
+  shas: [
+    { key: 'shas', label: 'شاص' },
+  ],
+};
+
+function carModelLabelLocal(makeKey, modelKey) {
+  const mk = safeStr(makeKey).toLowerCase();
+  const md = safeStr(modelKey).toLowerCase();
+  const arr = CAR_MODELS_BY_MAKE[mk] || [];
+  const found = arr.find((x) => safeStr(x.key).toLowerCase() === md);
+  return found?.label || modelKey || 'أخرى';
+}
+
+// ✅ محاولة استنتاج موديل السيارة من الحقول أو من العنوان/الوصف (fallback)
+function detectCarModel(listing, makeKey) {
+  const mk = safeStr(makeKey).toLowerCase();
+  if (!mk) return '';
+
+  const raw =
+    listing?.carModel ??
+    listing?.model ??
+    listing?.vehicleModel ??
+    listing?.subModel ??
+    listing?.subType ??
+    listing?.modelName ??
+    '';
+
+  const normalize = (v) =>
+    safeStr(v)
+      .toLowerCase()
+      .replace(/\s+/g, '_')
+      .replace(/-/g, '_')
+      .replace(/__+/g, '_');
+
+  const rawNorm = normalize(raw);
+  if (rawNorm) return rawNorm;
+
+  const txt = `${safeStr(listing?.title)} ${safeStr(listing?.description)}`.toLowerCase();
+  const presets = CAR_MODELS_BY_MAKE[mk] || [];
+
+  for (const it of presets) {
+    const key = safeStr(it.key).toLowerCase();
+    const label = safeStr(it.label).toLowerCase();
+    const variants = [key, label];
+
+    // مرادفات انجليزي شائعة لبعض الموديلات
+    if (key === 'land_cruiser') variants.push('landcruiser', 'land cruiser', 'lc');
+    if (key === 'hilux') variants.push('hi lux');
+    if (key === 'xtrail') variants.push('x-trail', 'xtrail');
+    if (key === 'crv') variants.push('cr-v', 'crv');
+    if (key === 'mazda3') variants.push('mazda 3');
+    if (key === 'mazda6') variants.push('mazda 6');
+
+    for (const v of variants) {
+      const vv = String(v || '').trim();
+      if (vv && txt.includes(vv)) return key;
+    }
+  }
+
+  return '';
+}
+
+    for (const v of variants) {
+      const vv = String(v || '').trim();
+      if (vv && txt.includes(vv)) return key;
+    }
+  }
+
+  return '';
+}
+
+
 
 const PHONE_BRANDS_PRESET = [
   { key: 'iphone', label: 'آيفون' },
@@ -238,7 +394,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const variants = useMemo(() => categoryVariants(single), [single]);
 
   // ✅ States للفروع الهرمية
-  const [carMake, setCarMake] = useState(''); // '' = الكل
+  const [carMake, setCarMake] = useState('');   const [carModel, setCarModel] = useState('');
+// '' = الكل
   const [phoneBrand, setPhoneBrand] = useState('');
   const [dealType, setDealType] = useState(''); // '' = الكل
   const [propertyType, setPropertyType] = useState('');
@@ -442,6 +599,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
     const catKey = single || '';
     const out = {
       carMakes: new Map(),
+      carModels: new Map(),
       phoneBrands: new Map(),
       dealTypes: new Map(),
       propertyTypes: new Map(),
@@ -471,7 +629,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
     }
 
     return out;
-  }, [itemsWithTax, single, dealType]);
+  }, [itemsWithTax, single, dealType, carMake]);
 
   const filtered = useMemo(() => {
     const catKey = single || '';
@@ -513,7 +671,16 @@ export default function CategoryListings({ category, initialListings = [] }) {
     return merged.slice(0, 40);
   }, [taxonomyCounts.carMakes]);
 
-  const phoneBrandOptions = useMemo(() => {
+  
+
+const carModelOptions = useMemo(() => {
+  const mk = safeStr(carMake);
+  if (!mk) return [];
+  const preset = CAR_MODELS_BY_MAKE[mk] || [];
+  const merged = presetMergeWithCounts(preset, taxonomyCounts.carModels);
+  return merged.slice(0, 80);
+}, [carMake, taxonomyCounts.carModels]);
+const phoneBrandOptions = useMemo(() => {
     const merged = presetMergeWithCounts(PHONE_BRANDS_PRESET, taxonomyCounts.phoneBrands);
     return merged.slice(0, 40);
   }, [taxonomyCounts.phoneBrands]);
@@ -544,6 +711,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
     <button
       type="button"
       className={`sooq-chip ${active ? 'isActive' : ''} ${disabled ? 'isDisabled' : ''}`}
+      style={{ borderColor: active ? (dotColor || CAT_COLOR) : undefined }}
       onClick={disabled ? undefined : onClick}
       disabled={!!disabled}
       title={title || text}
@@ -563,33 +731,107 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const TaxonomyBar = () => {
     if (!single) return null;
 
-    // سيارات
-    if (showCarsTax) {
-      return (
-        <div className="sooq-taxWrap" aria-label="فلترة ماركة السيارة">
-          <div className="sooq-taxTitle">🚗 اختر الماركة</div>
-          <div className="sooq-chips" role="tablist" aria-label="ماركات السيارات">
-            <Chip active={!carMake} onClick={() => setCarMake('')} text="الكل" count={itemsWithTax.length} />
-            {carMakeOptions.map(([k, c]) => {
-              const label = k === 'other' ? 'أخرى' : (carMakeLabel(k) || k);
-              return (
-                <Chip
-                  key={k}
-                  active={carMake === k}
-                  onClick={() => setCarMake(k)}
-                  text={label}
-                  count={c}
-                  icon="🚗"
-                  dotColor={CAT_COLOR}
-                />
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
+    
+// سيارات
+if (showCarsTax) {
+  const mk = safeStr(carMake);
+  const md = safeStr(carModel);
+  const mkLabel = mk ? carMakeLabel(mk) : '';
+      const modelsTotal = Array.from(taxonomyCounts.carModels.values()).reduce((a, b) => a + Number(b || 0), 0);
 
-    // جوالات
+  // 1) اختيار الماركة
+  if (!mk) {
+    return (
+      <div className="sooq-taxWrap" aria-label="فلترة ماركة السيارة">
+        <div className="sooq-taxTitle">🚗 اختر ماركة السيارة</div>
+        <div className="sooq-chips" role="tablist">
+          <Chip
+            active={!mk}
+            onClick={() => {
+              setCarMake('');
+              setCarModel('');
+            }}
+            text="الكل"
+            count={itemsWithTax.length}
+            dotColor={CAT_COLOR}
+          />
+          {carMakeOptions.map(([k, c]) => (
+            <Chip
+              key={k}
+              active={mk === k}
+              onClick={() => {
+                setCarMake(k);
+                setCarModel('');
+              }}
+              text={carMakeLabel(k)}
+              count={c}
+              dotColor={colorForKey(k)}
+              title={`سيارات ${carMakeLabel(k)}`}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // 2) اختيار الموديل داخل الماركة
+  return (
+    <div className="sooq-taxWrap" aria-label="فلترة موديل السيارة">
+      <div className="sooq-taxTitle">🚗 {mkLabel} — اختر الموديل</div>
+      <div className="sooq-chips" role="tablist">
+        <Chip
+          active={false}
+          onClick={() => {
+            setCarMake('');
+            setCarModel('');
+          }}
+          text="رجوع"
+          icon="⬅️"
+          count={undefined}
+          dotColor={CAT_COLOR}
+          title="رجوع لقائمة الماركات"
+        />
+
+        <Chip
+          active={!md}
+          onClick={() => setCarModel('')}
+          text={`كل موديلات ${mkLabel}`}
+          count={modelsTotal || undefined}
+          dotColor={colorForKey(mk)}
+          title={`عرض كل موديلات ${mkLabel}`}
+        />
+
+        {carModelOptions
+          .filter(([k]) => safeStr(k) && safeStr(k) !== 'other')
+          .map(([k, c]) => (
+            <Chip
+              key={k}
+              active={md === k}
+              onClick={() => setCarModel(k)}
+              text={carModelLabelLocal(mk, k)}
+              count={c}
+              dotColor={colorForKey(`${mk}:${k}`)}
+              title={`${mkLabel} ${carModelLabelLocal(mk, k)}`}
+            />
+          ))}
+
+        {/* أخرى */}
+        {carModelOptions.some(([k]) => safeStr(k) === 'other') ? (
+          <Chip
+            active={md === 'other'}
+            onClick={() => setCarModel('other')}
+            text="أخرى"
+            count={taxonomyCounts.carModels?.get('other') || 0}
+            dotColor={colorForKey(`${mk}:other`)}
+            title="موديلات أخرى"
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// جوالات
     if (showPhonesTax) {
       return (
         <div className="sooq-taxWrap" aria-label="فلترة ماركة الجوال">
