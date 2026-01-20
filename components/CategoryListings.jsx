@@ -909,29 +909,44 @@ const phoneBrandOptions = useMemo(() => {
   return (
     <div>
       <div className="sooq-filterShell">
-        <TaxonomyInner />
+        <div className="sooq-topBar">
+          <div className="sooq-viewSwitch" role="tablist" aria-label="تبديل العرض">
+            <button
+              type="button"
+              className={`sooq-viewBtn ${view === 'grid' ? 'isActive' : ''}`}
+              onClick={() => setView('grid')}
+            >
+              ◼️ <span className="sooq-viewTxt">شبكة</span>
+            </button>
+            <button
+              type="button"
+              className={`sooq-viewBtn ${view === 'list' ? 'isActive' : ''}`}
+              onClick={() => setView('list')}
+            >
+              ☰ <span className="sooq-viewTxt">قائمة</span>
+            </button>
+            <button
+              type="button"
+              className={`sooq-viewBtn ${view === 'map' ? 'isActive' : ''}`}
+              onClick={() => setView('map')}
+            >
+              🗺️ <span className="sooq-viewTxt">خريطة</span>
+            </button>
+          </div>
 
-        <div className="sooq-controlsRow">
-          <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <div className="row" style={{ gap: 8 }}>
-              <button className={`btn ${view === 'grid' ? 'btnPrimary' : ''}`} onClick={() => setView('grid')}>
-                ◼️ شبكة
-              </button>
-              <button className={`btn ${view === 'list' ? 'btnPrimary' : ''}`} onClick={() => setView('list')}>
-                ☰ قائمة
-              </button>
-              <button className={`btn ${view === 'map' ? 'btnPrimary' : ''}`} onClick={() => setView('map')}>
-                🗺️ خريطة
-              </button>
-            </div>
-
+          <div className="sooq-searchWrap">
+            <span className="sooq-searchIcon" aria-hidden="true">🔎</span>
             <input
-              className="input sooq-search"
+              className="input sooq-searchInput"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="ابحث داخل القسم..."
             />
           </div>
+        </div>
+
+        <div className="sooq-chipsShell">
+          <TaxonomyInner />
         </div>
       </div>
 
@@ -948,15 +963,13 @@ const phoneBrandOptions = useMemo(() => {
         <HomeMapView listings={filtered} />
       ) : (
         <>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: view === 'grid' ? 'repeat(auto-fill, minmax(240px, 1fr))' : '1fr',
-              gap: 12,
-            }}
-          >
+          <div className={`sooq-results ${view === 'list' ? 'isList' : 'isGrid'}`}>
             {filtered.map((l) => (
-              <ListingCard key={l.id} listing={l} />
+              <ListingCard
+                key={l.id}
+                listing={l}
+                variant={view === 'list' ? 'list' : 'grid'}
+              />
             ))}
           </div>
 
@@ -1149,6 +1162,89 @@ const phoneBrandOptions = useMemo(() => {
           .sooq-chip { padding: 8px 9px; font-size: 12px; }
         }
 
+
+
+        /* ====== Top bar (حل B: Glass/Blur + Chips) ====== */
+        .sooq-topBar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+        .sooq-viewSwitch {
+          display: inline-flex;
+          gap: 6px;
+          padding: 6px;
+          border-radius: 999px;
+          border: 1px solid rgba(0, 0, 0, 0.10);
+          background: rgba(255, 255, 255, 0.70);
+          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.06);
+          backdrop-filter: blur(10px);
+        }
+        .sooq-viewBtn {
+          border: 0;
+          background: transparent;
+          cursor: pointer;
+          padding: 10px 12px;
+          border-radius: 999px;
+          font-weight: 900;
+          font-size: 13px;
+          color: #0f172a;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          user-select: none;
+        }
+        .sooq-viewBtn.isActive {
+          background: #0f172a;
+          color: #fff;
+          box-shadow: 0 12px 18px rgba(15, 23, 42, 0.25);
+        }
+        .sooq-searchWrap {
+          position: relative;
+          flex: 1;
+          min-width: 220px;
+          max-width: 520px;
+        }
+        .sooq-searchIcon {
+          position: absolute;
+          left: 10px;
+          top: 50%;
+          transform: translateY(-50%);
+          font-size: 14px;
+          opacity: 0.75;
+          pointer-events: none;
+        }
+        .sooq-searchInput {
+          width: 100%;
+          padding-left: 34px !important;
+          border-radius: 999px !important;
+          border: 1px solid rgba(0, 0, 0, 0.10) !important;
+          background: rgba(255, 255, 255, 0.75) !important;
+          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.06);
+        }
+        .sooq-chipsShell {
+          margin-top: 12px;
+          padding-top: 10px;
+          border-top: 1px solid rgba(0, 0, 0, 0.08);
+        }
+
+        /* ====== Results grid/list ====== */
+        .sooq-results {
+          display: grid;
+          gap: 12px;
+        }
+        .sooq-results.isList {
+          grid-template-columns: 1fr;
+        }
+        .sooq-results.isGrid {
+          grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        }
+        @media (max-width: 520px) {
+          .sooq-viewTxt { display: none; }
+          .sooq-results.isGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
       `}</style>
     </div>
   );
