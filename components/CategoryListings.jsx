@@ -3,7 +3,7 @@
 
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '@/lib/firebaseClient';
 import ListingCard from '@/components/ListingCard';
 
@@ -81,15 +81,7 @@ function categoryVariants(single) {
     networks: ['networks', 'network', 'net', 'شبكات', 'نت وشبكات', 'نت_وشبكات', 'نت_و_شبكات'],
     maintenance: ['maintenance', 'صيانة'],
     furniture: ['furniture', 'أداث', 'اثاث', 'أثاث'],
-    home_tools: [
-      'home_tools',
-      'home tools',
-      'hometools',
-      'أدوات منزلية',
-      'ادوات منزلية',
-      'أدوات_منزلية',
-      'ادوات_منزلية',
-    ],
+    home_tools: ['home_tools', 'home tools', 'hometools', 'أدوات منزلية', 'ادوات منزلية', 'أدوات_منزلية', 'ادوات_منزلية'],
     clothes: ['clothes', 'ملابس'],
     animals: ['animals', 'animals_birds', 'animals-birds', 'حيوانات', 'حيوانات وطيور', 'حيوانات_وطيور'],
     jobs: ['jobs', 'وظائف'],
@@ -114,22 +106,10 @@ function categoryVariants(single) {
 function safeStr(v) {
   return String(v || '').trim();
 }
-
 // ✅ ألوان ثابتة للفلاتر (ماركات/موديلات) - توزيع تلقائي من Palette
 const TAX_PALETTE = [
-  '#2563eb',
-  '#16a34a',
-  '#7c3aed',
-  '#0ea5e9',
-  '#f59e0b',
-  '#f97316',
-  '#ef4444',
-  '#db2777',
-  '#8b5cf6',
-  '#14b8a6',
-  '#84cc16',
-  '#a16207',
-  '#64748b',
+  '#2563eb', '#16a34a', '#7c3aed', '#0ea5e9', '#f59e0b', '#f97316',
+  '#ef4444', '#db2777', '#8b5cf6', '#14b8a6', '#84cc16', '#a16207', '#64748b'
 ];
 
 function colorForKey(key) {
@@ -139,6 +119,7 @@ function colorForKey(key) {
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   return TAX_PALETTE[h % TAX_PALETTE.length];
 }
+
 
 function pickTaxonomy(listing, categoryKey) {
   const inferred = inferListingTaxonomy(listing || {}, categoryKey) || {};
@@ -159,6 +140,7 @@ function pickTaxonomy(listing, categoryKey) {
   }
   return out;
 }
+
 
 // ====== Presets (عرض فخم حتى لو العدد = 0) ======
 const CAR_MAKES_PRESET = [
@@ -181,11 +163,145 @@ const CAR_MAKES_PRESET = [
   // شائعة في اليمن
   { key: 'mg', label: 'MG' },
   { key: 'haval', label: 'هافال' },
-  // طلبك (باص/شاص)
+  // طلبك (باص/شاص) — نخليها كخيارات جاهزة (لو ما لها نتائج تكون 0)
   { key: 'bus', label: 'باص' },
   { key: 'shas', label: 'شاص' },
   { key: 'other', label: 'أخرى' },
 ];
+// ✅ موديلات شائعة لكل ماركة (قابل للتوسع لاحقاً)
+const CAR_MODELS_BY_MAKE = {
+  toyota: [
+    { key: 'hilux', label: 'هايلوكس' },
+    { key: 'shas', label: 'شاص' },
+    { key: 'land_cruiser', label: 'لاندكروزر' },
+    { key: 'prado', label: 'برادو' },
+    { key: 'camry', label: 'كامري' },
+    { key: 'corolla', label: 'كورولا' },
+    { key: 'yaris', label: 'يارس' },
+    { key: 'fortuner', label: 'فورتشنر' },
+    { key: 'rav4', label: 'راف 4' },
+    { key: 'hiace', label: 'هايس' },
+    { key: 'coaster', label: 'كوستر' },
+  ],
+  nissan: [
+    { key: 'patrol', label: 'باترول' },
+    { key: 'sunny', label: 'صني' },
+    { key: 'altima', label: 'التيما' },
+    { key: 'sentra', label: 'سنترا' },
+    { key: 'xtrail', label: 'اكستريل' },
+    { key: 'navara', label: 'نافارا' },
+    { key: 'tiida', label: 'تيدا' },
+    { key: 'urvan', label: 'أورفان' },
+  ],
+  hyundai: [
+    { key: 'accent', label: 'اكسنت' },
+    { key: 'elantra', label: 'النترا' },
+    { key: 'sonata', label: 'سوناتا' },
+    { key: 'tucson', label: 'توسان' },
+    { key: 'santafe', label: 'سنتافي' },
+    { key: 'h1', label: 'H1 / ستاركس' },
+    { key: 'creta', label: 'كريتا' },
+  ],
+  kia: [
+    { key: 'rio', label: 'ريو' },
+    { key: 'cerato', label: 'سيراتو' },
+    { key: 'k5', label: 'K5' },
+    { key: 'sportage', label: 'سبورتاج' },
+    { key: 'sorento', label: 'سورينتو' },
+    { key: 'picanto', label: 'بيكانتو' },
+    { key: 'carnival', label: 'كرنفال' },
+  ],
+  honda: [
+    { key: 'civic', label: 'سيفيك' },
+    { key: 'accord', label: 'أكورد' },
+    { key: 'crv', label: 'CR‑V' },
+    { key: 'pilot', label: 'بايلوت' },
+  ],
+  mazda: [
+    { key: 'mazda3', label: 'مازدا 3' },
+    { key: 'mazda6', label: 'مازدا 6' },
+    { key: 'cx5', label: 'CX‑5' },
+    { key: 'bt50', label: 'BT‑50' },
+  ],
+  mitsubishi: [
+    { key: 'l200', label: 'L200' },
+    { key: 'pajero', label: 'باجيرو' },
+    { key: 'outlander', label: 'أوتلاندر' },
+    { key: 'lancer', label: 'لانسر' },
+    { key: 'canter', label: 'كانتر' },
+  ],
+  isuzu: [
+    { key: 'dmax', label: 'دي‑ماكس' },
+    { key: 'elf', label: 'إلف' },
+  ],
+  bus: [
+    { key: 'coaster', label: 'كوستر' },
+    { key: 'hiace', label: 'هايس' },
+  ],
+  shas: [
+    { key: 'shas', label: 'شاص' },
+  ],
+};
+
+function carModelLabelLocal(makeKey, modelKey) {
+  const mk = safeStr(makeKey).toLowerCase();
+  const md = safeStr(modelKey).toLowerCase();
+  const arr = CAR_MODELS_BY_MAKE[mk] || [];
+  const found = arr.find((x) => safeStr(x.key).toLowerCase() === md);
+  return found?.label || modelKey || 'أخرى';
+}
+
+// ✅ محاولة استنتاج موديل السيارة من الحقول أو من العنوان/الوصف (fallback)
+function detectCarModel(listing, makeKey) {
+  const mk = safeStr(makeKey).toLowerCase();
+  if (!mk) return '';
+
+  const raw =
+    listing?.carModel ??
+    listing?.model ??
+    listing?.vehicleModel ??
+    listing?.subModel ??
+    listing?.subType ??
+    listing?.modelName ??
+    '';
+
+  const normalize = (v) =>
+    safeStr(v)
+      .toLowerCase()
+      .replace(/\s+/g, '_')
+      .replace(/-/g, '_')
+      .replace(/__+/g, '_');
+
+  const rawNorm = normalize(raw);
+  if (rawNorm) return rawNorm;
+
+  const txt = `${safeStr(listing?.title)} ${safeStr(listing?.description)}`.toLowerCase();
+  const presets = CAR_MODELS_BY_MAKE[mk] || [];
+
+  for (const it of presets) {
+    const key = safeStr(it.key).toLowerCase();
+    const label = safeStr(it.label).toLowerCase();
+    const variants = [key, label];
+
+    // مرادفات انجليزي شائعة لبعض الموديلات
+    if (key === 'land_cruiser') variants.push('landcruiser', 'land cruiser', 'lc');
+    if (key === 'hilux') variants.push('hi lux');
+    if (key === 'xtrail') variants.push('x-trail', 'xtrail');
+    if (key === 'crv') variants.push('cr-v', 'crv');
+    if (key === 'mazda3') variants.push('mazda 3');
+    if (key === 'mazda6') variants.push('mazda 6');
+
+    for (const v of variants) {
+      const vv = String(v || '').trim();
+      if (vv && txt.includes(vv)) return key;
+    }
+  }
+
+  return '';
+}
+
+
+
 
 const PHONE_BRANDS_PRESET = [
   { key: 'iphone', label: 'آيفون' },
@@ -216,16 +332,13 @@ const PROPERTY_TYPES_PRESET = [
 ];
 
 function presetMergeWithCounts(preset, countsMap) {
-  const safeMap =
-    countsMap && typeof countsMap.get === 'function' && typeof countsMap.entries === 'function'
-      ? countsMap
-      : new Map();
+  const safeMap = countsMap && typeof countsMap.get === 'function' && typeof countsMap.entries === 'function' ? countsMap : new Map();
 
   const used = new Set();
   const out = [];
 
   // 1) preset in desired order
-  for (const p of Array.isArray(preset) ? preset : []) {
+  for (const p of (Array.isArray(preset) ? preset : [])) {
     const k = safeStr(p?.key);
     if (!k) continue;
     used.add(k);
@@ -250,6 +363,7 @@ function presetMergeWithCounts(preset, countsMap) {
   return out.concat(extras);
 }
 
+
 export default function CategoryListings({ category, initialListings = [] }) {
   const PAGE_SIZE = 24;
 
@@ -257,9 +371,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const [q, setQ] = useState('');
 
   const [items, setItems] = useState(() => (Array.isArray(initialListings) ? initialListings : []));
-  const [loading, setLoading] = useState(() =>
-    Array.isArray(initialListings) ? initialListings.length === 0 : true
-  );
+  const [loading, setLoading] = useState(() => (Array.isArray(initialListings) ? initialListings.length === 0 : true));
   const [loadingMore, setLoadingMore] = useState(false);
   const [err, setErr] = useState('');
   const [hasMore, setHasMore] = useState(true);
@@ -283,15 +395,14 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const variants = useMemo(() => categoryVariants(single), [single]);
 
   // ✅ States للفروع الهرمية
-  const [carMake, setCarMake] = useState('');
-  const [carModel, setCarModel] = useState(''); // '' = الكل
+  const [carMake, setCarMake] = useState('');   const [carModel, setCarModel] = useState('');
+// '' = الكل
   const [phoneBrand, setPhoneBrand] = useState('');
   const [dealType, setDealType] = useState(''); // '' = الكل
   const [propertyType, setPropertyType] = useState('');
 
   useEffect(() => {
     setCarMake('');
-    setCarModel('');
     setPhoneBrand('');
     setDealType('');
     setPropertyType('');
@@ -519,7 +630,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
     }
 
     return out;
-  }, [itemsWithTax, single, dealType]);
+  }, [itemsWithTax, single, dealType, carMake]);
 
   const filtered = useMemo(() => {
     const catKey = single || '';
@@ -529,14 +640,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
     if (catKey === 'cars') {
       const sel = safeStr(carMake);
       if (sel) arr = arr.filter((l) => safeStr(l?._tax?.carMake || 'other') === sel);
-      // (carModel موجود عندك جاهز — ما غيرت المنطق هنا)
     }
-
     if (catKey === 'phones') {
       const sel = safeStr(phoneBrand);
       if (sel) arr = arr.filter((l) => safeStr(l?._tax?.phoneBrand || 'other') === sel);
     }
-
     if (catKey === 'realestate') {
       const selDeal = safeStr(dealType);
       const selProp = safeStr(propertyType);
@@ -560,13 +668,24 @@ export default function CategoryListings({ category, initialListings = [] }) {
 
   const carMakeOptions = useMemo(() => {
     const merged = presetMergeWithCounts(CAR_MAKES_PRESET, taxonomyCounts.carMakes);
+    // نعرض حتى 0 عشان تبقى واجهة فخمة وثابتة
     return merged.slice(0, 40);
   }, [taxonomyCounts.carMakes]);
 
-  const phoneBrandOptions = useMemo(() => {
+  
+
+const carModelOptions = useMemo(() => {
+  const mk = safeStr(carMake);
+  if (!mk) return [];
+  const preset = CAR_MODELS_BY_MAKE[mk] || [];
+  const merged = presetMergeWithCounts(preset, taxonomyCounts.carModels);
+  return merged.slice(0, 80);
+}, [carMake, taxonomyCounts.carModels]);
+const phoneBrandOptions = useMemo(() => {
     const merged = presetMergeWithCounts(PHONE_BRANDS_PRESET, taxonomyCounts.phoneBrands);
     return merged.slice(0, 40);
   }, [taxonomyCounts.phoneBrands]);
+
 
   const dealTypeOptions = useMemo(() => {
     return Array.from(taxonomyCounts.dealTypes.entries())
@@ -580,6 +699,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
     return merged.slice(0, 60);
   }, [taxonomyCounts.propertyTypes]);
 
+
   // ====== UI Chips (ستايل احترافي مثل الخريطة) ======
   const CAT_COLOR = useMemo(() => {
     if (single === 'cars') return '#2563eb';
@@ -592,7 +712,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
     <button
       type="button"
       className={`sooq-chip ${active ? 'isActive' : ''} ${disabled ? 'isDisabled' : ''}`}
-      style={{ borderColor: active ? dotColor || CAT_COLOR : undefined }}
+      style={{ borderColor: active ? (dotColor || CAT_COLOR) : undefined }}
       onClick={disabled ? undefined : onClick}
       disabled={!!disabled}
       title={title || text}
@@ -608,41 +728,104 @@ export default function CategoryListings({ category, initialListings = [] }) {
     </button>
   );
 
-  const TaxonomyBar = () => {
+
+  const TaxonomyInner = () => {
     if (!single) return null;
 
     // سيارات
     if (showCarsTax) {
       const mk = safeStr(carMake);
+      const md = safeStr(carModel);
+      const mkLabel = mk ? carMakeLabel(mk) : '';
+      const modelsTotal = Array.from(taxonomyCounts.carModels.values()).reduce((a, b) => a + Number(b || 0), 0);
 
+      // 1) اختيار الماركة
+      if (!mk) {
+        return (
+          <div className="sooq-taxSection" aria-label="فلترة ماركة السيارة">
+            <div className="sooq-taxTitle">🚗 اختر ماركة السيارة</div>
+            <div className="sooq-chips" role="tablist">
+              <Chip
+                active={!mk}
+                onClick={() => {
+                  setCarMake('');
+                  setCarModel('');
+                }}
+                text="الكل"
+                count={itemsWithTax.length}
+                dotColor={CAT_COLOR}
+              />
+              {carMakeOptions.map(([k, c]) => (
+                <Chip
+                  key={k}
+                  active={mk === k}
+                  onClick={() => {
+                    setCarMake(k);
+                    setCarModel('');
+                  }}
+                  text={carMakeLabel(k)}
+                  count={c}
+                  dotColor={colorForKey(k)}
+                  title={`سيارات ${carMakeLabel(k)}`}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      }
+
+      // 2) اختيار الموديل داخل الماركة
       return (
-        <div className="sooq-taxWrap" aria-label="فلترة ماركة السيارة">
-          <div className="sooq-taxTitle">🚗 اختر ماركة السيارة</div>
+        <div className="sooq-taxSection" aria-label="فلترة موديل السيارة">
+          <div className="sooq-taxTitle">🚗 {mkLabel} — اختر الموديل</div>
           <div className="sooq-chips" role="tablist">
             <Chip
-              active={!mk}
+              active={false}
               onClick={() => {
                 setCarMake('');
                 setCarModel('');
               }}
-              text="الكل"
-              count={itemsWithTax.length}
+              text="رجوع"
+              icon="⬅️"
+              count={undefined}
               dotColor={CAT_COLOR}
+              title="رجوع لقائمة الماركات"
             />
-            {carMakeOptions.map(([k, c]) => (
+
+            <Chip
+              active={!md}
+              onClick={() => setCarModel('')}
+              text={`كل موديلات ${mkLabel}`}
+              count={modelsTotal || undefined}
+              dotColor={colorForKey(mk)}
+              title={`عرض كل موديلات ${mkLabel}`}
+            />
+
+            {carModelOptions
+              .filter(([k]) => safeStr(k) && safeStr(k) !== 'other')
+              .map(([k, c]) => (
+                <Chip
+                  key={k}
+                  active={md === k}
+                  onClick={() => setCarModel(k)}
+                  text={carModelLabelLocal(mk, k)}
+                  count={c}
+                  dotColor={colorForKey(`${mk}:${k}`)}
+                  title={`${mkLabel} ${carModelLabelLocal(mk, k)}`}
+                />
+              ))}
+
+            {/* أخرى */}
+            {carModelOptions.some(([k]) => safeStr(k) === 'other') ? (
               <Chip
-                key={k}
-                active={mk === k}
-                onClick={() => {
-                  setCarMake(k);
-                  setCarModel('');
-                }}
-                text={carMakeLabel(k)}
-                count={c}
-                dotColor={colorForKey(k)}
-                title={`سيارات ${carMakeLabel(k)}`}
+                active={md === 'other'}
+                onClick={() => setCarModel('other')}
+                text="أخرى"
+                count={taxonomyCounts.carModels?.get('other') || 0}
+                dotColor={colorForKey(`${mk}:other`)}
+                title="موديلات أخرى"
               />
-            ))}
+            ) : null}
           </div>
         </div>
       );
@@ -651,12 +834,12 @@ export default function CategoryListings({ category, initialListings = [] }) {
     // جوالات
     if (showPhonesTax) {
       return (
-        <div className="sooq-taxWrap" aria-label="فلترة ماركة الجوال">
+        <div className="sooq-taxSection" aria-label="فلترة ماركة الجوال">
           <div className="sooq-taxTitle">📱 اختر الماركة</div>
           <div className="sooq-chips" role="tablist" aria-label="ماركات الجوالات">
             <Chip active={!phoneBrand} onClick={() => setPhoneBrand('')} text="الكل" count={itemsWithTax.length} />
             {phoneBrandOptions.map(([k, c]) => {
-              const label = k === 'other' ? 'أخرى' : phoneBrandLabel(k) || k;
+              const label = k === 'other' ? 'أخرى' : (phoneBrandLabel(k) || k);
               return (
                 <Chip
                   key={k}
@@ -690,7 +873,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
       };
 
       return (
-        <div className="sooq-taxWrap" aria-label="فلترة العقارات">
+        <div className="sooq-taxSection" aria-label="فلترة العقارات">
           <div className="sooq-taxTitle">🏡 فلترة العقارات</div>
 
           <div className="sooq-taxSub">نوع العملية</div>
@@ -726,13 +909,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
 
           {hasDeal && propertyTypeOptions.length > 0 ? (
             <>
-              <div className="sooq-taxSub" style={{ marginTop: 10 }}>
-                نوع العقار
-              </div>
+              <div className="sooq-taxSub" style={{ marginTop: 10 }}>نوع العقار</div>
               <div className="sooq-chips" role="tablist" aria-label="نوع العقار">
                 <Chip active={!propertyType} onClick={() => setPropertyType('')} text="كل الأنواع" />
                 {propertyTypeOptions.map(([k, c]) => {
-                  const label = k === 'other' ? 'أخرى' : propertyTypeLabel(k) || k;
+                  const label = k === 'other' ? 'أخرى' : (propertyTypeLabel(k) || k);
                   return (
                     <Chip
                       key={k}
@@ -755,6 +936,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
     return null;
   };
 
+
   if (loading) {
     return (
       <div className="card" style={{ padding: 16 }}>
@@ -767,52 +949,47 @@ export default function CategoryListings({ category, initialListings = [] }) {
     return (
       <div className="card" style={{ padding: 16, border: '1px solid #fecaca' }}>
         <div style={{ fontWeight: 900, color: '#b91c1c' }}>⚠️ حدث خطأ</div>
-        <div className="muted" style={{ marginTop: 6 }}>
-          {err}
-        </div>
+        <div className="muted" style={{ marginTop: 6 }}>{err}</div>
       </div>
     );
   }
 
   return (
     <div>
-      {/* ✅ الفلاتر هنا دائمًا فوق الشبكة/القائمة/الخريطة */}
-      <TaxonomyBar />
+      <div className="sooq-filterShell">
+        <TaxonomyInner />
 
-      <div className="card" style={{ padding: 12, marginBottom: 12 }}>
-        <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div className="row" style={{ gap: 8 }}>
-            <button className={`btn ${view === 'grid' ? 'btnPrimary' : ''}`} onClick={() => setView('grid')}>
-              ◼️ شبكة
-            </button>
-            <button className={`btn ${view === 'list' ? 'btnPrimary' : ''}`} onClick={() => setView('list')}>
-              ☰ قائمة
-            </button>
-            <button className={`btn ${view === 'map' ? 'btnPrimary' : ''}`} onClick={() => setView('map')}>
-              🗺️ خريطة
-            </button>
+        <div className="sooq-controlsRow">
+          <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className="row" style={{ gap: 8 }}>
+              <button className={`btn ${view === 'grid' ? 'btnPrimary' : ''}`} onClick={() => setView('grid')}>
+                ◼️ شبكة
+              </button>
+              <button className={`btn ${view === 'list' ? 'btnPrimary' : ''}`} onClick={() => setView('list')}>
+                ☰ قائمة
+              </button>
+              <button className={`btn ${view === 'map' ? 'btnPrimary' : ''}`} onClick={() => setView('map')}>
+                🗺️ خريطة
+              </button>
+            </div>
+
+            <input
+              className="input sooq-search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="ابحث داخل القسم..."
+            />
           </div>
-
-          <input
-            className="input"
-            style={{ flex: 1, minWidth: 180 }}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="ابحث داخل القسم..."
-          />
         </div>
       </div>
+
 
       {filtered.length === 0 ? (
         <div className="card" style={{ padding: 16, textAlign: 'center' }}>
           <div style={{ fontWeight: 900 }}>لا توجد إعلانات مطابقة</div>
-          <div className="muted" style={{ marginTop: 6 }}>
-            جرّب تغيير الفلاتر أو البحث.
-          </div>
+          <div className="muted" style={{ marginTop: 6 }}>جرّب تغيير الفلاتر أو البحث.</div>
           <div style={{ marginTop: 12 }}>
-            <Link className="btn btnPrimary" href="/add">
-              ➕ أضف إعلان
-            </Link>
+            <Link className="btn btnPrimary" href="/add">➕ أضف إعلان</Link>
           </div>
         </div>
       ) : view === 'map' ? (
@@ -835,33 +1012,95 @@ export default function CategoryListings({ category, initialListings = [] }) {
 
           <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center' }}>
             {loadingMore ? (
-              <div className="muted" style={{ padding: 10 }}>
-                ...جاري تحميل المزيد
-              </div>
+              <div className="muted" style={{ padding: 10 }}>...جاري تحميل المزيد</div>
             ) : hasMore ? (
-              <div className="muted" style={{ padding: 10 }}>
-                انزل لأسفل لتحميل المزيد
-              </div>
+              <div className="muted" style={{ padding: 10 }}>انزل لأسفل لتحميل المزيد</div>
             ) : (
-              <div className="muted" style={{ padding: 10 }}>
-                لا يوجد المزيد
-              </div>
+              <div className="muted" style={{ padding: 10 }}>لا يوجد المزيد</div>
             )}
           </div>
 
           {err && items.length > 0 ? (
             <div className="card" style={{ padding: 12, marginTop: 12, border: '1px solid #fecaca' }}>
               <div style={{ fontWeight: 900, color: '#b91c1c' }}>⚠️</div>
-              <div className="muted" style={{ marginTop: 6 }}>
-                {err}
-              </div>
+              <div className="muted" style={{ marginTop: 6 }}>{err}</div>
             </div>
           ) : null}
         </>
       )}
 
-      {/* ✅ هنا بس الستايل (شيبس احترافي مثل الخريطة) */}
       <style jsx>{`
+        .tax-wrap {
+          margin-bottom: 12px;
+          padding: 10px 12px;
+          border-radius: 14px;
+          border: 1px solid #e2e8f0;
+          background: rgba(255, 255, 255, 0.92);
+        }
+        .tax-title {
+          font-weight: 900;
+          margin-bottom: 8px;
+        }
+        .tax-row {
+          display: flex;
+          gap: 8px;
+          overflow-x: auto;
+          padding-bottom: 4px;
+        }
+        .tax-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 10px;
+          border-radius: 999px;
+          border: 1px solid rgba(0, 0, 0, 0.1);
+          background: #fff;
+          font-weight: 900;
+          font-size: 13px;
+          cursor: pointer;
+          white-space: nowrap;
+          user-select: none;
+        }
+        .tax-chip.isActive {
+          border-color: rgba(0, 0, 0, 0.22);
+          box-shadow: 0 8px 14px rgba(0, 0, 0, 0.1);
+        }
+        .tax-count {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 22px;
+          height: 18px;
+          padding: 0 6px;
+          border-radius: 999px;
+          background: rgba(0, 0, 0, 0.06);
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+
+        /* ====== Filter shell (نفس شكل الخريطة للشبكة/القائمة) ====== */
+        .sooq-filterShell {
+          margin-bottom: 12px;
+          padding: 12px 12px;
+          border-radius: 16px;
+          background: rgba(255, 255, 255, 0.9);
+          backdrop-filter: blur(10px);
+          border: 1px solid #e2e8f0;
+          box-shadow: 0 12px 22px rgba(0, 0, 0, 0.10);
+        }
+        .sooq-taxSection {
+          margin-bottom: 10px;
+        }
+        .sooq-controlsRow {
+          margin-top: 10px;
+        }
+        .sooq-search {
+          flex: 1;
+          min-width: 180px;
+        }
+
+        /* ====== Taxonomy bar (مثل الخريطة) ====== */
         .sooq-taxWrap {
           margin-bottom: 12px;
           padding: 10px 10px;
@@ -871,7 +1110,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
           border: 1px solid #e2e8f0;
           box-shadow: 0 10px 18px rgba(0, 0, 0, 0.08);
         }
-
         .sooq-taxTitle {
           font-weight: 900;
           margin-bottom: 8px;
@@ -879,7 +1117,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
           gap: 8px;
           align-items: center;
         }
-
         .sooq-taxSub {
           font-size: 12px;
           font-weight: 900;
@@ -904,7 +1141,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
           gap: 8px;
           padding: 8px 10px;
           border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.1);
+          border: 1px solid rgba(0, 0, 0, 0.10);
           background: #fff;
           font-size: 13px;
           line-height: 1;
@@ -913,17 +1150,19 @@ export default function CategoryListings({ category, initialListings = [] }) {
           user-select: none;
           font-weight: 900;
         }
-
-        .sooq-chip.isDisabled,
-        .sooq-chip:disabled {
+        .sooq-chip.isDisabled {
           opacity: 0.55;
           filter: grayscale(0.15);
           cursor: not-allowed;
         }
+        .sooq-chip:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
 
         .sooq-chip.isActive {
-          border-color: rgba(0, 0, 0, 0.2);
-          box-shadow: 0 8px 14px rgba(0, 0, 0, 0.1);
+          border-color: rgba(0, 0, 0, 0.20);
+          box-shadow: 0 8px 14px rgba(0, 0, 0, 0.10);
         }
 
         .sooq-chipDot {
@@ -932,16 +1171,13 @@ export default function CategoryListings({ category, initialListings = [] }) {
           border-radius: 50%;
           flex: 0 0 10px;
         }
-
         .sooq-chipIcon {
           font-size: 14px;
           line-height: 1;
         }
-
         .sooq-chipText {
           font-weight: 900;
         }
-
         .sooq-chipCount {
           display: inline-flex;
           align-items: center;
@@ -956,17 +1192,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
         }
 
         @media (max-width: 520px) {
-          .sooq-taxWrap {
-            padding: 10px 8px;
-          }
-          .sooq-chips {
-            padding: 6px;
-          }
-          .sooq-chip {
-            padding: 8px 9px;
-            font-size: 12px;
-          }
+          .sooq-taxWrap { padding: 10px 8px; }
+          .sooq-chips { padding: 6px; }
+          .sooq-chip { padding: 8px 9px; font-size: 12px; }
         }
+
       `}</style>
     </div>
   );
