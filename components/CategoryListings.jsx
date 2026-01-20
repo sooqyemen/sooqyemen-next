@@ -994,7 +994,14 @@ const phoneBrandOptions = useMemo(() => {
         </>
       )}
 
-      <style jsx>{`
+      {/*
+        IMPORTANT:
+        The taxonomy chips are rendered inside nested components (TaxonomyInner/Chip).
+        With styled-jsx scoping, those nested components won't inherit the parent's scope
+        attribute, so their styles can appear "بدون ستايل".
+        We use global styled-jsx here (classes are namespaced with "sooq-" so it's safe).
+      */}
+      <style jsx global>{`
         .tax-wrap {
           margin-bottom: 12px;
           padding: 10px 12px;
