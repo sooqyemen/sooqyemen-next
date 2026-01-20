@@ -28,10 +28,9 @@ import {
   MOTORCYCLE_BRANDS,
 } from '@/lib/taxonomy';
 
-const LocationPicker = dynamic(
-  () => import('@/components/Map/LocationPicker'),
-  { ssr: false }
-);
+const LocationPicker = dynamic(() => import('@/components/Map/LocationPicker'), {
+  ssr: false,
+});
 
 // ✅ الأقسام الافتراضية (مطابقة تمامًا لمفاتيح Firestore عندك)
 const DEFAULT_CATEGORIES = [
@@ -60,8 +59,10 @@ export default function AddPage() {
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [city, setCity] = useState('');
+
   // ✅ مهم: لا يوجد قسم افتراضي
   const [category, setCategory] = useState('');
+
   // ✅ فروع الأقسام (هرمية)
   const [carMake, setCarMake] = useState(''); // cars
   const [carMakeText, setCarMakeText] = useState('');
@@ -70,6 +71,7 @@ export default function AddPage() {
 
   const [phoneBrand, setPhoneBrand] = useState(''); // phones
   const [phoneBrandText, setPhoneBrandText] = useState('');
+
   const [dealType, setDealType] = useState(''); // realestate: sale/rent
   const [propertyType, setPropertyType] = useState(''); // realestate: land/house...
   const [propertyTypeText, setPropertyTypeText] = useState('');
@@ -187,7 +189,6 @@ export default function AddPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  
   // ✅ عند تغيير القسم: صفّر الفروع
   useEffect(() => {
     setCarMake('');
@@ -240,7 +241,7 @@ export default function AddPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category]);
 
-// ✅ معاينة الصور
+  // ✅ معاينة الصور
   useEffect(() => {
     if (images.length === 0) {
       setImagePreviews([]);
@@ -446,19 +447,19 @@ export default function AddPage() {
         carMake: category === 'cars' ? (carMake || null) : null,
         carMakeText: category === 'cars' && carMake === 'other' ? (carMakeText.trim() || null) : null,
 
-        // carModel: نخزّن key موحد + نص عند اختيار "أخرى" أو عند عدم توفر preset
         carModel:
           category === 'cars'
-            ? (carModel && carModel !== 'other'
-                ? carModel
-                : (carModelText.trim() ? slugKey(carModelText) : null))
+            ? carModel && carModel !== 'other'
+              ? carModel
+              : carModelText.trim()
+                ? slugKey(carModelText)
+                : null
             : null,
         carModelText:
           category === 'cars' && (carModel === 'other' || (carModelText.trim() && carModel !== 'other'))
             ? (carModelText.trim() || null)
             : null,
 
-        // بقية الأقسام
         electronicsType: category === 'electronics' ? (electronicsType || null) : null,
         electronicsTypeText: category === 'electronics' && electronicsType === 'other' ? (electronicsTypeText.trim() || null) : null,
 
@@ -514,7 +515,6 @@ export default function AddPage() {
         originalCurrency: currency,
         currencyBase: 'YER',
 
-        // ✅ نخزّن أكثر من صيغة لتضمن عمل الخريطة في كل مكان
         coords: lat != null && lng != null ? [lat, lng] : null,
         lat: lat != null ? lat : null,
         lng: lng != null ? lng : null,
@@ -611,13 +611,26 @@ export default function AddPage() {
       </div>
 
       <div className="form-tips">
-        <div className="tip-item"><span className="tip-icon">📸</span><span>أضف صور واضحة وجودة عالية</span></div>
-        <div className="tip-item"><span className="tip-icon">📝</span><span>اكتب وصفاً مفصلاً ودقيقاً</span></div>
-        <div className="tip-item"><span className="tip-icon">💰</span><span>حدد سعراً مناسباً ومنافساً</span></div>
-        <div className="tip-item"><span className="tip-icon">📍</span><span>اختر الموقع الدقيق لإعلانك</span></div>
+        <div className="tip-item">
+          <span className="tip-icon">📸</span>
+          <span>أضف صور واضحة وجودة عالية</span>
+        </div>
+        <div className="tip-item">
+          <span className="tip-icon">📝</span>
+          <span>اكتب وصفاً مفصلاً ودقيقاً</span>
+        </div>
+        <div className="tip-item">
+          <span className="tip-icon">💰</span>
+          <span>حدد سعراً مناسباً ومنافساً</span>
+        </div>
+        <div className="tip-item">
+          <span className="tip-icon">📍</span>
+          <span>اختر الموقع الدقيق لإعلانك</span>
+        </div>
       </div>
 
       <div className="form-grid">
+        {/* ✅ العمود الأول: النموذج */}
         <div className="form-container">
           <h2 className="form-section-title">معلومات الإعلان</h2>
 
@@ -710,7 +723,6 @@ export default function AddPage() {
             </div>
           </div>
 
-
           {/* ✅ فرع القسم (هرمي) */}
           {category === 'cars' && (
             <div className="card" style={{ padding: 12, marginBottom: 12, border: '1px solid #e2e8f0' }}>
@@ -726,7 +738,13 @@ export default function AddPage() {
                       setCarMake(e.target.value);
                       setCarModel('');
                       setCarModelText('');
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, carMake: undefined, carMakeText: undefined, carModelText: undefined }));
+                      if (submitAttempted)
+                        setErrors((prev) => ({
+                          ...prev,
+                          carMake: undefined,
+                          carMakeText: undefined,
+                          carModelText: undefined,
+                        }));
                     }}
                   >
                     <option value="" disabled>
@@ -812,9 +830,6 @@ export default function AddPage() {
             </div>
           )}
 
-            </div>
-          )}
-
           {category === 'phones' && (
             <div className="form-group">
               <label className="form-label required">ماركة الجوال</label>
@@ -872,7 +887,12 @@ export default function AddPage() {
                       setPropertyType('');
                       setPropertyTypeText('');
                       if (submitAttempted)
-                        setErrors((prev) => ({ ...prev, dealType: undefined, propertyType: undefined, propertyTypeText: undefined }));
+                        setErrors((prev) => ({
+                          ...prev,
+                          dealType: undefined,
+                          propertyType: undefined,
+                          propertyTypeText: undefined,
+                        }));
                     }}
                   >
                     <option value="" disabled>
@@ -895,7 +915,11 @@ export default function AddPage() {
                     onChange={(e) => {
                       setPropertyType(e.target.value);
                       if (submitAttempted)
-                        setErrors((prev) => ({ ...prev, propertyType: undefined, propertyTypeText: undefined }));
+                        setErrors((prev) => ({
+                          ...prev,
+                          propertyType: undefined,
+                          propertyTypeText: undefined,
+                        }));
                     }}
                     disabled={!dealType}
                     title={!dealType ? 'اختر بيع/إيجار أولاً' : ''}
@@ -1521,11 +1545,7 @@ export default function AddPage() {
                 <span>تفعيل نظام المزاد</span>
               </div>
               <label className="switch">
-                <input
-                  type="checkbox"
-                  checked={auctionEnabled}
-                  onChange={(e) => setAuctionEnabled(e.target.checked)}
-                />
+                <input type="checkbox" checked={auctionEnabled} onChange={(e) => setAuctionEnabled(e.target.checked)} />
                 <span className="slider"></span>
               </label>
             </div>
@@ -1556,7 +1576,7 @@ export default function AddPage() {
           </div>
         </div>
 
-        {/* الخريطة */}
+        {/* ✅ العمود الثاني: الخريطة */}
         <div className="map-container">
           <div className="map-header">
             <h2 className="form-section-title">
@@ -1568,26 +1588,30 @@ export default function AddPage() {
 
           <div className="map-wrapper">
             {!showMap ? (
-              <div className="map-placeholder" style={{
-                padding: '60px 20px',
-                textAlign: 'center',
-                background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
-                borderRadius: '12px',
-                border: '2px dashed #0ea5e9'
-              }}>
-                <div style={{ fontSize: '48px', marginBottom: '16px' }} role="img" aria-label="أيقونة الخريطة">🗺️</div>
+              <div
+                className="map-placeholder"
+                style={{
+                  padding: '60px 20px',
+                  textAlign: 'center',
+                  background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                  borderRadius: '12px',
+                  border: '2px dashed #0ea5e9',
+                }}
+              >
+                <div style={{ fontSize: '48px', marginBottom: '16px' }} role="img" aria-label="أيقونة الخريطة">
+                  🗺️
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowMap(true)}
                   className="btn btnPrimary"
-                  style={{
-                    padding: '12px 24px',
-                    fontSize: '16px',
-                    fontWeight: 'bold'
-                  }}
+                  style={{ padding: '12px 24px', fontSize: '16px', fontWeight: 'bold' }}
                   aria-label="تحميل الخريطة لتحديد الموقع"
                 >
-                  <span role="img" aria-label="أيقونة موقع">📍</span> تحميل الخريطة
+                  <span role="img" aria-label="أيقونة موقع">
+                    📍
+                  </span>{' '}
+                  تحميل الخريطة
                 </button>
                 <p style={{ marginTop: '12px', color: '#64748b', fontSize: '14px' }}>
                   اضغط لتحديد موقع الإعلان على الخريطة
@@ -1670,7 +1694,7 @@ export default function AddPage() {
           width: 100%;
         }
 
-        .cats-note{
+        .cats-note {
           margin: 10px 0 18px;
           padding: 12px 14px;
           border-radius: 12px;
@@ -2099,8 +2123,12 @@ export default function AddPage() {
         }
 
         @media (max-width: 1024px) {
-          .mobile-submit-section { display: block; }
-          .desktop-submit-section { display: none; }
+          .mobile-submit-section {
+            display: block;
+          }
+          .desktop-submit-section {
+            display: none;
+          }
         }
 
         .submit-btn-large {
@@ -2131,7 +2159,8 @@ export default function AddPage() {
           font-weight: 700;
         }
 
-        .final-notes, .form-notes{
+        .final-notes,
+        .form-notes {
           margin-top: 20px;
           padding: 15px;
           background: #f8fafc;
@@ -2176,7 +2205,9 @@ export default function AddPage() {
         }
 
         @keyframes spin {
-          to { transform: rotate(360deg); }
+          to {
+            transform: rotate(360deg);
+          }
         }
 
         .auth-required-card {
@@ -2231,18 +2262,41 @@ export default function AddPage() {
         }
 
         @media (max-width: 768px) {
-          .add-page-header { padding: 25px 15px; border-radius: 16px; }
-          .add-page-header h1 { font-size: 24px; }
-          .form-container, .map-container { padding: 20px; border-radius: 16px; }
-          .form-section-title { font-size: 18px; }
-          .currency-btn { padding: 8px 12px; font-size: 14px; }
+          .add-page-header {
+            padding: 25px 15px;
+            border-radius: 16px;
+          }
+          .add-page-header h1 {
+            font-size: 24px;
+          }
+          .form-container,
+          .map-container {
+            padding: 20px;
+            border-radius: 16px;
+          }
+          .form-section-title {
+            font-size: 18px;
+          }
+          .currency-btn {
+            padding: 8px 12px;
+            font-size: 14px;
+          }
         }
 
         @media (max-width: 480px) {
-          .form-row { grid-template-columns: 1fr; gap: 15px; }
-          .currency-selector { flex-direction: column; }
-          .communication-toggle { flex-direction: column; }
-          .image-previews { grid-template-columns: repeat(3, 1fr); }
+          .form-row {
+            grid-template-columns: 1fr;
+            gap: 15px;
+          }
+          .currency-selector {
+            flex-direction: column;
+          }
+          .communication-toggle {
+            flex-direction: column;
+          }
+          .image-previews {
+            grid-template-columns: repeat(3, 1fr);
+          }
         }
       `}</style>
     </div>
