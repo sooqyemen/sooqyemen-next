@@ -300,14 +300,6 @@ function detectCarModel(listing, makeKey) {
   return '';
 }
 
-    for (const v of variants) {
-      const vv = String(v || '').trim();
-      if (vv && txt.includes(vv)) return key;
-    }
-  }
-
-  return '';
-}
 
 
 
