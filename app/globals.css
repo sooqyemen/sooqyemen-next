@@ -578,3 +578,135 @@ img{
     background: white;
   }
 }
+
+/* =====================================================================
+   ✅ SooqYemen - Shared Category Filter UI (Grid/List/Map)
+   الهدف: نفس ستايل الخريطة (blur + chips) ويشتغل حتى لو الخريطة غير معروضة
+   تستخدمه: components/CategoryListings.jsx + components/Map/HomeMapView.jsx
+   ===================================================================== */
+
+/* Shell around filters + view buttons + search */
+.sooq-filterShell{
+  margin-bottom: 12px;
+  padding: 12px 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.90);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 22px rgba(0, 0, 0, 0.10);
+}
+
+.sooq-taxSection{ margin-bottom: 10px; }
+.sooq-taxTitle{
+  font-weight: 900;
+  margin-bottom: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.sooq-taxSub{
+  font-size: 12px;
+  font-weight: 900;
+  opacity: 0.85;
+  margin: 6px 0 6px;
+}
+
+/* Chips row */
+.sooq-chips{
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.55);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  align-items: center;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Chip button */
+.sooq-chip{
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  background: #fff;
+  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  font-weight: 900;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  touch-action: manipulation;
+}
+
+.sooq-chip:hover{ transform: translateY(-1px); }
+.sooq-chip:active{ transform: translateY(0px) scale(0.99); }
+.sooq-chip:focus-visible{ outline: 2px solid #3b82f6; outline-offset: 2px; }
+
+.sooq-chip.isDisabled,
+.sooq-chip:disabled{
+  opacity: 0.55;
+  filter: grayscale(0.15);
+  cursor: not-allowed;
+}
+
+.sooq-chip.isActive{
+  border-color: rgba(0, 0, 0, 0.20);
+  box-shadow: 0 8px 14px rgba(0, 0, 0, 0.10);
+}
+
+.sooq-chipDot{
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: 0 0 10px;
+}
+.sooq-chipIcon{ font-size: 14px; line-height: 1; }
+.sooq-chipText{ font-weight: 900; }
+.sooq-chipCount{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+@media (max-width: 520px){
+  .sooq-filterShell{ padding: 10px 10px; border-radius: 14px; }
+  .sooq-chips{ padding: 6px; }
+  .sooq-chip{ padding: 8px 9px; font-size: 12px; }
+}
+
+/* Dark mode tuning (since you change CSS variables in prefers-color-scheme) */
+@media (prefers-color-scheme: dark){
+  .sooq-filterShell{
+    background: rgba(30, 41, 59, 0.86);
+    border-color: var(--border);
+  }
+  .sooq-chips{
+    background: rgba(15, 23, 42, 0.35);
+  }
+  .sooq-chip{
+    background: rgba(30, 41, 59, 0.92);
+    border-color: rgba(148, 163, 184, 0.25);
+    color: #e2e8f0;
+  }
+  .sooq-chipCount{
+    background: rgba(148, 163, 184, 0.14);
+    color: #e2e8f0;
+  }
+}
