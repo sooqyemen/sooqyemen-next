@@ -427,6 +427,51 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const showPhonesTax = single === 'phones' && taxonomyCounts.phoneBrands.size > 0;
   const showRealTax = single === 'realestate' && taxonomyCounts.dealTypes.size > 0;
 
+  // ====== Category chips (نفس شريط أقسام الخريطة) ======
+  const ROOT_ORDER = useMemo(
+    () => [
+      'cars',
+      'realestate',
+      'phones',
+      'electronics',
+      'motorcycles',
+      'heavy_equipment',
+      'solar',
+      'networks',
+      'maintenance',
+      'furniture',
+      'home_tools',
+      'clothes',
+      'animals',
+      'jobs',
+      'services',
+      'other',
+    ],
+    []
+  );
+
+  const CAT_STYLE = useMemo(
+    () => ({
+      cars: { color: '#2563eb', label: 'سيارات' },
+      realestate: { color: '#16a34a', label: 'عقارات' },
+      phones: { color: '#7c3aed', label: 'جوالات' },
+      electronics: { color: '#0ea5e9', label: 'إلكترونيات' },
+      motorcycles: { color: '#f97316', label: 'دراجات' },
+      heavy_equipment: { color: '#a16207', label: 'معدات' },
+      solar: { color: '#f59e0b', label: 'طاقة شمسية' },
+      networks: { color: '#14b8a6', label: 'نت وشبكات' },
+      maintenance: { color: '#64748b', label: 'صيانة' },
+      furniture: { color: '#c2410c', label: 'أثاث' },
+      home_tools: { color: '#22c55e', label: 'أدوات' },
+      clothes: { color: '#db2777', label: 'ملابس' },
+      animals: { color: '#84cc16', label: 'حيوانات' },
+      jobs: { color: '#334155', label: 'وظائف' },
+      services: { color: '#0f172a', label: 'خدمات' },
+      other: { color: '#475569', label: 'أخرى' },
+    }),
+    []
+  );
+
   const carMakeOptions = useMemo(() => {
     return Array.from(taxonomyCounts.carMakes.entries())
       .filter(([k]) => !!safeStr(k))
@@ -477,6 +522,58 @@ export default function CategoryListings({ category, initialListings = [] }) {
       {typeof count === 'number' ? <span className="sooq-chipCount">{count}</span> : null}
     </button>
   );
+
+  const CategoryBar = () => {
+    // يشتغل في كل صفحات الأقسام: شريط أقسام مثل الخريطة
+    const currentKey = single || '';
+    const currentStyle = (currentKey && CAT_STYLE[currentKey]) || CAT_STYLE.other;
+    const currentCount = filtered.length;
+
+    return (
+      <div className="sooq-chipBar" aria-label="فلترة الأقسام">
+        <div className="sooq-chips" role="tablist" aria-label="الأقسام">
+          <Link
+            href="/"
+            className={`sooq-chip ${!currentKey ? 'isActive' : ''}`}
+            role="tab"
+            aria-selected={!currentKey}
+            title="كل الأقسام"
+          >
+            <span className="sooq-chipDot" style={{ background: '#0f172a' }} />
+            <span className="sooq-chipText">الكل</span>
+          </Link>
+
+          {ROOT_ORDER.map((k) => {
+            const s = CAT_STYLE[k] || CAT_STYLE.other;
+            const active = currentKey === k;
+            return (
+              <Link
+                key={k}
+                href={`/${k}`}
+                className={`sooq-chip ${active ? 'isActive' : ''}`}
+                role="tab"
+                aria-selected={active}
+                title={s.label}
+              >
+                <span className="sooq-chipDot" style={{ background: s.color }} />
+                <span className="sooq-chipText">{s.label}</span>
+                {active ? <span className="sooq-chipCount">{currentCount}</span> : null}
+              </Link>
+            );
+          })}
+
+          {/* fallback لو وصلنا لقسم غير معروف */}
+          {!ROOT_ORDER.includes(currentKey) && currentKey ? (
+            <span className="sooq-chip isActive" title={currentKey}>
+              <span className="sooq-chipDot" style={{ background: currentStyle.color }} />
+              <span className="sooq-chipText">{currentStyle.label || currentKey}</span>
+              <span className="sooq-chipCount">{currentCount}</span>
+            </span>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
 
   const TaxonomyBar = () => {
     if (!single) return null;
@@ -617,6 +714,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
 
   return (
     <div>
+      <CategoryBar />
       <TaxonomyBar />
 
       <div className="card" style={{ padding: 12, marginBottom: 12 }}>
@@ -736,9 +834,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
           font-size: 12px;
           font-weight: 900;
         }
-          .sooq-chips { padding: 6px; }
-          .sooq-chip { padding: 8px 9px; font-size: 12px; }
-        }
 
         /* ====== Taxonomy chips (نفس ستايل الخريطة) ====== */
         .sooq-chipBar {
@@ -771,6 +866,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
           white-space: nowrap;
           user-select: none;
           font-weight: 800;
+          text-decoration: none;
+          color: inherit;
         }
 
         .sooq-chip.isActive {
