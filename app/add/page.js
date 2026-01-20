@@ -10,9 +10,22 @@ import Link from 'next/link';
 // ✅ Taxonomy (تصنيف هرمي للفروع)
 import {
   CAR_MAKES,
+  CAR_MODELS_BY_MAKE,
   PHONE_BRANDS,
   DEAL_TYPES,
   PROPERTY_TYPES,
+  ELECTRONICS_TYPES,
+  HEAVY_EQUIPMENT_TYPES,
+  SOLAR_TYPES,
+  NETWORK_TYPES,
+  MAINTENANCE_TYPES,
+  FURNITURE_TYPES,
+  HOME_TOOLS_TYPES,
+  CLOTHES_TYPES,
+  ANIMAL_TYPES,
+  JOB_TYPES,
+  SERVICE_TYPES,
+  MOTORCYCLE_BRANDS,
 } from '@/lib/taxonomy';
 
 const LocationPicker = dynamic(
@@ -52,11 +65,52 @@ export default function AddPage() {
   // ✅ فروع الأقسام (هرمية)
   const [carMake, setCarMake] = useState(''); // cars
   const [carMakeText, setCarMakeText] = useState('');
+  const [carModel, setCarModel] = useState('');
+  const [carModelText, setCarModelText] = useState('');
+
   const [phoneBrand, setPhoneBrand] = useState(''); // phones
   const [phoneBrandText, setPhoneBrandText] = useState('');
   const [dealType, setDealType] = useState(''); // realestate: sale/rent
   const [propertyType, setPropertyType] = useState(''); // realestate: land/house...
   const [propertyTypeText, setPropertyTypeText] = useState('');
+
+  // ✅ بقية الأقسام (اختياري، لكن يُحسّن البحث والفلترة)
+  const [electronicsType, setElectronicsType] = useState('');
+  const [electronicsTypeText, setElectronicsTypeText] = useState('');
+
+  const [motorcycleBrand, setMotorcycleBrand] = useState('');
+  const [motorcycleBrandText, setMotorcycleBrandText] = useState('');
+
+  const [heavyEquipmentType, setHeavyEquipmentType] = useState('');
+  const [heavyEquipmentTypeText, setHeavyEquipmentTypeText] = useState('');
+
+  const [solarType, setSolarType] = useState('');
+  const [solarTypeText, setSolarTypeText] = useState('');
+
+  const [networkType, setNetworkType] = useState('');
+  const [networkTypeText, setNetworkTypeText] = useState('');
+
+  const [maintenanceType, setMaintenanceType] = useState('');
+  const [maintenanceTypeText, setMaintenanceTypeText] = useState('');
+
+  const [furnitureType, setFurnitureType] = useState('');
+  const [furnitureTypeText, setFurnitureTypeText] = useState('');
+
+  const [homeToolsType, setHomeToolsType] = useState('');
+  const [homeToolsTypeText, setHomeToolsTypeText] = useState('');
+
+  const [clothesType, setClothesType] = useState('');
+  const [clothesTypeText, setClothesTypeText] = useState('');
+
+  const [animalType, setAnimalType] = useState('');
+  const [animalTypeText, setAnimalTypeText] = useState('');
+
+  const [jobType, setJobType] = useState('');
+  const [jobTypeText, setJobTypeText] = useState('');
+
+  const [serviceType, setServiceType] = useState('');
+  const [serviceTypeText, setServiceTypeText] = useState('');
+
   const [phone, setPhone] = useState('');
   const [isWhatsapp, setIsWhatsapp] = useState(true);
 
@@ -138,11 +192,51 @@ export default function AddPage() {
   useEffect(() => {
     setCarMake('');
     setCarMakeText('');
+    setCarModel('');
+    setCarModelText('');
+
     setPhoneBrand('');
     setPhoneBrandText('');
+
     setDealType('');
     setPropertyType('');
     setPropertyTypeText('');
+
+    setElectronicsType('');
+    setElectronicsTypeText('');
+
+    setMotorcycleBrand('');
+    setMotorcycleBrandText('');
+
+    setHeavyEquipmentType('');
+    setHeavyEquipmentTypeText('');
+
+    setSolarType('');
+    setSolarTypeText('');
+
+    setNetworkType('');
+    setNetworkTypeText('');
+
+    setMaintenanceType('');
+    setMaintenanceTypeText('');
+
+    setFurnitureType('');
+    setFurnitureTypeText('');
+
+    setHomeToolsType('');
+    setHomeToolsTypeText('');
+
+    setClothesType('');
+    setClothesTypeText('');
+
+    setAnimalType('');
+    setAnimalTypeText('');
+
+    setJobType('');
+    setJobTypeText('');
+
+    setServiceType('');
+    setServiceTypeText('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category]);
 
@@ -177,6 +271,23 @@ export default function AddPage() {
     return Number(r.SAR || r.sar || r.sarRate || r.sarToYer || r.sar_yer || 425);
   };
 
+  // ✅ موديلات السيارة حسب الماركة (لواجهة الإضافة)
+  const carModelsForMake = useMemo(() => {
+    const mk = String(carMake || '').trim();
+    if (!mk || mk === 'other') return [];
+    return Array.isArray(CAR_MODELS_BY_MAKE?.[mk]) ? CAR_MODELS_BY_MAKE[mk] : [];
+  }, [carMake]);
+
+  const slugKey = (v) =>
+    String(v || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_')
+      .replace(/-+/g, '_')
+      .replace(/__+/g, '_')
+      .replace(/[^a-z0-9_\u0600-\u06FF]/g, '')
+      .slice(0, 60);
+
   // ✅ التحقق من الأخطاء
   const validateForm = () => {
     const newErrors = {};
@@ -205,6 +316,7 @@ export default function AddPage() {
     if (category === 'cars') {
       if (!carMake) newErrors.carMake = 'اختر ماركة السيارة';
       if (carMake === 'other' && !carMakeText.trim()) newErrors.carMakeText = 'اكتب ماركة السيارة';
+      if (carModel === 'other' && !carModelText.trim()) newErrors.carModelText = 'اكتب موديل السيارة';
     }
 
     if (category === 'phones') {
@@ -216,6 +328,44 @@ export default function AddPage() {
       if (!dealType) newErrors.dealType = 'اختر (بيع / إيجار)';
       if (!propertyType) newErrors.propertyType = 'اختر نوع العقار';
       if (propertyType === 'other' && !propertyTypeText.trim()) newErrors.propertyTypeText = 'اكتب نوع العقار';
+    }
+
+    // ✅ بقية الأقسام (نطلب وصف فقط إذا اختار المستخدم "أخرى")
+    if (category === 'electronics') {
+      if (electronicsType === 'other' && !electronicsTypeText.trim()) newErrors.electronicsTypeText = 'اكتب نوع الإلكترونيات';
+    }
+    if (category === 'motorcycles') {
+      if (motorcycleBrand === 'other' && !motorcycleBrandText.trim()) newErrors.motorcycleBrandText = 'اكتب ماركة الدراجة';
+    }
+    if (category === 'heavy_equipment') {
+      if (heavyEquipmentType === 'other' && !heavyEquipmentTypeText.trim()) newErrors.heavyEquipmentTypeText = 'اكتب نوع المعدة';
+    }
+    if (category === 'solar') {
+      if (solarType === 'other' && !solarTypeText.trim()) newErrors.solarTypeText = 'اكتب نوع الطاقة الشمسية';
+    }
+    if (category === 'networks') {
+      if (networkType === 'other' && !networkTypeText.trim()) newErrors.networkTypeText = 'اكتب نوع الشبكات';
+    }
+    if (category === 'maintenance') {
+      if (maintenanceType === 'other' && !maintenanceTypeText.trim()) newErrors.maintenanceTypeText = 'اكتب نوع الصيانة';
+    }
+    if (category === 'furniture') {
+      if (furnitureType === 'other' && !furnitureTypeText.trim()) newErrors.furnitureTypeText = 'اكتب نوع الأثاث';
+    }
+    if (category === 'home_tools') {
+      if (homeToolsType === 'other' && !homeToolsTypeText.trim()) newErrors.homeToolsTypeText = 'اكتب نوع الأدوات المنزلية';
+    }
+    if (category === 'clothes') {
+      if (clothesType === 'other' && !clothesTypeText.trim()) newErrors.clothesTypeText = 'اكتب نوع الملابس';
+    }
+    if (category === 'animals') {
+      if (animalType === 'other' && !animalTypeText.trim()) newErrors.animalTypeText = 'اكتب نوع الحيوانات';
+    }
+    if (category === 'jobs') {
+      if (jobType === 'other' && !jobTypeText.trim()) newErrors.jobTypeText = 'اكتب نوع الوظيفة';
+    }
+    if (category === 'services') {
+      if (serviceType === 'other' && !serviceTypeText.trim()) newErrors.serviceTypeText = 'اكتب نوع الخدمة';
     }
 
     if (auctionEnabled && (!auctionMinutes || Number(auctionMinutes) < 1)) {
@@ -295,6 +445,58 @@ export default function AddPage() {
         // ✅ فروع الأقسام (Taxonomy)
         carMake: category === 'cars' ? (carMake || null) : null,
         carMakeText: category === 'cars' && carMake === 'other' ? (carMakeText.trim() || null) : null,
+
+        // carModel: نخزّن key موحد + نص عند اختيار "أخرى" أو عند عدم توفر preset
+        carModel:
+          category === 'cars'
+            ? (carModel && carModel !== 'other'
+                ? carModel
+                : (carModelText.trim() ? slugKey(carModelText) : null))
+            : null,
+        carModelText:
+          category === 'cars' && (carModel === 'other' || (carModelText.trim() && carModel !== 'other'))
+            ? (carModelText.trim() || null)
+            : null,
+
+        // بقية الأقسام
+        electronicsType: category === 'electronics' ? (electronicsType || null) : null,
+        electronicsTypeText: category === 'electronics' && electronicsType === 'other' ? (electronicsTypeText.trim() || null) : null,
+
+        motorcycleBrand: category === 'motorcycles' ? (motorcycleBrand || null) : null,
+        motorcycleBrandText: category === 'motorcycles' && motorcycleBrand === 'other' ? (motorcycleBrandText.trim() || null) : null,
+
+        heavyEquipmentType: category === 'heavy_equipment' ? (heavyEquipmentType || null) : null,
+        heavyEquipmentTypeText:
+          category === 'heavy_equipment' && heavyEquipmentType === 'other' ? (heavyEquipmentTypeText.trim() || null) : null,
+
+        solarType: category === 'solar' ? (solarType || null) : null,
+        solarTypeText: category === 'solar' && solarType === 'other' ? (solarTypeText.trim() || null) : null,
+
+        networkType: category === 'networks' ? (networkType || null) : null,
+        networkTypeText: category === 'networks' && networkType === 'other' ? (networkTypeText.trim() || null) : null,
+
+        maintenanceType: category === 'maintenance' ? (maintenanceType || null) : null,
+        maintenanceTypeText:
+          category === 'maintenance' && maintenanceType === 'other' ? (maintenanceTypeText.trim() || null) : null,
+
+        furnitureType: category === 'furniture' ? (furnitureType || null) : null,
+        furnitureTypeText: category === 'furniture' && furnitureType === 'other' ? (furnitureTypeText.trim() || null) : null,
+
+        homeToolsType: category === 'home_tools' ? (homeToolsType || null) : null,
+        homeToolsTypeText:
+          category === 'home_tools' && homeToolsType === 'other' ? (homeToolsTypeText.trim() || null) : null,
+
+        clothesType: category === 'clothes' ? (clothesType || null) : null,
+        clothesTypeText: category === 'clothes' && clothesType === 'other' ? (clothesTypeText.trim() || null) : null,
+
+        animalType: category === 'animals' ? (animalType || null) : null,
+        animalTypeText: category === 'animals' && animalType === 'other' ? (animalTypeText.trim() || null) : null,
+
+        jobType: category === 'jobs' ? (jobType || null) : null,
+        jobTypeText: category === 'jobs' && jobType === 'other' ? (jobTypeText.trim() || null) : null,
+
+        serviceType: category === 'services' ? (serviceType || null) : null,
+        serviceTypeText: category === 'services' && serviceType === 'other' ? (serviceTypeText.trim() || null) : null,
 
         phoneBrand: category === 'phones' ? (phoneBrand || null) : null,
         phoneBrandText: category === 'phones' && phoneBrand === 'other' ? (phoneBrandText.trim() || null) : null,
@@ -511,42 +713,105 @@ export default function AddPage() {
 
           {/* ✅ فرع القسم (هرمي) */}
           {category === 'cars' && (
-            <div className="form-group">
-              <label className="form-label required">ماركة السيارة</label>
-              <select
-                className={`form-select ${errors.carMake ? 'error' : ''}`}
-                value={carMake}
-                onChange={(e) => {
-                  setCarMake(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, carMake: undefined, carMakeText: undefined }));
-                }}
-              >
-                <option value="" disabled>
-                  اختر الماركة
-                </option>
-                {CAR_MAKES.map((m) => (
-                  <option key={m.key} value={m.key}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-              {errors.carMake && <div className="form-error">{errors.carMake}</div>}
+            <div className="card" style={{ padding: 12, marginBottom: 12, border: '1px solid #e2e8f0' }}>
+              <div style={{ fontWeight: 900, marginBottom: 10 }}>تفاصيل السيارة</div>
 
-              {carMake === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.carMakeText ? 'error' : ''}`}
-                    value={carMakeText}
+              <div className="form-row" style={{ marginBottom: 0 }}>
+                <div className="form-group">
+                  <label className="form-label required">ماركة السيارة</label>
+                  <select
+                    className={`form-select ${errors.carMake ? 'error' : ''}`}
+                    value={carMake}
                     onChange={(e) => {
-                      setCarMakeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, carMakeText: undefined }));
+                      setCarMake(e.target.value);
+                      setCarModel('');
+                      setCarModelText('');
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, carMake: undefined, carMakeText: undefined, carModelText: undefined }));
                     }}
-                    placeholder="اكتب الماركة"
-                    maxLength={40}
-                  />
-                  {errors.carMakeText && <div className="form-error">{errors.carMakeText}</div>}
+                  >
+                    <option value="" disabled>
+                      اختر الماركة
+                    </option>
+                    {CAR_MAKES.map((m) => (
+                      <option key={m.key} value={m.key}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.carMake && <div className="form-error">{errors.carMake}</div>}
+
+                  {carMake === 'other' && (
+                    <div style={{ marginTop: 10 }}>
+                      <input
+                        className={`form-input ${errors.carMakeText ? 'error' : ''}`}
+                        value={carMakeText}
+                        onChange={(e) => {
+                          setCarMakeText(e.target.value);
+                          if (submitAttempted) setErrors((prev) => ({ ...prev, carMakeText: undefined }));
+                        }}
+                        placeholder="اكتب الماركة"
+                        maxLength={40}
+                      />
+                      {errors.carMakeText && <div className="form-error">{errors.carMakeText}</div>}
+                    </div>
+                  )}
                 </div>
-              )}
+
+                <div className="form-group">
+                  <label className="form-label">موديل السيارة (اختياري)</label>
+
+                  {carMake && carMake !== 'other' && carModelsForMake.length > 0 ? (
+                    <select
+                      className="form-select"
+                      value={carModel}
+                      onChange={(e) => {
+                        setCarModel(e.target.value);
+                        if (submitAttempted) setErrors((prev) => ({ ...prev, carModelText: undefined }));
+                      }}
+                    >
+                      <option value="">كل الموديلات</option>
+                      {carModelsForMake.map((mm) => (
+                        <option key={mm.key} value={mm.key}>
+                          {mm.label}
+                        </option>
+                      ))}
+                      <option value="other">أخرى</option>
+                    </select>
+                  ) : (
+                    <input
+                      className={`form-input ${errors.carModelText ? 'error' : ''}`}
+                      value={carModelText}
+                      onChange={(e) => {
+                        setCarModelText(e.target.value);
+                        setCarModel(e.target.value ? 'other' : '');
+                        if (submitAttempted) setErrors((prev) => ({ ...prev, carModelText: undefined }));
+                      }}
+                      placeholder={carMake ? 'اكتب الموديل (مثال: هايلوكس)' : 'اختر الماركة أولاً'}
+                      disabled={!carMake}
+                      maxLength={50}
+                    />
+                  )}
+
+                  {carMake && carMake !== 'other' && carModelsForMake.length > 0 && carModel === 'other' && (
+                    <div style={{ marginTop: 10 }}>
+                      <input
+                        className={`form-input ${errors.carModelText ? 'error' : ''}`}
+                        value={carModelText}
+                        onChange={(e) => {
+                          setCarModelText(e.target.value);
+                          if (submitAttempted) setErrors((prev) => ({ ...prev, carModelText: undefined }));
+                        }}
+                        placeholder="اكتب الموديل"
+                        maxLength={50}
+                      />
+                      {errors.carModelText && <div className="form-error">{errors.carModelText}</div>}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
             </div>
           )}
 
@@ -663,6 +928,451 @@ export default function AddPage() {
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ✅ فروع الأقسام الأخرى (اختياري) */}
+          {category === 'electronics' && (
+            <div className="form-group">
+              <label className="form-label">نوع الإلكترونيات</label>
+              <select
+                className="form-select"
+                value={electronicsType}
+                onChange={(e) => {
+                  setElectronicsType(e.target.value);
+                  if (submitAttempted) setErrors((prev) => ({ ...prev, electronicsTypeText: undefined }));
+                }}
+              >
+                <option value="">اختر النوع (اختياري)</option>
+                {ELECTRONICS_TYPES.map((x) => (
+                  <option key={x.key} value={x.key}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+
+              {electronicsType === 'other' && (
+                <div style={{ marginTop: 10 }}>
+                  <input
+                    className={`form-input ${errors.electronicsTypeText ? 'error' : ''}`}
+                    value={electronicsTypeText}
+                    onChange={(e) => {
+                      setElectronicsTypeText(e.target.value);
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, electronicsTypeText: undefined }));
+                    }}
+                    placeholder="اكتب النوع"
+                    maxLength={60}
+                  />
+                  {errors.electronicsTypeText && <div className="form-error">{errors.electronicsTypeText}</div>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {category === 'motorcycles' && (
+            <div className="form-group">
+              <label className="form-label">ماركة الدراجة</label>
+              <select
+                className="form-select"
+                value={motorcycleBrand}
+                onChange={(e) => {
+                  setMotorcycleBrand(e.target.value);
+                  if (submitAttempted) setErrors((prev) => ({ ...prev, motorcycleBrandText: undefined }));
+                }}
+              >
+                <option value="">اختر الماركة (اختياري)</option>
+                {MOTORCYCLE_BRANDS.map((x) => (
+                  <option key={x.key} value={x.key}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+
+              {motorcycleBrand === 'other' && (
+                <div style={{ marginTop: 10 }}>
+                  <input
+                    className={`form-input ${errors.motorcycleBrandText ? 'error' : ''}`}
+                    value={motorcycleBrandText}
+                    onChange={(e) => {
+                      setMotorcycleBrandText(e.target.value);
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, motorcycleBrandText: undefined }));
+                    }}
+                    placeholder="اكتب الماركة"
+                    maxLength={60}
+                  />
+                  {errors.motorcycleBrandText && <div className="form-error">{errors.motorcycleBrandText}</div>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {category === 'heavy_equipment' && (
+            <div className="form-group">
+              <label className="form-label">نوع المعدة</label>
+              <select
+                className="form-select"
+                value={heavyEquipmentType}
+                onChange={(e) => {
+                  setHeavyEquipmentType(e.target.value);
+                  if (submitAttempted) setErrors((prev) => ({ ...prev, heavyEquipmentTypeText: undefined }));
+                }}
+              >
+                <option value="">اختر النوع (اختياري)</option>
+                {HEAVY_EQUIPMENT_TYPES.map((x) => (
+                  <option key={x.key} value={x.key}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+
+              {heavyEquipmentType === 'other' && (
+                <div style={{ marginTop: 10 }}>
+                  <input
+                    className={`form-input ${errors.heavyEquipmentTypeText ? 'error' : ''}`}
+                    value={heavyEquipmentTypeText}
+                    onChange={(e) => {
+                      setHeavyEquipmentTypeText(e.target.value);
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, heavyEquipmentTypeText: undefined }));
+                    }}
+                    placeholder="اكتب النوع"
+                    maxLength={60}
+                  />
+                  {errors.heavyEquipmentTypeText && <div className="form-error">{errors.heavyEquipmentTypeText}</div>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {category === 'solar' && (
+            <div className="form-group">
+              <label className="form-label">فئة الطاقة الشمسية</label>
+              <select
+                className="form-select"
+                value={solarType}
+                onChange={(e) => {
+                  setSolarType(e.target.value);
+                  if (submitAttempted) setErrors((prev) => ({ ...prev, solarTypeText: undefined }));
+                }}
+              >
+                <option value="">اختر الفئة (اختياري)</option>
+                {SOLAR_TYPES.map((x) => (
+                  <option key={x.key} value={x.key}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+
+              {solarType === 'other' && (
+                <div style={{ marginTop: 10 }}>
+                  <input
+                    className={`form-input ${errors.solarTypeText ? 'error' : ''}`}
+                    value={solarTypeText}
+                    onChange={(e) => {
+                      setSolarTypeText(e.target.value);
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, solarTypeText: undefined }));
+                    }}
+                    placeholder="اكتب الفئة"
+                    maxLength={60}
+                  />
+                  {errors.solarTypeText && <div className="form-error">{errors.solarTypeText}</div>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {category === 'networks' && (
+            <div className="form-group">
+              <label className="form-label">فئة الشبكات</label>
+              <select
+                className="form-select"
+                value={networkType}
+                onChange={(e) => {
+                  setNetworkType(e.target.value);
+                  if (submitAttempted) setErrors((prev) => ({ ...prev, networkTypeText: undefined }));
+                }}
+              >
+                <option value="">اختر الفئة (اختياري)</option>
+                {NETWORK_TYPES.map((x) => (
+                  <option key={x.key} value={x.key}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+
+              {networkType === 'other' && (
+                <div style={{ marginTop: 10 }}>
+                  <input
+                    className={`form-input ${errors.networkTypeText ? 'error' : ''}`}
+                    value={networkTypeText}
+                    onChange={(e) => {
+                      setNetworkTypeText(e.target.value);
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, networkTypeText: undefined }));
+                    }}
+                    placeholder="اكتب الفئة"
+                    maxLength={60}
+                  />
+                  {errors.networkTypeText && <div className="form-error">{errors.networkTypeText}</div>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {category === 'maintenance' && (
+            <div className="form-group">
+              <label className="form-label">نوع الصيانة</label>
+              <select
+                className="form-select"
+                value={maintenanceType}
+                onChange={(e) => {
+                  setMaintenanceType(e.target.value);
+                  if (submitAttempted) setErrors((prev) => ({ ...prev, maintenanceTypeText: undefined }));
+                }}
+              >
+                <option value="">اختر النوع (اختياري)</option>
+                {MAINTENANCE_TYPES.map((x) => (
+                  <option key={x.key} value={x.key}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+
+              {maintenanceType === 'other' && (
+                <div style={{ marginTop: 10 }}>
+                  <input
+                    className={`form-input ${errors.maintenanceTypeText ? 'error' : ''}`}
+                    value={maintenanceTypeText}
+                    onChange={(e) => {
+                      setMaintenanceTypeText(e.target.value);
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, maintenanceTypeText: undefined }));
+                    }}
+                    placeholder="اكتب النوع"
+                    maxLength={60}
+                  />
+                  {errors.maintenanceTypeText && <div className="form-error">{errors.maintenanceTypeText}</div>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {category === 'furniture' && (
+            <div className="form-group">
+              <label className="form-label">نوع الأثاث</label>
+              <select
+                className="form-select"
+                value={furnitureType}
+                onChange={(e) => {
+                  setFurnitureType(e.target.value);
+                  if (submitAttempted) setErrors((prev) => ({ ...prev, furnitureTypeText: undefined }));
+                }}
+              >
+                <option value="">اختر النوع (اختياري)</option>
+                {FURNITURE_TYPES.map((x) => (
+                  <option key={x.key} value={x.key}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+
+              {furnitureType === 'other' && (
+                <div style={{ marginTop: 10 }}>
+                  <input
+                    className={`form-input ${errors.furnitureTypeText ? 'error' : ''}`}
+                    value={furnitureTypeText}
+                    onChange={(e) => {
+                      setFurnitureTypeText(e.target.value);
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, furnitureTypeText: undefined }));
+                    }}
+                    placeholder="اكتب النوع"
+                    maxLength={60}
+                  />
+                  {errors.furnitureTypeText && <div className="form-error">{errors.furnitureTypeText}</div>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {category === 'home_tools' && (
+            <div className="form-group">
+              <label className="form-label">نوع الأدوات المنزلية</label>
+              <select
+                className="form-select"
+                value={homeToolsType}
+                onChange={(e) => {
+                  setHomeToolsType(e.target.value);
+                  if (submitAttempted) setErrors((prev) => ({ ...prev, homeToolsTypeText: undefined }));
+                }}
+              >
+                <option value="">اختر النوع (اختياري)</option>
+                {HOME_TOOLS_TYPES.map((x) => (
+                  <option key={x.key} value={x.key}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+
+              {homeToolsType === 'other' && (
+                <div style={{ marginTop: 10 }}>
+                  <input
+                    className={`form-input ${errors.homeToolsTypeText ? 'error' : ''}`}
+                    value={homeToolsTypeText}
+                    onChange={(e) => {
+                      setHomeToolsTypeText(e.target.value);
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, homeToolsTypeText: undefined }));
+                    }}
+                    placeholder="اكتب النوع"
+                    maxLength={60}
+                  />
+                  {errors.homeToolsTypeText && <div className="form-error">{errors.homeToolsTypeText}</div>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {category === 'clothes' && (
+            <div className="form-group">
+              <label className="form-label">نوع الملابس</label>
+              <select
+                className="form-select"
+                value={clothesType}
+                onChange={(e) => {
+                  setClothesType(e.target.value);
+                  if (submitAttempted) setErrors((prev) => ({ ...prev, clothesTypeText: undefined }));
+                }}
+              >
+                <option value="">اختر النوع (اختياري)</option>
+                {CLOTHES_TYPES.map((x) => (
+                  <option key={x.key} value={x.key}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+
+              {clothesType === 'other' && (
+                <div style={{ marginTop: 10 }}>
+                  <input
+                    className={`form-input ${errors.clothesTypeText ? 'error' : ''}`}
+                    value={clothesTypeText}
+                    onChange={(e) => {
+                      setClothesTypeText(e.target.value);
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, clothesTypeText: undefined }));
+                    }}
+                    placeholder="اكتب النوع"
+                    maxLength={60}
+                  />
+                  {errors.clothesTypeText && <div className="form-error">{errors.clothesTypeText}</div>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {category === 'animals' && (
+            <div className="form-group">
+              <label className="form-label">نوع الحيوانات</label>
+              <select
+                className="form-select"
+                value={animalType}
+                onChange={(e) => {
+                  setAnimalType(e.target.value);
+                  if (submitAttempted) setErrors((prev) => ({ ...prev, animalTypeText: undefined }));
+                }}
+              >
+                <option value="">اختر النوع (اختياري)</option>
+                {ANIMAL_TYPES.map((x) => (
+                  <option key={x.key} value={x.key}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+
+              {animalType === 'other' && (
+                <div style={{ marginTop: 10 }}>
+                  <input
+                    className={`form-input ${errors.animalTypeText ? 'error' : ''}`}
+                    value={animalTypeText}
+                    onChange={(e) => {
+                      setAnimalTypeText(e.target.value);
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, animalTypeText: undefined }));
+                    }}
+                    placeholder="اكتب النوع"
+                    maxLength={60}
+                  />
+                  {errors.animalTypeText && <div className="form-error">{errors.animalTypeText}</div>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {category === 'jobs' && (
+            <div className="form-group">
+              <label className="form-label">نوع الوظيفة</label>
+              <select
+                className="form-select"
+                value={jobType}
+                onChange={(e) => {
+                  setJobType(e.target.value);
+                  if (submitAttempted) setErrors((prev) => ({ ...prev, jobTypeText: undefined }));
+                }}
+              >
+                <option value="">اختر النوع (اختياري)</option>
+                {JOB_TYPES.map((x) => (
+                  <option key={x.key} value={x.key}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+
+              {jobType === 'other' && (
+                <div style={{ marginTop: 10 }}>
+                  <input
+                    className={`form-input ${errors.jobTypeText ? 'error' : ''}`}
+                    value={jobTypeText}
+                    onChange={(e) => {
+                      setJobTypeText(e.target.value);
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, jobTypeText: undefined }));
+                    }}
+                    placeholder="اكتب النوع"
+                    maxLength={60}
+                  />
+                  {errors.jobTypeText && <div className="form-error">{errors.jobTypeText}</div>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {category === 'services' && (
+            <div className="form-group">
+              <label className="form-label">نوع الخدمة</label>
+              <select
+                className="form-select"
+                value={serviceType}
+                onChange={(e) => {
+                  setServiceType(e.target.value);
+                  if (submitAttempted) setErrors((prev) => ({ ...prev, serviceTypeText: undefined }));
+                }}
+              >
+                <option value="">اختر النوع (اختياري)</option>
+                {SERVICE_TYPES.map((x) => (
+                  <option key={x.key} value={x.key}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+
+              {serviceType === 'other' && (
+                <div style={{ marginTop: 10 }}>
+                  <input
+                    className={`form-input ${errors.serviceTypeText ? 'error' : ''}`}
+                    value={serviceTypeText}
+                    onChange={(e) => {
+                      setServiceTypeText(e.target.value);
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, serviceTypeText: undefined }));
+                    }}
+                    placeholder="اكتب النوع"
+                    maxLength={60}
+                  />
+                  {errors.serviceTypeText && <div className="form-error">{errors.serviceTypeText}</div>}
+                </div>
+              )}
             </div>
           )}
 
