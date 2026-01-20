@@ -367,7 +367,9 @@ function presetMergeWithCounts(preset, countsMap) {
 export default function CategoryListings({ category, initialListings = [] }) {
   const PAGE_SIZE = 24;
 
-  const [view, setView] = useState('grid'); // grid | list | map
+  // ✅ grid | list | map
+  // ملاحظة: نخلي الافتراضي grid (وتقدر تغييره لاحقاً إلى map لو رغبت)
+  const [view, setView] = useState('grid');
   const [q, setQ] = useState('');
 
   const [items, setItems] = useState(() => (Array.isArray(initialListings) ? initialListings : []));
@@ -961,15 +963,31 @@ const phoneBrandOptions = useMemo(() => {
 
         <div className="sooq-controlsRow">
           <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <div className="row" style={{ gap: 8 }}>
-              <button className={`btn ${view === 'grid' ? 'btnPrimary' : ''}`} onClick={() => setView('grid')}>
-                ◼️ شبكة
+            {/* ✅ View Switch (Segmented) */}
+            <div className="sooq-viewSwitch" role="tablist" aria-label="تبديل العرض">
+              <button
+                type="button"
+                className={`sooq-viewBtn ${view === 'grid' ? 'isActive' : ''}`}
+                onClick={() => setView('grid')}
+              >
+                <span className="sooq-viewIco" aria-hidden="true">◼️</span>
+                <span className="sooq-viewTxt">شبكة</span>
               </button>
-              <button className={`btn ${view === 'list' ? 'btnPrimary' : ''}`} onClick={() => setView('list')}>
-                ☰ قائمة
+              <button
+                type="button"
+                className={`sooq-viewBtn ${view === 'list' ? 'isActive' : ''}`}
+                onClick={() => setView('list')}
+              >
+                <span className="sooq-viewIco" aria-hidden="true">☰</span>
+                <span className="sooq-viewTxt">قائمة</span>
               </button>
-              <button className={`btn ${view === 'map' ? 'btnPrimary' : ''}`} onClick={() => setView('map')}>
-                🗺️ خريطة
+              <button
+                type="button"
+                className={`sooq-viewBtn ${view === 'map' ? 'isActive' : ''}`}
+                onClick={() => setView('map')}
+              >
+                <span className="sooq-viewIco" aria-hidden="true">🗺️</span>
+                <span className="sooq-viewTxt">خريطة</span>
               </button>
             </div>
 
@@ -996,15 +1014,11 @@ const phoneBrandOptions = useMemo(() => {
         <HomeMapView listings={filtered} />
       ) : (
         <>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: view === 'grid' ? 'repeat(auto-fill, minmax(240px, 1fr))' : '1fr',
-              gap: 12,
-            }}
-          >
+          <div className={`sooq-results ${view === 'grid' ? 'sooq-resultsGrid' : 'sooq-resultsList'}`}>
             {filtered.map((l) => (
-              <ListingCard key={l.id} listing={l} />
+              <div key={l.id} className="sooq-item">
+                <ListingCard listing={l} variant={view} view={view} />
+              </div>
             ))}
           </div>
 
@@ -1191,10 +1205,74 @@ const phoneBrandOptions = useMemo(() => {
           font-weight: 900;
         }
 
+        /* ====== View switch (Segmented) ====== */
+        .sooq-viewSwitch {
+          display: inline-flex;
+          border: 1px solid #e2e8f0;
+          background: rgba(255, 255, 255, 0.7);
+          border-radius: 999px;
+          padding: 4px;
+          gap: 4px;
+          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.06);
+        }
+        .sooq-viewBtn {
+          border: 0;
+          background: transparent;
+          cursor: pointer;
+          padding: 8px 10px;
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          font-weight: 900;
+          font-size: 13px;
+          color: #334155;
+          white-space: nowrap;
+          user-select: none;
+        }
+        .sooq-viewBtn.isActive {
+          background: #0f172a;
+          color: #fff;
+          box-shadow: 0 10px 16px rgba(15, 23, 42, 0.25);
+        }
+        .sooq-viewIco {
+          font-size: 14px;
+          line-height: 1;
+        }
+
+        /* ====== Results layout ====== */
+        .sooq-results {
+          width: 100%;
+        }
+        /* ✅ Grid محترم: الجوال = عمودين ثابتين، الشاشات الأكبر = auto-fill */
+        .sooq-resultsGrid {
+          display: grid;
+          gap: 12px;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        @media (min-width: 640px) {
+          .sooq-resultsGrid {
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+          }
+        }
+
+        /* ✅ List: عنصر واحد بالصف */
+        .sooq-resultsList {
+          display: grid;
+          gap: 10px;
+          grid-template-columns: 1fr;
+        }
+        .sooq-item {
+          min-width: 0;
+        }
+
         @media (max-width: 520px) {
           .sooq-taxWrap { padding: 10px 8px; }
           .sooq-chips { padding: 6px; }
           .sooq-chip { padding: 8px 9px; font-size: 12px; }
+          /* أيقونات فقط للجوال لتقليل الزحمة */
+          .sooq-viewTxt { display: none; }
+          .sooq-viewBtn { padding: 10px 12px; }
         }
 
       `}</style>
