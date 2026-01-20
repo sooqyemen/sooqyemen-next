@@ -12,15 +12,6 @@ import EmptyState from '@/components/EmptyState';
 import './home.css';
 import { loadFirebaseClient, scheduleIdleCallback } from '@/lib/firebaseLoader';
 
-// ✅ Taxonomy (الفروع الهرمية)
-import {
-  inferListingTaxonomy,
-  carMakeLabel,
-  phoneBrandLabel,
-  dealTypeLabel,
-  propertyTypeLabel,
-} from '@/lib/taxonomy';
-
 // تحميل ديناميكي للخريطة (تجنب SSR لمشاكل Leaflet)
 const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
   ssr: false,
@@ -401,25 +392,7 @@ export default function HomePageClient({ initialListings = [] }) {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  // ✅ فلاتر الفروع (هرمية)
-  const [carMakeFilter, setCarMakeFilter] = useState('all');
-  const [phoneBrandFilter, setPhoneBrandFilter] = useState('all');
-  const [dealTypeFilter, setDealTypeFilter] = useState('all');
-  const [propertyTypeFilter, setPropertyTypeFilter] = useState('all');
   const [viewMode, setViewMode] = useState('grid');
-
-  // reset branch filters
-  useEffect(() => {
-    setCarMakeFilter('all');
-    setPhoneBrandFilter('all');
-    setDealTypeFilter('all');
-    setPropertyTypeFilter('all');
-  }, [selectedCategory]);
-
-  useEffect(() => {
-    // عند تغيير (بيع/إيجار) نعيد نوع العقار
-    setPropertyTypeFilter('all');
-  }, [dealTypeFilter]);
 
   useEffect(() => {
     aliveRef.current = true;
@@ -593,24 +566,19 @@ export default function HomePageClient({ initialListings = [] }) {
   const handleCategoryClick = (category) => {
     if (!category) return;
 
-    // رجوع للكل
+    // ✅ في الصفحة الرئيسية: "الكل" يبقى فلتر داخل نفس الصفحة
     if (category.key === 'all') {
       setSelectedCategory('all');
-      setCarMakeFilter('all');
-      setPhoneBrandFilter('all');
-      setDealTypeFilter('all');
-      setPropertyTypeFilter('all');
       return;
     }
 
-    // ✅ أول ضغطة: فلترة داخل الصفحة
-    if (selectedCategory !== category.key) {
-      setSelectedCategory(category.key);
+    // ✅ باقي الأقسام: تحويل لصفحة القسم (مثل قبل) بدون فلترة داخل الرئيسية
+    if (category.href) {
+      router.push(category.href);
       return;
     }
 
-    // ✅ ضغط ثانية على نفس القسم: يفتح صفحة القسم (اختياري)
-    if (category.href) router.push(category.href);
+    router.push(`/${category.key}`);
   };
 
   const suggestions = useMemo(() => {
@@ -631,190 +599,6 @@ export default function HomePageClient({ initialListings = [] }) {
     });
     return Array.from(results).slice(0, 8);
   }, [search, listings]);
-
-  // ✅ قاعدة لحساب الفروع: نفس الفلترة (بحث + قسم) بدون تطبيق فروع
-  const baseForBranches = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const catSelected = normalizeCategoryKey(selectedCategory || 'all');
-
-    return listings.filter((listing) => {
-      const listingCat = normalizeCategoryKey(listing.category);
-      if (catSelected !== 'all' && listingCat !== catSelected) return false;
-      if (!q) return true;
-
-      const title = safeText(listing.title).toLowerCase();
-      const desc = safeText(listing.description).toLowerCase();
-      const city = safeText(listing.city).toLowerCase();
-      return title.includes(q) || desc.includes(q) || city.includes(q);
-    });
-  }, [search, listings, selectedCategory]);
-
-  // ✅ خيارات الفروع (تظهر فقط لما تختار قسم)
-  const carMakeOptions = useMemo(() => {
-    const catSelected = normalizeCategoryKey(selectedCategory || 'all');
-    if (catSelected !== 'cars') return [];
-    const m = new Map();
-
-    baseForBranches.forEach((l) => {
-      let key = String(l?.carMake || '').trim();
-      const txt = String(l?.carMakeText || '').trim();
-
-      if (!key) {
-        try {
-          const tax = inferListingTaxonomy(l || {}, 'cars') || {};
-          key = String(tax.carMake || '').trim();
-        } catch {
-          key = '';
-        }
-      }
-      if (!key && txt) key = 'other';
-      if (!key) return;
-
-      m.set(key, (m.get(key) || 0) + 1);
-    });
-
-    const arr = Array.from(m.entries()).map(([key, count]) => ({
-      key,
-      count,
-      label: key === 'other' ? 'أخرى' : (carMakeLabel(key) || key),
-    }));
-
-    arr.sort((a, b) => (b.count - a.count) || a.label.localeCompare(b.label, 'ar'));
-    // خلّي "أخرى" آخر شي
-    return arr.sort((a, b) => (a.key === 'other') - (b.key === 'other'));
-  }, [baseForBranches, selectedCategory]);
-
-  const phoneBrandOptions = useMemo(() => {
-    const catSelected = normalizeCategoryKey(selectedCategory || 'all');
-    if (catSelected !== 'phones') return [];
-    const m = new Map();
-
-    baseForBranches.forEach((l) => {
-      let key = String(l?.phoneBrand || '').trim();
-      const txt = String(l?.phoneBrandText || '').trim();
-
-      if (!key) {
-        try {
-          const tax = inferListingTaxonomy(l || {}, 'phones') || {};
-          key = String(tax.phoneBrand || '').trim();
-        } catch {
-          key = '';
-        }
-      }
-      if (!key && txt) key = 'other';
-      if (!key) return;
-
-      m.set(key, (m.get(key) || 0) + 1);
-    });
-
-    const arr = Array.from(m.entries()).map(([key, count]) => ({
-      key,
-      count,
-      label: key === 'other' ? 'أخرى' : (phoneBrandLabel(key) || key),
-    }));
-
-    arr.sort((a, b) => (b.count - a.count) || a.label.localeCompare(b.label, 'ar'));
-    return arr.sort((a, b) => (a.key === 'other') - (b.key === 'other'));
-  }, [baseForBranches, selectedCategory]);
-
-  const dealTypeOptions = useMemo(() => {
-    const catSelected = normalizeCategoryKey(selectedCategory || 'all');
-    if (catSelected !== 'realestate') return [];
-    const m = new Map();
-
-    baseForBranches.forEach((l) => {
-      let key = String(l?.dealType || '').trim();
-      if (!key) {
-        try {
-          const tax = inferListingTaxonomy(l || {}, 'realestate') || {};
-          key = String(tax.dealType || '').trim();
-        } catch {
-          key = '';
-        }
-      }
-      if (!key) return;
-      m.set(key, (m.get(key) || 0) + 1);
-    });
-
-    const arr = Array.from(m.entries()).map(([key, count]) => ({
-      key,
-      count,
-      label: dealTypeLabel(key) || key,
-    }));
-    arr.sort((a, b) => (b.count - a.count));
-    return arr;
-  }, [baseForBranches, selectedCategory]);
-
-  const dealFilteredCount = useMemo(() => {
-    const catSelected = normalizeCategoryKey(selectedCategory || 'all');
-    if (catSelected !== 'realestate') return 0;
-    if (dealTypeFilter === 'all') return baseForBranches.length;
-
-    let c = 0;
-    baseForBranches.forEach((l) => {
-      let deal = String(l?.dealType || '').trim();
-      if (!deal) {
-        try {
-          const tax = inferListingTaxonomy(l || {}, 'realestate') || {};
-          deal = String(tax.dealType || '').trim();
-        } catch {
-          deal = '';
-        }
-      }
-      if (deal === dealTypeFilter) c += 1;
-    });
-    return c;
-  }, [baseForBranches, selectedCategory, dealTypeFilter]);
-
-
-
-  const propertyTypeOptions = useMemo(() => {
-    const catSelected = normalizeCategoryKey(selectedCategory || 'all');
-    if (catSelected !== 'realestate') return [];
-    if (dealTypeFilter === 'all') return []; // ما نعرض أنواع العقار إلا بعد اختيار بيع/إيجار
-
-    const m = new Map();
-    baseForBranches.forEach((l) => {
-      // فلترة بيع/إيجار أولاً
-      let deal = String(l?.dealType || '').trim();
-      if (!deal) {
-        try {
-          const tax = inferListingTaxonomy(l || {}, 'realestate') || {};
-          deal = String(tax.dealType || '').trim();
-        } catch {
-          deal = '';
-        }
-      }
-      if (deal !== dealTypeFilter) return;
-
-      let key = String(l?.propertyType || '').trim();
-      const txt = String(l?.propertyTypeText || '').trim();
-
-      if (!key) {
-        try {
-          const tax = inferListingTaxonomy(l || {}, 'realestate') || {};
-          key = String(tax.propertyType || '').trim();
-        } catch {
-          key = '';
-        }
-      }
-      if (!key && txt) key = 'other';
-      if (!key) return;
-
-      m.set(key, (m.get(key) || 0) + 1);
-    });
-
-    const arr = Array.from(m.entries()).map(([key, count]) => ({
-      key,
-      count,
-      label: key === 'other' ? 'أخرى' : (propertyTypeLabel(key) || key),
-    }));
-
-    arr.sort((a, b) => (b.count - a.count) || a.label.localeCompare(b.label, 'ar'));
-    return arr.sort((a, b) => (a.key === 'other') - (b.key === 'other'));
-  }, [baseForBranches, selectedCategory, dealTypeFilter]);
-
-
 
   const filteredListings = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -863,19 +647,13 @@ export default function HomePageClient({ initialListings = [] }) {
           <div className="container">
             <div className="categories-container" aria-label="أقسام الإعلانات">
               <div className="categories-scroll" role="tablist">
-                {(normalizeCategoryKey(selectedCategory || 'all') === 'all'
-                  ? CATEGORY_CONFIG
-                  : [
-                      { key: 'all', label: 'رجوع', icon: '⬅️', href: '/' },
-                      CATEGORY_CONFIG.find((c) => c.key === selectedCategory) || CATEGORY_CONFIG[0],
-                    ]
-                ).map((category) => {
+                {CATEGORY_CONFIG.map((category) => {
                   const isActive = selectedCategory === category.key;
                   return (
                     <button
                       key={category.key}
                       type="button"
-                      className={`category-button focus-ring ${isActive ? 'active' : ''} ${category.key === 'all' && selectedCategory !== 'all' ? 'back' : ''}`}
+                      className={`category-button focus-ring ${isActive ? 'active' : ''}`}
                       onClick={() => handleCategoryClick(category)}
                       role="tab"
                       aria-selected={isActive}
@@ -889,127 +667,6 @@ export default function HomePageClient({ initialListings = [] }) {
                 })}
               </div>
             </div>
-
-
-            {/* ✅ فلاتر الفروع (تظهر بعد اختيار قسم) */}
-            {normalizeCategoryKey(selectedCategory || 'all') !== 'all' && (
-              <div className="subcats-wrap" aria-label="فلاتر الفروع">
-                {/* سيارات */}
-                {normalizeCategoryKey(selectedCategory) === 'cars' && (
-                  <div className="subcats-bar">
-                    <button
-                      type="button"
-                      className={`subcat-chip focus-ring ${carMakeFilter === 'all' ? 'active' : ''}`}
-                      onClick={() => setCarMakeFilter('all')}
-                    >
-                      الكل <span className="subcat-count">{baseForBranches.length}</span>
-                    </button>
-
-                    {carMakeOptions.map((o) => (
-                      <button
-                        key={o.key}
-                        type="button"
-                        className={`subcat-chip focus-ring ${carMakeFilter === o.key ? 'active' : ''}`}
-                        onClick={() => setCarMakeFilter(o.key)}
-                        title={o.label}
-                      >
-                        {o.label} <span className="subcat-count">{o.count}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* جوالات */}
-                {normalizeCategoryKey(selectedCategory) === 'phones' && (
-                  <div className="subcats-bar">
-                    <button
-                      type="button"
-                      className={`subcat-chip focus-ring ${phoneBrandFilter === 'all' ? 'active' : ''}`}
-                      onClick={() => setPhoneBrandFilter('all')}
-                    >
-                      الكل <span className="subcat-count">{baseForBranches.length}</span>
-                    </button>
-
-                    {phoneBrandOptions.map((o) => (
-                      <button
-                        key={o.key}
-                        type="button"
-                        className={`subcat-chip focus-ring ${phoneBrandFilter === o.key ? 'active' : ''}`}
-                        onClick={() => setPhoneBrandFilter(o.key)}
-                        title={o.label}
-                      >
-                        {o.label} <span className="subcat-count">{o.count}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* عقارات */}
-                {normalizeCategoryKey(selectedCategory) === 'realestate' && (
-                  <div className="subcats-bar">
-                    {dealTypeFilter !== 'all' && (
-                      <button
-                        type="button"
-                        className="subcat-back focus-ring"
-                        onClick={() => {
-                          setDealTypeFilter('all');
-                          setPropertyTypeFilter('all');
-                        }}
-                        title="رجوع"
-                      >
-                        ⬅️ بيع/إيجار
-                      </button>
-                    )}
-
-                    {dealTypeFilter === 'all' ? (
-                      <>
-                        <button
-                          type="button"
-                          className={`subcat-chip focus-ring ${dealTypeFilter === 'all' ? 'active' : ''}`}
-                          onClick={() => setDealTypeFilter('all')}
-                        >
-                          الكل <span className="subcat-count">{baseForBranches.length}</span>
-                        </button>
-
-                        {dealTypeOptions.map((o) => (
-                          <button
-                            key={o.key}
-                            type="button"
-                            className={`subcat-chip focus-ring ${dealTypeFilter === o.key ? 'active' : ''}`}
-                            onClick={() => setDealTypeFilter(o.key)}
-                            title={o.label}
-                          >
-                            {o.label} <span className="subcat-count">{o.count}</span>
-                          </button>
-                        ))}
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          className={`subcat-chip focus-ring ${propertyTypeFilter === 'all' ? 'active' : ''}`}
-                          onClick={() => setPropertyTypeFilter('all')}
-                        >
-                          كل الأنواع <span className="subcat-count">{dealFilteredCount}</span>
-                        </button>
-
-                        {propertyTypeOptions.map((o) => (
-                          <button
-                            key={o.key}
-                            type="button"
-                            className={`subcat-chip focus-ring ${propertyTypeFilter === o.key ? 'active' : ''}`}
-                            onClick={() => setPropertyTypeFilter(o.key)}
-                            title={o.label}
-                          >
-                            {o.label} <span className="subcat-count">{o.count}</span>
-                          </button>
-                        ))}
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
 
             <div className="toolbar">
               <div className="toolbar-left">
@@ -1167,73 +824,7 @@ export default function HomePageClient({ initialListings = [] }) {
               padding: 0.5rem;
             }
           }
-        
-
-          /* ====== Subcategory chips (taxonomy) ====== */
-          .subcats-wrap {
-            margin-top: 12px;
-            margin-bottom: 10px;
-          }
-
-          .subcats-bar {
-            display: flex;
-            gap: 8px;
-            overflow-x: auto;
-            padding: 8px;
-            border-radius: 12px;
-            background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(0,0,0,0.08);
-          }
-
-          .subcat-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 10px;
-            border-radius: 999px;
-            border: 1px solid rgba(0,0,0,0.10);
-            background: #fff;
-            font-size: 13px;
-            line-height: 1;
-            cursor: pointer;
-            white-space: nowrap;
-            user-select: none;
-          }
-
-          .subcat-chip.active {
-            border-color: rgba(0,0,0,0.20);
-            box-shadow: 0 8px 14px rgba(0,0,0,0.10);
-          }
-
-          .subcat-count {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 22px;
-            height: 18px;
-            padding: 0 6px;
-            border-radius: 999px;
-            background: rgba(0,0,0,0.06);
-            font-size: 12px;
-            font-weight: 800;
-          }
-
-          .subcat-back {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 10px;
-            border-radius: 999px;
-            border: 1px solid rgba(0,0,0,0.12);
-            background: #fff;
-            cursor: pointer;
-            white-space: nowrap;
-            user-select: none;
-            font-weight: 900;
-          }
-
-`}</style>
+        `}</style>
       </div>
     </>
   );
