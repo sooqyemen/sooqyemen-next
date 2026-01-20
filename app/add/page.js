@@ -28,9 +28,7 @@ import {
   MOTORCYCLE_BRANDS,
 } from '@/lib/taxonomy';
 
-const LocationPicker = dynamic(() => import('@/components/Map/LocationPicker'), {
-  ssr: false,
-});
+const LocationPicker = dynamic(() => import('@/components/Map/LocationPicker'), { ssr: false });
 
 // ✅ الأقسام الافتراضية (مطابقة تمامًا لمفاتيح Firestore عندك)
 const DEFAULT_CATEGORIES = [
@@ -71,7 +69,6 @@ export default function AddPage() {
 
   const [phoneBrand, setPhoneBrand] = useState(''); // phones
   const [phoneBrandText, setPhoneBrandText] = useState('');
-
   const [dealType, setDealType] = useState(''); // realestate: sale/rent
   const [propertyType, setPropertyType] = useState(''); // realestate: land/house...
   const [propertyTypeText, setPropertyTypeText] = useState('');
@@ -447,19 +444,17 @@ export default function AddPage() {
         carMake: category === 'cars' ? (carMake || null) : null,
         carMakeText: category === 'cars' && carMake === 'other' ? (carMakeText.trim() || null) : null,
 
+        // carModel: نخزّن key موحد + نص عند اختيار "أخرى" أو عند عدم توفر preset
         carModel:
           category === 'cars'
-            ? carModel && carModel !== 'other'
-              ? carModel
-              : carModelText.trim()
-                ? slugKey(carModelText)
-                : null
+            ? (carModel && carModel !== 'other' ? carModel : (carModelText.trim() ? slugKey(carModelText) : null))
             : null,
         carModelText:
           category === 'cars' && (carModel === 'other' || (carModelText.trim() && carModel !== 'other'))
             ? (carModelText.trim() || null)
             : null,
 
+        // بقية الأقسام
         electronicsType: category === 'electronics' ? (electronicsType || null) : null,
         electronicsTypeText: category === 'electronics' && electronicsType === 'other' ? (electronicsTypeText.trim() || null) : null,
 
@@ -515,6 +510,7 @@ export default function AddPage() {
         originalCurrency: currency,
         currencyBase: 'YER',
 
+        // ✅ نخزّن أكثر من صيغة لتضمن عمل الخريطة في كل مكان
         coords: lat != null && lng != null ? [lat, lng] : null,
         lat: lat != null ? lat : null,
         lng: lng != null ? lng : null,
@@ -630,7 +626,6 @@ export default function AddPage() {
       </div>
 
       <div className="form-grid">
-        {/* ✅ العمود الأول: النموذج */}
         <div className="form-container">
           <h2 className="form-section-title">معلومات الإعلان</h2>
 
@@ -692,9 +687,7 @@ export default function AddPage() {
             </div>
 
             <div className="form-group">
-              <label className="form-label required">
-                القسم {catsSource === 'fallback' ? '(Fallback)' : ''}
-              </label>
+              <label className="form-label required">القسم {catsSource === 'fallback' ? '(Fallback)' : ''}</label>
               <select
                 className={`form-select ${errors.category ? 'error' : ''}`}
                 value={category}
@@ -1056,12 +1049,15 @@ export default function AddPage() {
                     value={heavyEquipmentTypeText}
                     onChange={(e) => {
                       setHeavyEquipmentTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, heavyEquipmentTypeText: undefined }));
+                      if (submitAttempted)
+                        setErrors((prev) => ({ ...prev, heavyEquipmentTypeText: undefined }));
                     }}
                     placeholder="اكتب النوع"
                     maxLength={60}
                   />
-                  {errors.heavyEquipmentTypeText && <div className="form-error">{errors.heavyEquipmentTypeText}</div>}
+                  {errors.heavyEquipmentTypeText && (
+                    <div className="form-error">{errors.heavyEquipmentTypeText}</div>
+                  )}
                 </div>
               )}
             </div>
@@ -1167,7 +1163,8 @@ export default function AddPage() {
                     value={maintenanceTypeText}
                     onChange={(e) => {
                       setMaintenanceTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, maintenanceTypeText: undefined }));
+                      if (submitAttempted)
+                        setErrors((prev) => ({ ...prev, maintenanceTypeText: undefined }));
                     }}
                     placeholder="اكتب النوع"
                     maxLength={60}
@@ -1241,7 +1238,8 @@ export default function AddPage() {
                     value={homeToolsTypeText}
                     onChange={(e) => {
                       setHomeToolsTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, homeToolsTypeText: undefined }));
+                      if (submitAttempted)
+                        setErrors((prev) => ({ ...prev, homeToolsTypeText: undefined }));
                     }}
                     placeholder="اكتب النوع"
                     maxLength={60}
@@ -1315,7 +1313,8 @@ export default function AddPage() {
                     value={animalTypeText}
                     onChange={(e) => {
                       setAnimalTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, animalTypeText: undefined }));
+                      if (submitAttempted)
+                        setErrors((prev) => ({ ...prev, animalTypeText: undefined }));
                     }}
                     placeholder="اكتب النوع"
                     maxLength={60}
@@ -1389,7 +1388,8 @@ export default function AddPage() {
                     value={serviceTypeText}
                     onChange={(e) => {
                       setServiceTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, serviceTypeText: undefined }));
+                      if (submitAttempted)
+                        setErrors((prev) => ({ ...prev, serviceTypeText: undefined }));
                     }}
                     placeholder="اكتب النوع"
                     maxLength={60}
@@ -1576,7 +1576,7 @@ export default function AddPage() {
           </div>
         </div>
 
-        {/* ✅ العمود الثاني: الخريطة */}
+        {/* الخريطة */}
         <div className="map-container">
           <div className="map-header">
             <h2 className="form-section-title">
