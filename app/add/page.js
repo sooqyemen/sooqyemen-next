@@ -1651,7 +1651,7 @@ export default function AddPage() {
 
         <div className="final-notes">
           <p>
-            بعد النشر، يمكنك متابعة إعلانك من قسم <strong>"إعلاناتي"</strong>
+            بعد النشر، يمكنك متابعة إعلانك من قسم <strong>&quot;إعلاناتي&quot;</strong>
           </p>
         </div>
       </div>
