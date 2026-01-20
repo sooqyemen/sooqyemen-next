@@ -332,28 +332,37 @@ const PROPERTY_TYPES_PRESET = [
 ];
 
 function presetMergeWithCounts(preset, countsMap) {
+  const safeMap = countsMap && typeof countsMap.get === 'function' && typeof countsMap.entries === 'function' ? countsMap : new Map();
+
   const used = new Set();
   const out = [];
 
   // 1) preset in desired order
-  for (const p of preset) {
-    const k = safeStr(p.key);
+  for (const p of (Array.isArray(preset) ? preset : [])) {
+    const k = safeStr(p?.key);
     if (!k) continue;
     used.add(k);
-    const c = countsMap.get(k) || 0;
-    out.push({ key: k, label: p.label, count: c, color: p.color });
+    const c = safeMap.get(k) || 0;
+    const label = safeStr(p?.label) || k;
+    const color = p?.color;
+    // IMPORTANT: return an ARRAY so it can be destructured like ([k,c])
+    out.push([k, c, label, color]);
   }
 
   // 2) add any extra keys discovered in data but not in preset
-  for (const [k, c] of countsMap.entries()) {
+  const extras = [];
+  for (const [k, c] of safeMap.entries()) {
     const kk = safeStr(k);
     if (!kk || used.has(kk)) continue;
     used.add(kk);
-    out.push({ key: kk, label: kk, count: c });
+    extras.push([kk, c || 0, kk, undefined]);
   }
 
-  return out;
+  // Sort extras by count (desc)
+  extras.sort((a, b) => (b?.[1] || 0) - (a?.[1] || 0));
+  return out.concat(extras);
 }
+
 
 export default function CategoryListings({ category, initialListings = [] }) {
   const PAGE_SIZE = 24;
@@ -840,7 +849,7 @@ if (showCarsTax) {
                   text={label}
                   count={c}
                   icon="📱"
-                  dotColor={CAT_COLOR}
+                  dotColor={colorForKey(k)}
                 />
               );
             })}
@@ -857,6 +866,12 @@ if (showCarsTax) {
       const visibleDealOptions = hasDeal ? dealTypeOptions.filter(([k]) => k === dealType) : dealTypeOptions;
 
       const dealDot = (k) => (k === 'sale' ? '#0ea5e9' : k === 'rent' ? '#f59e0b' : CAT_COLOR);
+
+      const propertyTypeDot = (k) => {
+        const kk = String(k || '').trim();
+        const found = PROPERTY_TYPES_PRESET.find((x) => String(x?.key || '').trim() === kk);
+        return found?.color || colorForKey(`property:${kk}`) || CAT_COLOR;
+      };
 
       return (
         <div className="sooq-taxWrap" aria-label="فلترة العقارات">
@@ -902,7 +917,7 @@ if (showCarsTax) {
                       text={label}
                       count={c}
                       icon="🏡"
-                      dotColor={CAT_COLOR}
+                      dotColor={propertyTypeDot(k)}
                     />
                   );
                 })}
