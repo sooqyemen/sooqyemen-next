@@ -58,7 +58,6 @@ function normalizeSlug(v) {
 }
 
 // ✅ لتفادي ظهور أقسام "فاضية" بسبب اختلافات حفظ قيمة category في الإعلانات القديمة
-// نجلب نفس القسم بعدة قيم محتملة (حتى 10 قيم - حد Firestore لــ in)
 function categoryVariants(single) {
   const s = normalizeSlug(single);
   if (!s) return [];
@@ -106,7 +105,7 @@ function categoryVariants(single) {
 function safeStr(v) {
   return String(v || '').trim();
 }
-// ✅ ألوان ثابتة للفلاتر (ماركات/موديلات) - توزيع تلقائي من Palette
+// ✅ ألوان ثابتة للفلاتر
 const TAX_PALETTE = [
   '#2563eb', '#16a34a', '#7c3aed', '#0ea5e9', '#f59e0b', '#f97316',
   '#ef4444', '#db2777', '#8b5cf6', '#14b8a6', '#84cc16', '#a16207', '#64748b'
@@ -119,7 +118,6 @@ function colorForKey(key) {
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   return TAX_PALETTE[h % TAX_PALETTE.length];
 }
-
 
 function pickTaxonomy(listing, categoryKey) {
   const inferred = inferListingTaxonomy(listing || {}, categoryKey) || {};
@@ -141,8 +139,7 @@ function pickTaxonomy(listing, categoryKey) {
   return out;
 }
 
-
-// ====== Presets (عرض فخم حتى لو العدد = 0) ======
+// ====== Presets ======
 const CAR_MAKES_PRESET = [
   { key: 'toyota', label: 'تويوتا' },
   { key: 'nissan', label: 'نيسان' },
@@ -160,15 +157,13 @@ const CAR_MAKES_PRESET = [
   { key: 'bmw', label: 'BMW' },
   { key: 'audi', label: 'Audi' },
   { key: 'volkswagen', label: 'Volkswagen' },
-  // شائعة في اليمن
   { key: 'mg', label: 'MG' },
   { key: 'haval', label: 'هافال' },
-  // طلبك (باص/شاص) — نخليها كخيارات جاهزة (لو ما لها نتائج تكون 0)
   { key: 'bus', label: 'باص' },
   { key: 'shas', label: 'شاص' },
   { key: 'other', label: 'أخرى' },
 ];
-// ✅ موديلات شائعة لكل ماركة (قابل للتوسع لاحقاً)
+
 const CAR_MODELS_BY_MAKE = {
   toyota: [
     { key: 'hilux', label: 'هايلوكس' },
@@ -251,58 +246,6 @@ function carModelLabelLocal(makeKey, modelKey) {
   return found?.label || modelKey || 'أخرى';
 }
 
-// ✅ محاولة استنتاج موديل السيارة من الحقول أو من العنوان/الوصف (fallback)
-function detectCarModel(listing, makeKey) {
-  const mk = safeStr(makeKey).toLowerCase();
-  if (!mk) return '';
-
-  const raw =
-    listing?.carModel ??
-    listing?.model ??
-    listing?.vehicleModel ??
-    listing?.subModel ??
-    listing?.subType ??
-    listing?.modelName ??
-    '';
-
-  const normalize = (v) =>
-    safeStr(v)
-      .toLowerCase()
-      .replace(/\s+/g, '_')
-      .replace(/-/g, '_')
-      .replace(/__+/g, '_');
-
-  const rawNorm = normalize(raw);
-  if (rawNorm) return rawNorm;
-
-  const txt = `${safeStr(listing?.title)} ${safeStr(listing?.description)}`.toLowerCase();
-  const presets = CAR_MODELS_BY_MAKE[mk] || [];
-
-  for (const it of presets) {
-    const key = safeStr(it.key).toLowerCase();
-    const label = safeStr(it.label).toLowerCase();
-    const variants = [key, label];
-
-    // مرادفات انجليزي شائعة لبعض الموديلات
-    if (key === 'land_cruiser') variants.push('landcruiser', 'land cruiser', 'lc');
-    if (key === 'hilux') variants.push('hi lux');
-    if (key === 'xtrail') variants.push('x-trail', 'xtrail');
-    if (key === 'crv') variants.push('cr-v', 'crv');
-    if (key === 'mazda3') variants.push('mazda 3');
-    if (key === 'mazda6') variants.push('mazda 6');
-
-    for (const v of variants) {
-      const vv = String(v || '').trim();
-      if (vv && txt.includes(vv)) return key;
-    }
-  }
-
-  return '';
-}
-
-
-
-
 const PHONE_BRANDS_PRESET = [
   { key: 'iphone', label: 'آيفون' },
   { key: 'samsung', label: 'سامسونج' },
@@ -316,7 +259,6 @@ const PHONE_BRANDS_PRESET = [
   { key: 'other', label: 'أخرى' },
 ];
 
-// ✅ أنواع العقار + ألوان (تظهر حتى لو 0)
 const PROPERTY_TYPES_PRESET = [
   { key: 'land', label: 'أرض', color: '#0ea5e9' },
   { key: 'apartment', label: 'شقة', color: '#7c3aed' },
@@ -333,11 +275,9 @@ const PROPERTY_TYPES_PRESET = [
 
 function presetMergeWithCounts(preset, countsMap) {
   const safeMap = countsMap && typeof countsMap.get === 'function' && typeof countsMap.entries === 'function' ? countsMap : new Map();
-
   const used = new Set();
   const out = [];
 
-  // 1) preset in desired order
   for (const p of (Array.isArray(preset) ? preset : [])) {
     const k = safeStr(p?.key);
     if (!k) continue;
@@ -345,11 +285,9 @@ function presetMergeWithCounts(preset, countsMap) {
     const c = safeMap.get(k) || 0;
     const label = safeStr(p?.label) || k;
     const color = p?.color;
-    // IMPORTANT: return an ARRAY so it can be destructured like ([k,c])
     out.push([k, c, label, color]);
   }
 
-  // 2) add any extra keys discovered in data but not in preset
   const extras = [];
   for (const [k, c] of safeMap.entries()) {
     const kk = safeStr(k);
@@ -358,7 +296,6 @@ function presetMergeWithCounts(preset, countsMap) {
     extras.push([kk, c || 0, kk, undefined]);
   }
 
-  // Sort extras by count (desc)
   extras.sort((a, b) => (b?.[1] || 0) - (a?.[1] || 0));
   return out.concat(extras);
 }
@@ -378,7 +315,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
 
   const lastDocRef = useRef(null);
   const cursorReadyRef = useRef(false);
-
   const loadMoreRef = useRef(null);
   const aliveRef = useRef(true);
 
@@ -395,10 +331,10 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const variants = useMemo(() => categoryVariants(single), [single]);
 
   // ✅ States للفروع الهرمية
-  const [carMake, setCarMake] = useState('');   const [carModel, setCarModel] = useState('');
-// '' = الكل
+  const [carMake, setCarMake] = useState('');   
+  const [carModel, setCarModel] = useState('');
   const [phoneBrand, setPhoneBrand] = useState('');
-  const [dealType, setDealType] = useState(''); // '' = الكل
+  const [dealType, setDealType] = useState('');
   const [propertyType, setPropertyType] = useState('');
 
   useEffect(() => {
@@ -445,17 +381,14 @@ export default function CategoryListings({ category, initialListings = [] }) {
         .limit(PAGE_SIZE);
 
       const snap = await ref.get();
-
       const data = snap.docs.map((d) => normalizeListing({ id: d.id, ...d.data() })).filter(Boolean);
 
       if (!aliveRef.current) return;
-
       setItems(data);
 
       const last = snap.docs[snap.docs.length - 1] || null;
       lastDocRef.current = last;
       cursorReadyRef.current = true;
-
       setHasMore(snap.docs.length === PAGE_SIZE);
       setLoading(false);
     } catch (e) {
@@ -470,27 +403,21 @@ export default function CategoryListings({ category, initialListings = [] }) {
   async function ensureCursorReady() {
     if (cursorReadyRef.current) return;
     if (!single) return;
-
     try {
       const ref = db
         .collection('listings')
         .where('category', variants.length > 1 ? 'in' : '==', variants.length > 1 ? variants : single)
         .orderBy('createdAt', 'desc')
         .limit(PAGE_SIZE);
-
       const snap = await ref.get();
       lastDocRef.current = snap.docs[snap.docs.length - 1] || null;
       cursorReadyRef.current = true;
-
       const page1 = snap.docs.map((d) => normalizeListing({ id: d.id, ...d.data() })).filter(Boolean);
       if (!aliveRef.current) return;
-
-      // merge without duplicates
       setItems((prev) => {
         const existing = new Set(prev.map((x) => x.id));
         return [...prev, ...page1.filter((x) => !existing.has(x.id))];
       });
-
       setHasMore(snap.docs.length === PAGE_SIZE);
     } catch (e) {
       console.error(e);
@@ -500,13 +427,10 @@ export default function CategoryListings({ category, initialListings = [] }) {
   async function fetchMore() {
     if (!hasMore || loadingMore) return;
     if (!single) return;
-
     setLoadingMore(true);
     setErr('');
-
     try {
       await ensureCursorReady();
-
       const lastDoc = lastDocRef.current;
       if (!lastDoc) {
         if (!aliveRef.current) return;
@@ -514,28 +438,21 @@ export default function CategoryListings({ category, initialListings = [] }) {
         setLoadingMore(false);
         return;
       }
-
       const ref = db
         .collection('listings')
         .where('category', variants.length > 1 ? 'in' : '==', variants.length > 1 ? variants : single)
         .orderBy('createdAt', 'desc')
         .startAfter(lastDoc)
         .limit(PAGE_SIZE);
-
       const snap = await ref.get();
-
       const data = snap.docs.map((d) => normalizeListing({ id: d.id, ...d.data() })).filter(Boolean);
-
       if (!aliveRef.current) return;
-
       setItems((prev) => {
         const existing = new Set(prev.map((x) => x.id));
         return [...prev, ...data.filter((x) => !existing.has(x.id))];
       });
-
       const newLast = snap.docs[snap.docs.length - 1] || null;
       lastDocRef.current = newLast;
-
       setHasMore(snap.docs.length === PAGE_SIZE);
       setLoadingMore(false);
     } catch (e) {
@@ -546,7 +463,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
     }
   }
 
-  // ✅ initial SSR vs client fetch
   useEffect(() => {
     if (Array.isArray(initialListings) && initialListings.length > 0) {
       setItems(initialListings.map(normalizeListing).filter(Boolean));
@@ -561,21 +477,17 @@ export default function CategoryListings({ category, initialListings = [] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [single]);
 
-  // ✅ Infinite scroll (نوقفه في وضع الخريطة)
   useEffect(() => {
     if (view === 'map') return;
-
     const el = loadMoreRef.current;
     if (!el) return;
     if (!hasMore || loading || loadingMore) return;
-
     const obs = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) fetchMore();
       },
       { root: null, rootMargin: '800px 0px', threshold: 0 }
     );
-
     obs.observe(el);
     return () => {
       try {
@@ -585,7 +497,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, hasMore, loading, loadingMore, single]);
 
-  // ✅ Taxonomy enrich
   const itemsWithTax = useMemo(() => {
     const catKey = single || '';
     return items
@@ -606,20 +517,17 @@ export default function CategoryListings({ category, initialListings = [] }) {
       propertyTypes: new Map(),
     };
     if (!catKey) return out;
-
     const inc = (m, k) => {
       const kk = safeStr(k);
       if (!kk) return;
       m.set(kk, (m.get(kk) || 0) + 1);
     };
-
     for (const l of itemsWithTax) {
       const t = l._tax || {};
       if (catKey === 'cars') inc(out.carMakes, t.carMake || 'other');
       if (catKey === 'phones') inc(out.phoneBrands, t.phoneBrand || 'other');
       if (catKey === 'realestate') inc(out.dealTypes, t.dealType || '');
     }
-
     if (catKey === 'realestate') {
       const dealFilter = safeStr(dealType);
       for (const l of itemsWithTax) {
@@ -628,7 +536,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
         inc(out.propertyTypes, t.propertyType || 'other');
       }
     }
-
     return out;
   }, [itemsWithTax, single, dealType, carMake]);
 
@@ -653,7 +560,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
     }
 
     if (!query) return arr;
-
     return arr.filter((l) => {
       const title = safeStr(l.title).toLowerCase();
       const city = safeStr(l.city || l.region || l.locationLabel).toLowerCase();
@@ -668,24 +574,21 @@ export default function CategoryListings({ category, initialListings = [] }) {
 
   const carMakeOptions = useMemo(() => {
     const merged = presetMergeWithCounts(CAR_MAKES_PRESET, taxonomyCounts.carMakes);
-    // نعرض حتى 0 عشان تبقى واجهة فخمة وثابتة
     return merged.slice(0, 40);
   }, [taxonomyCounts.carMakes]);
 
-  
+  const carModelOptions = useMemo(() => {
+    const mk = safeStr(carMake);
+    if (!mk) return [];
+    const preset = CAR_MODELS_BY_MAKE[mk] || [];
+    const merged = presetMergeWithCounts(preset, taxonomyCounts.carModels);
+    return merged.slice(0, 80);
+  }, [carMake, taxonomyCounts.carModels]);
 
-const carModelOptions = useMemo(() => {
-  const mk = safeStr(carMake);
-  if (!mk) return [];
-  const preset = CAR_MODELS_BY_MAKE[mk] || [];
-  const merged = presetMergeWithCounts(preset, taxonomyCounts.carModels);
-  return merged.slice(0, 80);
-}, [carMake, taxonomyCounts.carModels]);
-const phoneBrandOptions = useMemo(() => {
+  const phoneBrandOptions = useMemo(() => {
     const merged = presetMergeWithCounts(PHONE_BRANDS_PRESET, taxonomyCounts.phoneBrands);
     return merged.slice(0, 40);
   }, [taxonomyCounts.phoneBrands]);
-
 
   const dealTypeOptions = useMemo(() => {
     return Array.from(taxonomyCounts.dealTypes.entries())
@@ -699,8 +602,6 @@ const phoneBrandOptions = useMemo(() => {
     return merged.slice(0, 60);
   }, [taxonomyCounts.propertyTypes]);
 
-
-  // ====== UI Chips (ستايل احترافي مثل الخريطة) ======
   const CAT_COLOR = useMemo(() => {
     if (single === 'cars') return '#2563eb';
     if (single === 'phones') return '#7c3aed';
@@ -719,27 +620,21 @@ const phoneBrandOptions = useMemo(() => {
     >
       <span className="sooq-chipDot" style={{ background: dotColor || CAT_COLOR }} />
       {icon ? (
-        <span className="sooq-chipIcon" aria-hidden="true">
-          {icon}
-        </span>
+        <span className="sooq-chipIcon" aria-hidden="true">{icon}</span>
       ) : null}
       <span className="sooq-chipText">{text}</span>
       {typeof count === 'number' ? <span className="sooq-chipCount">{count}</span> : null}
     </button>
   );
 
-
   const TaxonomyInner = () => {
     if (!single) return null;
-
-    // سيارات
     if (showCarsTax) {
       const mk = safeStr(carMake);
       const md = safeStr(carModel);
       const mkLabel = mk ? carMakeLabel(mk) : '';
       const modelsTotal = Array.from(taxonomyCounts.carModels.values()).reduce((a, b) => a + Number(b || 0), 0);
 
-      // 1) اختيار الماركة
       if (!mk) {
         return (
           <div className="sooq-taxSection" aria-label="فلترة ماركة السيارة">
@@ -747,10 +642,7 @@ const phoneBrandOptions = useMemo(() => {
             <div className="sooq-chips" role="tablist">
               <Chip
                 active={!mk}
-                onClick={() => {
-                  setCarMake('');
-                  setCarModel('');
-                }}
+                onClick={() => { setCarMake(''); setCarModel(''); }}
                 text="الكل"
                 count={itemsWithTax.length}
                 dotColor={CAT_COLOR}
@@ -759,10 +651,7 @@ const phoneBrandOptions = useMemo(() => {
                 <Chip
                   key={k}
                   active={mk === k}
-                  onClick={() => {
-                    setCarMake(k);
-                    setCarModel('');
-                  }}
+                  onClick={() => { setCarMake(k); setCarModel(''); }}
                   text={carMakeLabel(k)}
                   count={c}
                   dotColor={colorForKey(k)}
@@ -773,25 +662,19 @@ const phoneBrandOptions = useMemo(() => {
           </div>
         );
       }
-
-      // 2) اختيار الموديل داخل الماركة
       return (
         <div className="sooq-taxSection" aria-label="فلترة موديل السيارة">
           <div className="sooq-taxTitle">🚗 {mkLabel} — اختر الموديل</div>
           <div className="sooq-chips" role="tablist">
             <Chip
               active={false}
-              onClick={() => {
-                setCarMake('');
-                setCarModel('');
-              }}
+              onClick={() => { setCarMake(''); setCarModel(''); }}
               text="رجوع"
               icon="⬅️"
               count={undefined}
               dotColor={CAT_COLOR}
               title="رجوع لقائمة الماركات"
             />
-
             <Chip
               active={!md}
               onClick={() => setCarModel('')}
@@ -800,7 +683,6 @@ const phoneBrandOptions = useMemo(() => {
               dotColor={colorForKey(mk)}
               title={`عرض كل موديلات ${mkLabel}`}
             />
-
             {carModelOptions
               .filter(([k]) => safeStr(k) && safeStr(k) !== 'other')
               .map(([k, c]) => (
@@ -814,8 +696,6 @@ const phoneBrandOptions = useMemo(() => {
                   title={`${mkLabel} ${carModelLabelLocal(mk, k)}`}
                 />
               ))}
-
-            {/* أخرى */}
             {carModelOptions.some(([k]) => safeStr(k) === 'other') ? (
               <Chip
                 active={md === 'other'}
@@ -830,8 +710,6 @@ const phoneBrandOptions = useMemo(() => {
         </div>
       );
     }
-
-    // جوالات
     if (showPhonesTax) {
       return (
         <div className="sooq-taxSection" aria-label="فلترة ماركة الجوال">
@@ -856,16 +734,10 @@ const phoneBrandOptions = useMemo(() => {
         </div>
       );
     }
-
-    // عقارات
     if (showRealTax) {
       const hasDeal = !!safeStr(dealType);
-
-      // ✅ إذا اخترت (بيع) نخفي (إيجار) والعكس
       const visibleDealOptions = hasDeal ? dealTypeOptions.filter(([k]) => k === dealType) : dealTypeOptions;
-
       const dealDot = (k) => (k === 'sale' ? '#0ea5e9' : k === 'rent' ? '#f59e0b' : CAT_COLOR);
-
       const propertyTypeDot = (k) => {
         const kk = String(k || '').trim();
         const found = PROPERTY_TYPES_PRESET.find((x) => String(x?.key || '').trim() === kk);
@@ -875,29 +747,21 @@ const phoneBrandOptions = useMemo(() => {
       return (
         <div className="sooq-taxSection" aria-label="فلترة العقارات">
           <div className="sooq-taxTitle">🏡 فلترة العقارات</div>
-
           <div className="sooq-taxSub">نوع العملية</div>
           <div className="sooq-chips" role="tablist" aria-label="بيع أو إيجار">
             <Chip
               active={!dealType}
-              onClick={() => {
-                setDealType('');
-                setPropertyType('');
-              }}
+              onClick={() => { setDealType(''); setPropertyType(''); }}
               text="الكل"
               count={itemsWithTax.length}
             />
-
             {visibleDealOptions.map(([k, c]) => {
               const label = dealTypeLabel(k) || (k === 'sale' ? 'بيع' : k === 'rent' ? 'إيجار' : k);
               return (
                 <Chip
                   key={k}
                   active={dealType === k}
-                  onClick={() => {
-                    setDealType(k);
-                    setPropertyType('');
-                  }}
+                  onClick={() => { setDealType(k); setPropertyType(''); }}
                   text={label}
                   count={c}
                   icon="🏷️"
@@ -906,7 +770,6 @@ const phoneBrandOptions = useMemo(() => {
               );
             })}
           </div>
-
           {hasDeal && propertyTypeOptions.length > 0 ? (
             <>
               <div className="sooq-taxSub" style={{ marginTop: 10 }}>نوع العقار</div>
@@ -932,10 +795,8 @@ const phoneBrandOptions = useMemo(() => {
         </div>
       );
     }
-
     return null;
   };
-
 
   if (loading) {
     return (
@@ -958,7 +819,6 @@ const phoneBrandOptions = useMemo(() => {
     <div>
       <div className="sooq-filterShell">
         <TaxonomyInner />
-
         <div className="sooq-controlsRow">
           <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <div className="row" style={{ gap: 8 }}>
@@ -972,7 +832,6 @@ const phoneBrandOptions = useMemo(() => {
                 🗺️ خريطة
               </button>
             </div>
-
             <input
               className="input sooq-search"
               value={q}
@@ -983,7 +842,6 @@ const phoneBrandOptions = useMemo(() => {
         </div>
       </div>
 
-
       {filtered.length === 0 ? (
         <div className="card" style={{ padding: 16, textAlign: 'center' }}>
           <div style={{ fontWeight: 900 }}>لا توجد إعلانات مطابقة</div>
@@ -993,16 +851,12 @@ const phoneBrandOptions = useMemo(() => {
           </div>
         </div>
       ) : view === 'map' ? (
-        <HomeMapView listings={filtered} />
+        <div className="sooq-fade-in">
+             <HomeMapView listings={filtered} />
+        </div>
       ) : (
         <>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: view === 'grid' ? 'repeat(auto-fill, minmax(240px, 1fr))' : '1fr',
-              gap: 12,
-            }}
-          >
+          <div className={`sooq-resultsGrid ${view === 'list' ? 'is-list' : ''}`}>
             {filtered.map((l) => (
               <ListingCard key={l.id} listing={l} />
             ))}
@@ -1030,6 +884,39 @@ const phoneBrandOptions = useMemo(() => {
       )}
 
       <style jsx>{`
+        /* ====== تحسينات العرض (الشبكة والقائمة) ====== */
+        .sooq-resultsGrid {
+            display: grid;
+            gap: 16px; /* مسافة أوسع بين الكروت */
+            animation: fadeIn 0.4s ease-out;
+            padding-bottom: 20px;
+        }
+
+        /* وضع الشبكة: كروت متناسقة */
+        .sooq-resultsGrid:not(.is-list) {
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        }
+
+        /* وضع القائمة: تصميم التايم لاين الأنيق */
+        .sooq-resultsGrid.is-list {
+            grid-template-columns: 1fr;
+            max-width: 750px; /* تحديد العرض ليكون مريحاً للعين */
+            margin: 0 auto;   /* توسيط القائمة */
+            width: 100%;
+        }
+        
+        /* أنيميشن ناعم عند الظهور */
+        .sooq-fade-in {
+             animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ================================================= */
+
         .tax-wrap {
           margin-bottom: 12px;
           padding: 10px 12px;
@@ -1083,19 +970,21 @@ const phoneBrandOptions = useMemo(() => {
 
         /* ====== Filter shell (نفس شكل الخريطة للشبكة/القائمة) ====== */
         .sooq-filterShell {
-          margin-bottom: 12px;
-          padding: 12px 12px;
+          margin-bottom: 16px;
+          padding: 12px 14px;
           border-radius: 16px;
           background: rgba(255, 255, 255, 0.9);
           backdrop-filter: blur(10px);
           border: 1px solid #e2e8f0;
-          box-shadow: 0 12px 22px rgba(0, 0, 0, 0.10);
+          box-shadow: 0 12px 22px rgba(0, 0, 0, 0.06);
         }
         .sooq-taxSection {
           margin-bottom: 10px;
         }
         .sooq-controlsRow {
-          margin-top: 10px;
+          margin-top: 12px;
+          padding-top: 10px;
+          border-top: 1px solid rgba(0,0,0,0.05);
         }
         .sooq-search {
           flex: 1;
@@ -1132,10 +1021,7 @@ const phoneBrandOptions = useMemo(() => {
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
           scrollbar-width: none; /* Firefox */
-          padding: 8px;
-          border-radius: 14px;
-          background: rgba(255, 255, 255, 0.55);
-          backdrop-filter: blur(6px);
+          padding: 4px 2px;
           align-items: center;
         }
 
@@ -1147,7 +1033,7 @@ const phoneBrandOptions = useMemo(() => {
           display: inline-flex;
           align-items: center;
           gap: 8px;
-          padding: 8px 10px;
+          padding: 8px 12px;
           -webkit-appearance: none;
           appearance: none;
           border-radius: 999px !important;
@@ -1159,6 +1045,11 @@ const phoneBrandOptions = useMemo(() => {
           white-space: nowrap;
           user-select: none;
           font-weight: 900;
+          transition: all 0.2s ease;
+        }
+        .sooq-chip:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.06);
         }
         .sooq-chip.isDisabled {
           opacity: 0.55;
@@ -1172,14 +1063,15 @@ const phoneBrandOptions = useMemo(() => {
 
         .sooq-chip.isActive {
           border-color: rgba(0, 0, 0, 0.20);
-          box-shadow: 0 8px 14px rgba(0, 0, 0, 0.10);
+          box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+          transform: translateY(-1px);
         }
 
         .sooq-chipDot {
-          width: 10px;
-          height: 10px;
+          width: 8px;
+          height: 8px;
           border-radius: 50%;
-          flex: 0 0 10px;
+          flex: 0 0 8px;
         }
         .sooq-chipIcon {
           font-size: 14px;
@@ -1192,21 +1084,24 @@ const phoneBrandOptions = useMemo(() => {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          min-width: 22px;
+          min-width: 20px;
           height: 18px;
-          padding: 0 6px;
+          padding: 0 5px;
           border-radius: 999px;
           background: rgba(0, 0, 0, 0.06);
-          font-size: 12px;
-          font-weight: 900;
+          font-size: 11px;
+          font-weight: 800;
         }
 
         @media (max-width: 520px) {
           .sooq-taxWrap { padding: 10px 8px; }
-          .sooq-chips { padding: 6px; }
-          .sooq-chip { padding: 8px 9px; font-size: 12px; }
+          .sooq-chips { padding: 4px; }
+          .sooq-chip { padding: 7px 10px; font-size: 12px; }
+          .sooq-resultsGrid { gap: 12px; }
+          .sooq-resultsGrid:not(.is-list) {
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+          }
         }
-
       `}</style>
     </div>
   );
