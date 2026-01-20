@@ -251,63 +251,7 @@ function carModelLabelLocal(makeKey, modelKey) {
   return found?.label || modelKey || 'أخرى';
 }
 
-// ✅ محاولة استنتاج موديل السيارة من الحقول أو من العنوان/الوصف (fallback)
-function detectCarModel(listing, makeKey) {
-  const mk = safeStr(makeKey).toLowerCase();
-  if (!mk) return '';
 
-  const raw =
-    listing?.carModel ??
-    listing?.model ??
-    listing?.vehicleModel ??
-    listing?.subModel ??
-    listing?.subType ??
-    listing?.modelName ??
-    '';
-
-  const normalize = (v) =>
-    safeStr(v)
-      .toLowerCase()
-      .replace(/\s+/g, '_')
-      .replace(/-/g, '_')
-      .replace(/__+/g, '_');
-
-  const rawNorm = normalize(raw);
-  if (rawNorm) return rawNorm;
-
-  const txt = `${safeStr(listing?.title)} ${safeStr(listing?.description)}`.toLowerCase();
-  const presets = CAR_MODELS_BY_MAKE[mk] || [];
-
-  for (const it of presets) {
-    const key = safeStr(it.key).toLowerCase();
-    const label = safeStr(it.label).toLowerCase();
-    const variants = [key, label];
-
-    // مرادفات انجليزي شائعة لبعض الموديلات
-    if (key === 'land_cruiser') variants.push('landcruiser', 'land cruiser', 'lc');
-    if (key === 'hilux') variants.push('hi lux');
-    if (key === 'xtrail') variants.push('x-trail', 'xtrail');
-    if (key === 'crv') variants.push('cr-v', 'crv');
-    if (key === 'mazda3') variants.push('mazda 3');
-    if (key === 'mazda6') variants.push('mazda 6');
-
-    for (const v of variants) {
-      const vv = String(v || '').trim();
-      if (vv && txt.includes(vv)) return key;
-    }
-  }
-
-  return '';
-}
-
-    for (const v of variants) {
-      const vv = String(v || '').trim();
-      if (vv && txt.includes(vv)) return key;
-    }
-  }
-
-  return '';
-}
 
 
 
@@ -340,28 +284,37 @@ const PROPERTY_TYPES_PRESET = [
 ];
 
 function presetMergeWithCounts(preset, countsMap) {
+  const safeMap = countsMap && typeof countsMap.get === 'function' && typeof countsMap.entries === 'function' ? countsMap : new Map();
+
   const used = new Set();
   const out = [];
 
   // 1) preset in desired order
-  for (const p of preset) {
-    const k = safeStr(p.key);
+  for (const p of (Array.isArray(preset) ? preset : [])) {
+    const k = safeStr(p?.key);
     if (!k) continue;
     used.add(k);
-    const c = countsMap.get(k) || 0;
-    out.push({ key: k, label: p.label, count: c, color: p.color });
+    const c = safeMap.get(k) || 0;
+    const label = safeStr(p?.label) || k;
+    const color = p?.color;
+    // IMPORTANT: return an ARRAY so it can be destructured like ([k,c])
+    out.push([k, c, label, color]);
   }
 
   // 2) add any extra keys discovered in data but not in preset
-  for (const [k, c] of countsMap.entries()) {
+  const extras = [];
+  for (const [k, c] of safeMap.entries()) {
     const kk = safeStr(k);
     if (!kk || used.has(kk)) continue;
     used.add(kk);
-    out.push({ key: kk, label: kk, count: c });
+    extras.push([kk, c || 0, kk, undefined]);
   }
 
-  return out;
+  // Sort extras by count (desc)
+  extras.sort((a, b) => (b?.[1] || 0) - (a?.[1] || 0));
+  return out.concat(extras);
 }
+
 
 export default function CategoryListings({ category, initialListings = [] }) {
   const PAGE_SIZE = 24;
@@ -394,36 +347,18 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const variants = useMemo(() => categoryVariants(single), [single]);
 
   // ✅ States للفروع الهرمية
-  const [carMake, setCarMake] = useState('');
-  const [carModel, setCarModel] = useState(''); // '' = الكل
+  const [carMake, setCarMake] = useState('');   const [carModel, setCarModel] = useState('');
+// '' = الكل
   const [phoneBrand, setPhoneBrand] = useState('');
   const [dealType, setDealType] = useState(''); // '' = الكل
   const [propertyType, setPropertyType] = useState('');
 
   useEffect(() => {
     setCarMake('');
-    setCarModel('');
     setPhoneBrand('');
     setDealType('');
     setPropertyType('');
   }, [single]);
-
-  const canResetFilters = useMemo(() => {
-    const hasSearch = !!safeStr(q);
-    if (single === 'cars') return hasSearch || !!safeStr(carMake) || !!safeStr(carModel);
-    if (single === 'phones') return hasSearch || !!safeStr(phoneBrand);
-    if (single === 'realestate') return hasSearch || !!safeStr(dealType) || !!safeStr(propertyType);
-    return hasSearch;
-  }, [q, single, carMake, carModel, phoneBrand, dealType, propertyType]);
-
-  const resetAllFilters = useCallback(() => {
-    setQ('');
-    setCarMake('');
-    setCarModel('');
-    setPhoneBrand('');
-    setDealType('');
-    setPropertyType('');
-  }, []);
 
   const normalizeListing = (d) => {
     const l = { id: d?.id || d?._id || d?.docId || d?.uid || d?.listingId, ...(d || {}) };
@@ -637,22 +572,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
       if (catKey === 'realestate') inc(out.dealTypes, t.dealType || '');
     }
 
-    // ✅ عدّ موديلات السيارات بناءً على الماركة المختارة (هرمي: شركة -> موديل)
-    if (catKey === 'cars') {
-      const makeFilter = safeStr(carMake);
-      if (makeFilter) {
-        for (const l of itemsWithTax) {
-          const t = l._tax || {};
-          if (safeStr(t.carMake || 'other') !== makeFilter) continue;
-          const modelKey =
-            safeStr(t.carModel) ||
-            detectCarModel(l, makeFilter) ||
-            'other';
-          inc(out.carModels, modelKey);
-        }
-      }
-    }
-
     if (catKey === 'realestate') {
       const dealFilter = safeStr(dealType);
       for (const l of itemsWithTax) {
@@ -672,19 +591,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
 
     if (catKey === 'cars') {
       const sel = safeStr(carMake);
-      const selModel = safeStr(carModel);
       if (sel) arr = arr.filter((l) => safeStr(l?._tax?.carMake || 'other') === sel);
-
-      // ✅ فلترة الموديل داخل الماركة المختارة
-      if (sel && selModel) {
-        arr = arr.filter((l) => {
-          const modelKey =
-            safeStr(l?._tax?.carModel) ||
-            detectCarModel(l, sel) ||
-            'other';
-          return safeStr(modelKey) === selModel;
-        });
-      }
     }
     if (catKey === 'phones') {
       const sel = safeStr(phoneBrand);
@@ -705,7 +612,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
       const desc = safeStr(l.description).toLowerCase();
       return title.includes(query) || city.includes(query) || desc.includes(query);
     });
-  }, [itemsWithTax, single, q, carMake, carModel, phoneBrand, dealType, propertyType]);
+  }, [itemsWithTax, single, q, carMake, phoneBrand, dealType, propertyType]);
 
   const showCarsTax = single === 'cars' && taxonomyCounts.carMakes.size > 0;
   const showPhonesTax = single === 'phones' && taxonomyCounts.phoneBrands.size > 0;
@@ -773,138 +680,114 @@ const phoneBrandOptions = useMemo(() => {
     </button>
   );
 
-  const ResetFiltersButton = () => {
-    if (!canResetFilters) return null;
-    return (
-      <button
-        type="button"
-        className="sooq-resetBtn"
-        onClick={resetAllFilters}
-        title="إعادة تعيين الفلاتر"
-      >
-        ↺ إعادة تعيين
-      </button>
-    );
-  };
 
-
-  const TaxonomyBar = () => {
+  const TaxonomyInner = () => {
     if (!single) return null;
 
-    
-// سيارات
-if (showCarsTax) {
-  const mk = safeStr(carMake);
-  const md = safeStr(carModel);
-  const mkLabel = mk ? carMakeLabel(mk) : '';
+    // سيارات
+    if (showCarsTax) {
+      const mk = safeStr(carMake);
+      const md = safeStr(carModel);
+      const mkLabel = mk ? carMakeLabel(mk) : '';
       const modelsTotal = Array.from(taxonomyCounts.carModels.values()).reduce((a, b) => a + Number(b || 0), 0);
 
-  // 1) اختيار الماركة
-  if (!mk) {
-    return (
-      <div className="sooq-taxWrap" aria-label="فلترة ماركة السيارة">
-        <div className="sooq-taxTitle">
-          <span>🚗 اختر ماركة السيارة</span>
-          <ResetFiltersButton />
-        </div>
-        <div className="sooq-chips" role="tablist">
-          <Chip
-            active={!mk}
-            onClick={() => {
-              setCarMake('');
-              setCarModel('');
-            }}
-            text="الكل"
-            count={itemsWithTax.length}
-            dotColor={CAT_COLOR}
-          />
-          {carMakeOptions.map(([k, c]) => (
+      // 1) اختيار الماركة
+      if (!mk) {
+        return (
+          <div className="sooq-taxSection" aria-label="فلترة ماركة السيارة">
+            <div className="sooq-taxTitle">🚗 اختر ماركة السيارة</div>
+            <div className="sooq-chips" role="tablist">
+              <Chip
+                active={!mk}
+                onClick={() => {
+                  setCarMake('');
+                  setCarModel('');
+                }}
+                text="الكل"
+                count={itemsWithTax.length}
+                dotColor={CAT_COLOR}
+              />
+              {carMakeOptions.map(([k, c]) => (
+                <Chip
+                  key={k}
+                  active={mk === k}
+                  onClick={() => {
+                    setCarMake(k);
+                    setCarModel('');
+                  }}
+                  text={carMakeLabel(k)}
+                  count={c}
+                  dotColor={colorForKey(k)}
+                  title={`سيارات ${carMakeLabel(k)}`}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      }
+
+      // 2) اختيار الموديل داخل الماركة
+      return (
+        <div className="sooq-taxSection" aria-label="فلترة موديل السيارة">
+          <div className="sooq-taxTitle">🚗 {mkLabel} — اختر الموديل</div>
+          <div className="sooq-chips" role="tablist">
             <Chip
-              key={k}
-              active={mk === k}
+              active={false}
               onClick={() => {
-                setCarMake(k);
+                setCarMake('');
                 setCarModel('');
               }}
-              text={carMakeLabel(k)}
-              count={c}
-              dotColor={colorForKey(k)}
-              title={`سيارات ${carMakeLabel(k)}`}
+              text="رجوع"
+              icon="⬅️"
+              count={undefined}
+              dotColor={CAT_COLOR}
+              title="رجوع لقائمة الماركات"
             />
-          ))}
-        </div>
-      </div>
-    );
-  }
 
-  // 2) اختيار الموديل داخل الماركة
-  return (
-    <div className="sooq-taxWrap" aria-label="فلترة موديل السيارة">
-      <div className="sooq-taxTitle">
-        <span>🚗 {mkLabel} — اختر الموديل</span>
-        <ResetFiltersButton />
-      </div>
-      <div className="sooq-chips" role="tablist">
-        <Chip
-          active={false}
-          onClick={() => {
-            setCarMake('');
-            setCarModel('');
-          }}
-          text="رجوع"
-          icon="⬅️"
-          count={undefined}
-          dotColor={CAT_COLOR}
-          title="رجوع لقائمة الماركات"
-        />
-
-        <Chip
-          active={!md}
-          onClick={() => setCarModel('')}
-          text={`كل موديلات ${mkLabel}`}
-          count={modelsTotal || undefined}
-          dotColor={colorForKey(mk)}
-          title={`عرض كل موديلات ${mkLabel}`}
-        />
-
-        {carModelOptions
-          .filter(([k]) => safeStr(k) && safeStr(k) !== 'other')
-          .map(([k, c]) => (
             <Chip
-              key={k}
-              active={md === k}
-              onClick={() => setCarModel(k)}
-              text={carModelLabelLocal(mk, k)}
-              count={c}
-              dotColor={colorForKey(`${mk}:${k}`)}
-              title={`${mkLabel} ${carModelLabelLocal(mk, k)}`}
+              active={!md}
+              onClick={() => setCarModel('')}
+              text={`كل موديلات ${mkLabel}`}
+              count={modelsTotal || undefined}
+              dotColor={colorForKey(mk)}
+              title={`عرض كل موديلات ${mkLabel}`}
             />
-          ))}
 
-        {/* أخرى */}
-        {carModelOptions.some(([k]) => safeStr(k) === 'other') ? (
-          <Chip
-            active={md === 'other'}
-            onClick={() => setCarModel('other')}
-            text="أخرى"
-            count={taxonomyCounts.carModels?.get('other') || 0}
-            dotColor={colorForKey(`${mk}:other`)}
-            title="موديلات أخرى"
-          />
-        ) : null}
-      </div>
-    </div>
-  );
-}
+            {carModelOptions
+              .filter(([k]) => safeStr(k) && safeStr(k) !== 'other')
+              .map(([k, c]) => (
+                <Chip
+                  key={k}
+                  active={md === k}
+                  onClick={() => setCarModel(k)}
+                  text={carModelLabelLocal(mk, k)}
+                  count={c}
+                  dotColor={colorForKey(`${mk}:${k}`)}
+                  title={`${mkLabel} ${carModelLabelLocal(mk, k)}`}
+                />
+              ))}
 
-// جوالات
+            {/* أخرى */}
+            {carModelOptions.some(([k]) => safeStr(k) === 'other') ? (
+              <Chip
+                active={md === 'other'}
+                onClick={() => setCarModel('other')}
+                text="أخرى"
+                count={taxonomyCounts.carModels?.get('other') || 0}
+                dotColor={colorForKey(`${mk}:other`)}
+                title="موديلات أخرى"
+              />
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
+    // جوالات
     if (showPhonesTax) {
       return (
-        <div className="sooq-taxWrap" aria-label="فلترة ماركة الجوال">
-          <div className="sooq-taxTitle">
-            <span>📱 اختر الماركة</span>
-            <ResetFiltersButton />
-          </div>
+        <div className="sooq-taxSection" aria-label="فلترة ماركة الجوال">
+          <div className="sooq-taxTitle">📱 اختر الماركة</div>
           <div className="sooq-chips" role="tablist" aria-label="ماركات الجوالات">
             <Chip active={!phoneBrand} onClick={() => setPhoneBrand('')} text="الكل" count={itemsWithTax.length} />
             {phoneBrandOptions.map(([k, c]) => {
@@ -917,7 +800,7 @@ if (showCarsTax) {
                   text={label}
                   count={c}
                   icon="📱"
-                  dotColor={CAT_COLOR}
+                  dotColor={colorForKey(k)}
                 />
               );
             })}
@@ -930,23 +813,29 @@ if (showCarsTax) {
     if (showRealTax) {
       const hasDeal = !!safeStr(dealType);
 
-      // ✅ إذا اخترت (بيع) نخفي (إيجار) والعكس — مثل طلبك
+      // ✅ إذا اخترت (بيع) نخفي (إيجار) والعكس
       const visibleDealOptions = hasDeal ? dealTypeOptions.filter(([k]) => k === dealType) : dealTypeOptions;
 
       const dealDot = (k) => (k === 'sale' ? '#0ea5e9' : k === 'rent' ? '#f59e0b' : CAT_COLOR);
 
+      const propertyTypeDot = (k) => {
+        const kk = String(k || '').trim();
+        const found = PROPERTY_TYPES_PRESET.find((x) => String(x?.key || '').trim() === kk);
+        return found?.color || colorForKey(`property:${kk}`) || CAT_COLOR;
+      };
+
       return (
-        <div className="sooq-taxWrap" aria-label="فلترة العقارات">
-          <div className="sooq-taxTitle">
-            <span>🏡 فلترة العقارات</span>
-            <ResetFiltersButton />
-          </div>
+        <div className="sooq-taxSection" aria-label="فلترة العقارات">
+          <div className="sooq-taxTitle">🏡 فلترة العقارات</div>
 
           <div className="sooq-taxSub">نوع العملية</div>
           <div className="sooq-chips" role="tablist" aria-label="بيع أو إيجار">
             <Chip
               active={!dealType}
-              onClick={() => { setDealType(''); setPropertyType(''); }}
+              onClick={() => {
+                setDealType('');
+                setPropertyType('');
+              }}
               text="الكل"
               count={itemsWithTax.length}
             />
@@ -957,7 +846,10 @@ if (showCarsTax) {
                 <Chip
                   key={k}
                   active={dealType === k}
-                  onClick={() => { setDealType(k); setPropertyType(''); }}
+                  onClick={() => {
+                    setDealType(k);
+                    setPropertyType('');
+                  }}
                   text={label}
                   count={c}
                   icon="🏷️"
@@ -982,7 +874,7 @@ if (showCarsTax) {
                       text={label}
                       count={c}
                       icon="🏡"
-                      dotColor={CAT_COLOR}
+                      dotColor={propertyTypeDot(k)}
                     />
                   );
                 })}
@@ -1016,31 +908,33 @@ if (showCarsTax) {
 
   return (
     <div>
-      <TaxonomyBar />
+      <div className="sooq-filterShell">
+        <TaxonomyInner />
 
-      <div className="card" style={{ padding: 12, marginBottom: 12 }}>
-        <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div className="row" style={{ gap: 8 }}>
-            <button className={`btn ${view === 'grid' ? 'btnPrimary' : ''}`} onClick={() => setView('grid')}>
-              ◼️ شبكة
-            </button>
-            <button className={`btn ${view === 'list' ? 'btnPrimary' : ''}`} onClick={() => setView('list')}>
-              ☰ قائمة
-            </button>
-            <button className={`btn ${view === 'map' ? 'btnPrimary' : ''}`} onClick={() => setView('map')}>
-              🗺️ خريطة
-            </button>
+        <div className="sooq-controlsRow">
+          <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className="row" style={{ gap: 8 }}>
+              <button className={`btn ${view === 'grid' ? 'btnPrimary' : ''}`} onClick={() => setView('grid')}>
+                ◼️ شبكة
+              </button>
+              <button className={`btn ${view === 'list' ? 'btnPrimary' : ''}`} onClick={() => setView('list')}>
+                ☰ قائمة
+              </button>
+              <button className={`btn ${view === 'map' ? 'btnPrimary' : ''}`} onClick={() => setView('map')}>
+                🗺️ خريطة
+              </button>
+            </div>
+
+            <input
+              className="input sooq-search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="ابحث داخل القسم..."
+            />
           </div>
-
-          <input
-            className="input"
-            style={{ flex: 1, minWidth: 180 }}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="ابحث داخل القسم..."
-          />
         </div>
       </div>
+
 
       {filtered.length === 0 ? (
         <div className="card" style={{ padding: 16, textAlign: 'center' }}>
@@ -1136,15 +1030,37 @@ if (showCarsTax) {
           font-weight: 900;
         }
 
+
+        /* ====== Filter shell (نفس شكل الخريطة للشبكة/القائمة) ====== */
+        .sooq-filterShell {
+          margin-bottom: 12px;
+          padding: 12px 12px;
+          border-radius: 16px;
+          background: rgba(255, 255, 255, 0.9);
+          backdrop-filter: blur(10px);
+          border: 1px solid #e2e8f0;
+          box-shadow: 0 12px 22px rgba(0, 0, 0, 0.10);
+        }
+        .sooq-taxSection {
+          margin-bottom: 10px;
+        }
+        .sooq-controlsRow {
+          margin-top: 10px;
+        }
+        .sooq-search {
+          flex: 1;
+          min-width: 180px;
+        }
+
         /* ====== Taxonomy bar (مثل الخريطة) ====== */
         .sooq-taxWrap {
           margin-bottom: 12px;
           padding: 10px 10px;
           border-radius: 14px;
-          background: rgba(255, 255, 255, 0.88);
-          backdrop-filter: blur(10px);
-          border: 1px solid rgba(226, 232, 240, 0.95);
-          box-shadow: 0 12px 22px rgba(0, 0, 0, 0.10);
+          background: rgba(255, 255, 255, 0.86);
+          backdrop-filter: blur(8px);
+          border: 1px solid #e2e8f0;
+          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.08);
         }
         .sooq-taxTitle {
           font-weight: 900;
@@ -1152,31 +1068,6 @@ if (showCarsTax) {
           display: flex;
           gap: 8px;
           align-items: center;
-          justify-content: space-between;
-        }
-
-        .sooq-resetBtn {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
-          padding: 7px 10px;
-          border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.10);
-          background: rgba(255, 255, 255, 0.70);
-          backdrop-filter: blur(8px);
-          box-shadow: 0 8px 14px rgba(0, 0, 0, 0.08);
-          font-weight: 900;
-          font-size: 12px;
-          cursor: pointer;
-          white-space: nowrap;
-        }
-        .sooq-resetBtn:hover {
-          border-color: rgba(0, 0, 0, 0.18);
-          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.10);
-        }
-        .sooq-resetBtn:active {
-          transform: translateY(0.5px);
         }
         .sooq-taxSub {
           font-size: 12px;
@@ -1191,30 +1082,9 @@ if (showCarsTax) {
           overflow-x: auto;
           padding: 8px;
           border-radius: 14px;
-          background: rgba(255, 255, 255, 0.86);
-          backdrop-filter: blur(8px);
-          border: 1px solid rgba(226, 232, 240, 0.80);
+          background: rgba(255, 255, 255, 0.55);
+          backdrop-filter: blur(6px);
           align-items: center;
-        }
-
-        .sooq-resetBtn {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
-          padding: 7px 10px;
-          border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.10);
-          background: rgba(255, 255, 255, 0.85);
-          backdrop-filter: blur(10px);
-          font-weight: 900;
-          font-size: 12px;
-          cursor: pointer;
-          white-space: nowrap;
-          box-shadow: 0 8px 14px rgba(0, 0, 0, 0.08);
-        }
-        .sooq-resetBtn:active {
-          transform: translateY(1px);
         }
 
         .sooq-chip {
