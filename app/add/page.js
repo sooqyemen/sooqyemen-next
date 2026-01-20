@@ -28,7 +28,10 @@ import {
   MOTORCYCLE_BRANDS,
 } from '@/lib/taxonomy';
 
-const LocationPicker = dynamic(() => import('@/components/Map/LocationPicker'), { ssr: false });
+const LocationPicker = dynamic(
+  () => import('@/components/Map/LocationPicker'),
+  { ssr: false }
+);
 
 // ✅ الأقسام الافتراضية (مطابقة تمامًا لمفاتيح Firestore عندك)
 const DEFAULT_CATEGORIES = [
@@ -57,10 +60,8 @@ export default function AddPage() {
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [city, setCity] = useState('');
-
   // ✅ مهم: لا يوجد قسم افتراضي
   const [category, setCategory] = useState('');
-
   // ✅ فروع الأقسام (هرمية)
   const [carMake, setCarMake] = useState(''); // cars
   const [carMakeText, setCarMakeText] = useState('');
@@ -186,6 +187,7 @@ export default function AddPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  
   // ✅ عند تغيير القسم: صفّر الفروع
   useEffect(() => {
     setCarMake('');
@@ -238,7 +240,7 @@ export default function AddPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category]);
 
-  // ✅ معاينة الصور
+// ✅ معاينة الصور
   useEffect(() => {
     if (images.length === 0) {
       setImagePreviews([]);
@@ -447,7 +449,9 @@ export default function AddPage() {
         // carModel: نخزّن key موحد + نص عند اختيار "أخرى" أو عند عدم توفر preset
         carModel:
           category === 'cars'
-            ? (carModel && carModel !== 'other' ? carModel : (carModelText.trim() ? slugKey(carModelText) : null))
+            ? (carModel && carModel !== 'other'
+                ? carModel
+                : (carModelText.trim() ? slugKey(carModelText) : null))
             : null,
         carModelText:
           category === 'cars' && (carModel === 'other' || (carModelText.trim() && carModel !== 'other'))
@@ -607,22 +611,10 @@ export default function AddPage() {
       </div>
 
       <div className="form-tips">
-        <div className="tip-item">
-          <span className="tip-icon">📸</span>
-          <span>أضف صور واضحة وجودة عالية</span>
-        </div>
-        <div className="tip-item">
-          <span className="tip-icon">📝</span>
-          <span>اكتب وصفاً مفصلاً ودقيقاً</span>
-        </div>
-        <div className="tip-item">
-          <span className="tip-icon">💰</span>
-          <span>حدد سعراً مناسباً ومنافساً</span>
-        </div>
-        <div className="tip-item">
-          <span className="tip-icon">📍</span>
-          <span>اختر الموقع الدقيق لإعلانك</span>
-        </div>
+        <div className="tip-item"><span className="tip-icon">📸</span><span>أضف صور واضحة وجودة عالية</span></div>
+        <div className="tip-item"><span className="tip-icon">📝</span><span>اكتب وصفاً مفصلاً ودقيقاً</span></div>
+        <div className="tip-item"><span className="tip-icon">💰</span><span>حدد سعراً مناسباً ومنافساً</span></div>
+        <div className="tip-item"><span className="tip-icon">📍</span><span>اختر الموقع الدقيق لإعلانك</span></div>
       </div>
 
       <div className="form-grid">
@@ -687,7 +679,9 @@ export default function AddPage() {
             </div>
 
             <div className="form-group">
-              <label className="form-label required">القسم {catsSource === 'fallback' ? '(Fallback)' : ''}</label>
+              <label className="form-label required">
+                القسم {catsSource === 'fallback' ? '(Fallback)' : ''}
+              </label>
               <select
                 className={`form-select ${errors.category ? 'error' : ''}`}
                 value={category}
@@ -716,6 +710,7 @@ export default function AddPage() {
             </div>
           </div>
 
+
           {/* ✅ فرع القسم (هرمي) */}
           {category === 'cars' && (
             <div className="card" style={{ padding: 12, marginBottom: 12, border: '1px solid #e2e8f0' }}>
@@ -731,13 +726,7 @@ export default function AddPage() {
                       setCarMake(e.target.value);
                       setCarModel('');
                       setCarModelText('');
-                      if (submitAttempted)
-                        setErrors((prev) => ({
-                          ...prev,
-                          carMake: undefined,
-                          carMakeText: undefined,
-                          carModelText: undefined,
-                        }));
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, carMake: undefined, carMakeText: undefined, carModelText: undefined }));
                     }}
                   >
                     <option value="" disabled>
@@ -880,12 +869,7 @@ export default function AddPage() {
                       setPropertyType('');
                       setPropertyTypeText('');
                       if (submitAttempted)
-                        setErrors((prev) => ({
-                          ...prev,
-                          dealType: undefined,
-                          propertyType: undefined,
-                          propertyTypeText: undefined,
-                        }));
+                        setErrors((prev) => ({ ...prev, dealType: undefined, propertyType: undefined, propertyTypeText: undefined }));
                     }}
                   >
                     <option value="" disabled>
@@ -908,11 +892,7 @@ export default function AddPage() {
                     onChange={(e) => {
                       setPropertyType(e.target.value);
                       if (submitAttempted)
-                        setErrors((prev) => ({
-                          ...prev,
-                          propertyType: undefined,
-                          propertyTypeText: undefined,
-                        }));
+                        setErrors((prev) => ({ ...prev, propertyType: undefined, propertyTypeText: undefined }));
                     }}
                     disabled={!dealType}
                     title={!dealType ? 'اختر بيع/إيجار أولاً' : ''}
@@ -1049,15 +1029,12 @@ export default function AddPage() {
                     value={heavyEquipmentTypeText}
                     onChange={(e) => {
                       setHeavyEquipmentTypeText(e.target.value);
-                      if (submitAttempted)
-                        setErrors((prev) => ({ ...prev, heavyEquipmentTypeText: undefined }));
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, heavyEquipmentTypeText: undefined }));
                     }}
                     placeholder="اكتب النوع"
                     maxLength={60}
                   />
-                  {errors.heavyEquipmentTypeText && (
-                    <div className="form-error">{errors.heavyEquipmentTypeText}</div>
-                  )}
+                  {errors.heavyEquipmentTypeText && <div className="form-error">{errors.heavyEquipmentTypeText}</div>}
                 </div>
               )}
             </div>
@@ -1163,8 +1140,7 @@ export default function AddPage() {
                     value={maintenanceTypeText}
                     onChange={(e) => {
                       setMaintenanceTypeText(e.target.value);
-                      if (submitAttempted)
-                        setErrors((prev) => ({ ...prev, maintenanceTypeText: undefined }));
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, maintenanceTypeText: undefined }));
                     }}
                     placeholder="اكتب النوع"
                     maxLength={60}
@@ -1238,8 +1214,7 @@ export default function AddPage() {
                     value={homeToolsTypeText}
                     onChange={(e) => {
                       setHomeToolsTypeText(e.target.value);
-                      if (submitAttempted)
-                        setErrors((prev) => ({ ...prev, homeToolsTypeText: undefined }));
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, homeToolsTypeText: undefined }));
                     }}
                     placeholder="اكتب النوع"
                     maxLength={60}
@@ -1313,8 +1288,7 @@ export default function AddPage() {
                     value={animalTypeText}
                     onChange={(e) => {
                       setAnimalTypeText(e.target.value);
-                      if (submitAttempted)
-                        setErrors((prev) => ({ ...prev, animalTypeText: undefined }));
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, animalTypeText: undefined }));
                     }}
                     placeholder="اكتب النوع"
                     maxLength={60}
@@ -1388,8 +1362,7 @@ export default function AddPage() {
                     value={serviceTypeText}
                     onChange={(e) => {
                       setServiceTypeText(e.target.value);
-                      if (submitAttempted)
-                        setErrors((prev) => ({ ...prev, serviceTypeText: undefined }));
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, serviceTypeText: undefined }));
                     }}
                     placeholder="اكتب النوع"
                     maxLength={60}
@@ -1545,7 +1518,11 @@ export default function AddPage() {
                 <span>تفعيل نظام المزاد</span>
               </div>
               <label className="switch">
-                <input type="checkbox" checked={auctionEnabled} onChange={(e) => setAuctionEnabled(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  checked={auctionEnabled}
+                  onChange={(e) => setAuctionEnabled(e.target.checked)}
+                />
                 <span className="slider"></span>
               </label>
             </div>
@@ -1588,30 +1565,26 @@ export default function AddPage() {
 
           <div className="map-wrapper">
             {!showMap ? (
-              <div
-                className="map-placeholder"
-                style={{
-                  padding: '60px 20px',
-                  textAlign: 'center',
-                  background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
-                  borderRadius: '12px',
-                  border: '2px dashed #0ea5e9',
-                }}
-              >
-                <div style={{ fontSize: '48px', marginBottom: '16px' }} role="img" aria-label="أيقونة الخريطة">
-                  🗺️
-                </div>
+              <div className="map-placeholder" style={{
+                padding: '60px 20px',
+                textAlign: 'center',
+                background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                borderRadius: '12px',
+                border: '2px dashed #0ea5e9'
+              }}>
+                <div style={{ fontSize: '48px', marginBottom: '16px' }} role="img" aria-label="أيقونة الخريطة">🗺️</div>
                 <button
                   type="button"
                   onClick={() => setShowMap(true)}
                   className="btn btnPrimary"
-                  style={{ padding: '12px 24px', fontSize: '16px', fontWeight: 'bold' }}
+                  style={{
+                    padding: '12px 24px',
+                    fontSize: '16px',
+                    fontWeight: 'bold'
+                  }}
                   aria-label="تحميل الخريطة لتحديد الموقع"
                 >
-                  <span role="img" aria-label="أيقونة موقع">
-                    📍
-                  </span>{' '}
-                  تحميل الخريطة
+                  <span role="img" aria-label="أيقونة موقع">📍</span> تحميل الخريطة
                 </button>
                 <p style={{ marginTop: '12px', color: '#64748b', fontSize: '14px' }}>
                   اضغط لتحديد موقع الإعلان على الخريطة
@@ -1678,7 +1651,7 @@ export default function AddPage() {
 
         <div className="final-notes">
           <p>
-            بعد النشر، يمكنك متابعة إعلانك من قسم <strong>&quot;إعلاناتي&quot;</strong>
+            بعد النشر، يمكنك متابعة إعلانك من قسم <strong>"إعلاناتي"</strong>
           </p>
         </div>
       </div>
@@ -1694,7 +1667,7 @@ export default function AddPage() {
           width: 100%;
         }
 
-        .cats-note {
+        .cats-note{
           margin: 10px 0 18px;
           padding: 12px 14px;
           border-radius: 12px;
@@ -2123,12 +2096,8 @@ export default function AddPage() {
         }
 
         @media (max-width: 1024px) {
-          .mobile-submit-section {
-            display: block;
-          }
-          .desktop-submit-section {
-            display: none;
-          }
+          .mobile-submit-section { display: block; }
+          .desktop-submit-section { display: none; }
         }
 
         .submit-btn-large {
@@ -2159,8 +2128,7 @@ export default function AddPage() {
           font-weight: 700;
         }
 
-        .final-notes,
-        .form-notes {
+        .final-notes, .form-notes{
           margin-top: 20px;
           padding: 15px;
           background: #f8fafc;
@@ -2205,9 +2173,7 @@ export default function AddPage() {
         }
 
         @keyframes spin {
-          to {
-            transform: rotate(360deg);
-          }
+          to { transform: rotate(360deg); }
         }
 
         .auth-required-card {
@@ -2262,41 +2228,18 @@ export default function AddPage() {
         }
 
         @media (max-width: 768px) {
-          .add-page-header {
-            padding: 25px 15px;
-            border-radius: 16px;
-          }
-          .add-page-header h1 {
-            font-size: 24px;
-          }
-          .form-container,
-          .map-container {
-            padding: 20px;
-            border-radius: 16px;
-          }
-          .form-section-title {
-            font-size: 18px;
-          }
-          .currency-btn {
-            padding: 8px 12px;
-            font-size: 14px;
-          }
+          .add-page-header { padding: 25px 15px; border-radius: 16px; }
+          .add-page-header h1 { font-size: 24px; }
+          .form-container, .map-container { padding: 20px; border-radius: 16px; }
+          .form-section-title { font-size: 18px; }
+          .currency-btn { padding: 8px 12px; font-size: 14px; }
         }
 
         @media (max-width: 480px) {
-          .form-row {
-            grid-template-columns: 1fr;
-            gap: 15px;
-          }
-          .currency-selector {
-            flex-direction: column;
-          }
-          .communication-toggle {
-            flex-direction: column;
-          }
-          .image-previews {
-            grid-template-columns: repeat(3, 1fr);
-          }
+          .form-row { grid-template-columns: 1fr; gap: 15px; }
+          .currency-selector { flex-direction: column; }
+          .communication-toggle { flex-direction: column; }
+          .image-previews { grid-template-columns: repeat(3, 1fr); }
         }
       `}</style>
     </div>
