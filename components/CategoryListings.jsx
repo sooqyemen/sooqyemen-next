@@ -14,6 +14,10 @@ import {
   phoneBrandLabel,
   dealTypeLabel,
   propertyTypeLabel,
+  
+  // المتغيرات التي كانت ناقصة في الاستيراد وتستخدم في الكود
+  CAR_MAKES_PRESET,
+  CAR_MODELS_BY_MAKE,
 
   // ✅ Single-facet categories
   ELECTRONICS_TYPES,
@@ -95,12 +99,9 @@ function normalizeSlug(v) {
 }
 
 // ✅ وضع صارم: يطابق category قيمة القسم الرسمية فقط (بدون توسعة لقيَم قديمة)
-// إذا عندك إعلانات قديمة محفوظة بقيم غير مطابقة (مثل real_estate / real estate / عربي..)، لن تظهر عند تفعيل هذا.
-// بما أنك ناوي تنظّف الإعلانات القديمة، خليه true.
 const STRICT_CATEGORY_MATCH = true;
 
 // ✅ لتفادي ظهور أقسام "فاضية" بسبب اختلافات حفظ قيمة category في الإعلانات القديمة
-// نجلب نفس القسم بعدة قيم محتملة (حتى 10 قيم - حد Firestore لــ in)
 function categoryVariants(single) {
   const s = normalizeSlug(single);
   if (!s) return [];
@@ -160,6 +161,7 @@ function applyCategoryWhere(q, categoryKey) {
 function safeStr(v) {
   return String(v || '').trim();
 }
+
 // ✅ ألوان ثابتة للفلاتر (ماركات/موديلات) - توزيع تلقائي من Palette
 const TAX_PALETTE = [
   '#2563eb', '#16a34a', '#7c3aed', '#0ea5e9', '#f59e0b', '#f97316',
@@ -174,34 +176,15 @@ function colorForKey(key) {
   return TAX_PALETTE[h % TAX_PALETTE.length];
 }
 
-
+// ✅ تم إصلاح هذه الدالة: كانت مفتوحة وغير مغلقة في الكود الأصلي
 function pickTaxonomy(listing, categoryKey) {
-  const inferred = inferListingTaxonomy(listing || {}, categoryKey) || {};
-      const out = {
-      carMakes: new Map(),
-      carModels: new Map(),
-      phoneBrands: new Map(),
-      dealTypes: new Map(),
-      propertyTypes: new Map(),
-
-      electronicsTypes: new Map(),
-      motorcycleBrands: new Map(),
-      heavyEquipmentTypes: new Map(),
-      solarTypes: new Map(),
-      networkTypes: new Map(),
-      maintenanceTypes: new Map(),
-      furnitureTypes: new Map(),
-      homeToolsTypes: new Map(),
-      clothesTypes: new Map(),
-      animalTypes: new Map(),
-      jobTypes: new Map(),
-      serviceTypes: new Map(),
-    };
+  return inferListingTaxonomy(listing || {}, categoryKey) || {};
+}
 
 function carModelLabelLocal(makeKey, modelKey) {
   const mk = safeStr(makeKey).toLowerCase();
   const md = safeStr(modelKey).toLowerCase();
-  const arr = CAR_MODELS_BY_MAKE[mk] || [];
+  const arr = CAR_MODELS_BY_MAKE ? (CAR_MODELS_BY_MAKE[mk] || []) : [];
   const found = arr.find((x) => safeStr(x.key).toLowerCase() === md);
   return found?.label || modelKey || 'أخرى';
 }
@@ -231,7 +214,7 @@ function detectCarModel(listing, makeKey) {
   if (rawNorm) return rawNorm;
 
   const txt = `${safeStr(listing?.title)} ${safeStr(listing?.description)}`.toLowerCase();
-  const presets = CAR_MODELS_BY_MAKE[mk] || [];
+  const presets = CAR_MODELS_BY_MAKE ? (CAR_MODELS_BY_MAKE[mk] || []) : [];
 
   for (const it of presets) {
     const key = safeStr(it.key).toLowerCase();
@@ -254,9 +237,6 @@ function detectCarModel(listing, makeKey) {
 
   return '';
 }
-
-
-
 
 const PHONE_BRANDS_PRESET = [
   { key: 'iphone', label: 'آيفون' },
@@ -581,7 +561,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
 
   const taxonomyCounts = useMemo(() => {
     const catKey = single || '';
-        const out = {
+    const out = {
       carMakes: new Map(),
       carModels: new Map(),
       phoneBrands: new Map(),
@@ -629,7 +609,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
       if (catKey === 'animals') inc(out.animalTypes, t.animalType || 'other');
       if (catKey === 'jobs') inc(out.jobTypes, t.jobType || 'other');
       if (catKey === 'services') inc(out.serviceTypes, t.serviceType || 'other');
-    }    }
+    }
 
     // carModels: نعرضها فقط عندما تختار ماركة
     if (catKey === 'cars') {
@@ -756,31 +736,30 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const showAnimalsTax = single === 'animals' && taxonomyCounts.animalTypes.size > 0;
   const showJobsTax = single === 'jobs' && taxonomyCounts.jobTypes.size > 0;
   const showServicesTax = single === 'services' && taxonomyCounts.serviceTypes.size > 0;
+
   const carMakeOptions = useMemo(() => {
-    const merged = presetMergeWithCounts(CAR_MAKES_PRESET, taxonomyCounts.carMakes);
+    // ✅ افتراض أن CAR_MAKES_PRESET مستوردة أو معرفة
+    const preset = CAR_MAKES_PRESET || []; 
+    const merged = presetMergeWithCounts(preset, taxonomyCounts.carMakes);
     // نعرض حتى 0 عشان تبقى واجهة فخمة وثابتة
     return merged.slice(0, 40);
   }, [taxonomyCounts.carMakes]);
 
-  
+  const carModelOptions = useMemo(() => {
+    const mk = safeStr(carMake);
+    if (!mk) return [];
+    const preset = CAR_MODELS_BY_MAKE ? (CAR_MODELS_BY_MAKE[mk] || []) : [];
+    const merged = presetMergeWithCounts(preset, taxonomyCounts.carModels);
+    return merged.slice(0, 80);
+  }, [carMake, taxonomyCounts.carModels]);
 
-const carModelOptions = useMemo(() => {
-  const mk = safeStr(carMake);
-  if (!mk) return [];
-  const preset = CAR_MODELS_BY_MAKE[mk] || [];
-  const merged = presetMergeWithCounts(preset, taxonomyCounts.carModels);
-  return merged.slice(0, 80);
-}, [carMake, taxonomyCounts.carModels]);
-const phoneBrandOptions = useMemo(() => {
+  const phoneBrandOptions = useMemo(() => {
     const merged = presetMergeWithCounts(PHONE_BRANDS_PRESET, taxonomyCounts.phoneBrands);
     return merged.slice(0, 40);
   }, [taxonomyCounts.phoneBrands]);
 
-
-  
-
-
-const electronicsTypeOptions = useMemo(() => {
+  // ✅ تم إصلاح الإغلاق الناقص هنا (كان مفقود ] )
+  const electronicsTypeOptions = useMemo(() => {
     const preset = (Array.isArray(ELECTRONICS_TYPES) ? ELECTRONICS_TYPES : []).map((x) => ({
       key: x.key,
       label: x.label,
@@ -788,9 +767,9 @@ const electronicsTypeOptions = useMemo(() => {
     }));
     const merged = presetMergeWithCounts(preset, taxonomyCounts.electronicsTypes);
     return merged.slice(0, 60);
-  }, [taxonomyCounts.electronicsTypes
+  }, [taxonomyCounts.electronicsTypes]);
 
-const motorcycleBrandOptions = useMemo(() => {
+  const motorcycleBrandOptions = useMemo(() => {
     const preset = (Array.isArray(MOTORCYCLE_BRANDS) ? MOTORCYCLE_BRANDS : []).map((x) => ({
       key: x.key,
       label: x.label,
@@ -800,7 +779,7 @@ const motorcycleBrandOptions = useMemo(() => {
     return merged.slice(0, 60);
   }, [taxonomyCounts.motorcycleBrands]);
 
-const heavyEquipmentTypeOptions = useMemo(() => {
+  const heavyEquipmentTypeOptions = useMemo(() => {
     const preset = (Array.isArray(HEAVY_EQUIPMENT_TYPES) ? HEAVY_EQUIPMENT_TYPES : []).map((x) => ({
       key: x.key,
       label: x.label,
@@ -810,7 +789,7 @@ const heavyEquipmentTypeOptions = useMemo(() => {
     return merged.slice(0, 60);
   }, [taxonomyCounts.heavyEquipmentTypes]);
 
-const solarTypeOptions = useMemo(() => {
+  const solarTypeOptions = useMemo(() => {
     const preset = (Array.isArray(SOLAR_TYPES) ? SOLAR_TYPES : []).map((x) => ({
       key: x.key,
       label: x.label,
@@ -820,7 +799,7 @@ const solarTypeOptions = useMemo(() => {
     return merged.slice(0, 60);
   }, [taxonomyCounts.solarTypes]);
 
-const networkTypeOptions = useMemo(() => {
+  const networkTypeOptions = useMemo(() => {
     const preset = (Array.isArray(NETWORK_TYPES) ? NETWORK_TYPES : []).map((x) => ({
       key: x.key,
       label: x.label,
@@ -830,7 +809,7 @@ const networkTypeOptions = useMemo(() => {
     return merged.slice(0, 60);
   }, [taxonomyCounts.networkTypes]);
 
-const maintenanceTypeOptions = useMemo(() => {
+  const maintenanceTypeOptions = useMemo(() => {
     const preset = (Array.isArray(MAINTENANCE_TYPES) ? MAINTENANCE_TYPES : []).map((x) => ({
       key: x.key,
       label: x.label,
@@ -840,7 +819,7 @@ const maintenanceTypeOptions = useMemo(() => {
     return merged.slice(0, 60);
   }, [taxonomyCounts.maintenanceTypes]);
 
-const furnitureTypeOptions = useMemo(() => {
+  const furnitureTypeOptions = useMemo(() => {
     const preset = (Array.isArray(FURNITURE_TYPES) ? FURNITURE_TYPES : []).map((x) => ({
       key: x.key,
       label: x.label,
@@ -850,7 +829,7 @@ const furnitureTypeOptions = useMemo(() => {
     return merged.slice(0, 60);
   }, [taxonomyCounts.furnitureTypes]);
 
-const homeToolsTypeOptions = useMemo(() => {
+  const homeToolsTypeOptions = useMemo(() => {
     const preset = (Array.isArray(HOME_TOOLS_TYPES) ? HOME_TOOLS_TYPES : []).map((x) => ({
       key: x.key,
       label: x.label,
@@ -860,7 +839,7 @@ const homeToolsTypeOptions = useMemo(() => {
     return merged.slice(0, 60);
   }, [taxonomyCounts.homeToolsTypes]);
 
-const clothesTypeOptions = useMemo(() => {
+  const clothesTypeOptions = useMemo(() => {
     const preset = (Array.isArray(CLOTHES_TYPES) ? CLOTHES_TYPES : []).map((x) => ({
       key: x.key,
       label: x.label,
@@ -870,7 +849,7 @@ const clothesTypeOptions = useMemo(() => {
     return merged.slice(0, 60);
   }, [taxonomyCounts.clothesTypes]);
 
-const animalTypeOptions = useMemo(() => {
+  const animalTypeOptions = useMemo(() => {
     const preset = (Array.isArray(ANIMAL_TYPES) ? ANIMAL_TYPES : []).map((x) => ({
       key: x.key,
       label: x.label,
@@ -880,7 +859,7 @@ const animalTypeOptions = useMemo(() => {
     return merged.slice(0, 60);
   }, [taxonomyCounts.animalTypes]);
 
-const jobTypeOptions = useMemo(() => {
+  const jobTypeOptions = useMemo(() => {
     const preset = (Array.isArray(JOB_TYPES) ? JOB_TYPES : []).map((x) => ({
       key: x.key,
       label: x.label,
@@ -890,7 +869,7 @@ const jobTypeOptions = useMemo(() => {
     return merged.slice(0, 60);
   }, [taxonomyCounts.jobTypes]);
 
-const serviceTypeOptions = useMemo(() => {
+  const serviceTypeOptions = useMemo(() => {
     const preset = (Array.isArray(SERVICE_TYPES) ? SERVICE_TYPES : []).map((x) => ({
       key: x.key,
       label: x.label,
@@ -900,8 +879,7 @@ const serviceTypeOptions = useMemo(() => {
     return merged.slice(0, 60);
   }, [taxonomyCounts.serviceTypes]);
 
-]);
-const dealTypeOptions = useMemo(() => {
+  const dealTypeOptions = useMemo(() => {
     return Array.from(taxonomyCounts.dealTypes.entries())
       .map(([k, c]) => [safeStr(k), c])
       .filter(([k]) => k === 'sale' || k === 'rent')
@@ -932,7 +910,7 @@ const dealTypeOptions = useMemo(() => {
     if (single === 'jobs') return '#64748b';
     if (single === 'services') return '#334155';
     return '#475569';
-  }, [single]);;
+  }, [single]);
 
   const Chip = ({ active, disabled, onClick, icon, text, count, dotColor, title }) => (
     <button
