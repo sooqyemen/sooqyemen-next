@@ -1,4 +1,3 @@
-// app/edit-listing/[id]/page.js
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -13,6 +12,9 @@ import {
   PHONE_BRANDS,
   DEAL_TYPES,
   PROPERTY_TYPES,
+} from '@/lib/taxonomy';
+
+import {
   ELECTRONICS_TYPES,
   HEAVY_EQUIPMENT_TYPES,
   SOLAR_TYPES,
@@ -25,21 +27,32 @@ import {
   JOB_TYPES,
   SERVICE_TYPES,
   MOTORCYCLE_BRANDS,
-} from '@/lib/taxonomy';
+} from '@/lib/taxonomy/others';
 
 import { db, firebase, storage } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
-import { toYER, useRates } from '@/lib/rates';
-
-const LocationPicker = dynamic(
-  () => import('@/components/Map/LocationPicker'),
-  { ssr: false }
-);
+const LocationPicker = dynamic(() => import('@/components/Map/LocationPicker'), { ssr: false });
 
 // ✅ إيميلات المدراء (نفس الهيدر)
 const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
 
 const MAX_IMAGES = 10;
+
+const DEFAULT_EXCHANGE = {
+  // تقدر تغيّرها من .env.local (قيم تقريبية افتراضية)
+  SAR_TO_YER: Number(process.env.NEXT_PUBLIC_SAR_TO_YER || process.env.NEXT_PUBLIC_RATE_SAR_TO_YER || 600),
+  USD_TO_YER: Number(process.env.NEXT_PUBLIC_USD_TO_YER || process.env.NEXT_PUBLIC_RATE_USD_TO_YER || 1500),
+};
+
+function toYERLocal(amount, cur) {
+  const n = Number(String(amount ?? '').replace(/,/g, ''));
+  if (!isFinite(n) || n <= 0) return 0;
+  if (cur === 'YER') return n;
+  if (cur === 'SAR') return n * DEFAULT_EXCHANGE.SAR_TO_YER;
+  if (cur === 'USD') return n * DEFAULT_EXCHANGE.USD_TO_YER;
+  return n;
+}
+
 
 function normalizeCatKey(v) {
   const raw = String(v || '').trim();
@@ -59,24 +72,33 @@ function normalizeCatKey(v) {
     mobile: 'phones',
 
     // عربي
-    'عقارات': 'realestate',
-    'العقارات': 'realestate',
-    'سيارات': 'cars',
-    'السيارات': 'cars',
-    'جوالات': 'phones',
-    'الجوالات': 'phones',
-    'موبايلات': 'phones',
+    عقارات: 'realestate',
+    العقارات: 'realestate',
+    سيارات: 'cars',
+    السيارات: 'cars',
+    جوالات: 'phones',
+    الجوالات: 'phones',
+    موبايلات: 'phones',
   };
 
   return map[norm] || map[raw] || norm;
 }
 
+const slugKey = (v) =>
+  String(v || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/-+/g, '_')
+    .replace(/__+/g, '_')
+    .replace(/[^a-z0-9_\u0600-\u06FF]/g, '')
+    .slice(0, 60);
+
 export default function EditListingPage() {
-  const { id } = useParams();
+  const params = useParams();
+  const id = params?.id;
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-  const rates = useRates();
-
   const userEmail = user?.email ? String(user.email).toLowerCase() : null;
   const isAdmin = !!userEmail && ADMIN_EMAILS.includes(userEmail);
 
@@ -168,24 +190,14 @@ export default function EditListingPage() {
   const [errors, setErrors] = useState({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
+  const catKey = useMemo(() => normalizeCatKey(category), [category]);
 
-  const catKey = normalizeCatKey(category);
-
-  const carModelsForMake = (() => {
+  const carModelsForMake = useMemo(() => {
     const mk = String(carMake || '').trim();
     if (!mk || mk === 'other') return [];
-    return Array.isArray(CAR_MODELS_BY_MAKE?.[mk]) ? CAR_MODELS_BY_MAKE[mk] : [];
-  })();
-
-  const slugKey = (v) =>
-    String(v || '')
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, '_')
-      .replace(/-+/g, '_')
-      .replace(/__+/g, '_')
-      .replace(/[^a-z0-9_\u0600-\u06FF]/g, '')
-      .slice(0, 60);
+    const arr = CAR_MODELS_BY_MAKE?.[mk];
+    return Array.isArray(arr) ? arr : [];
+  }, [carMake]);
 
   // ====== Load doc ======
   useEffect(() => {
@@ -195,7 +207,7 @@ export default function EditListingPage() {
     setDocLoading(true);
 
     db.collection('listings')
-      .doc(id)
+      .doc(String(id))
       .get()
       .then((snap) => {
         if (!mounted) return;
@@ -206,7 +218,7 @@ export default function EditListingPage() {
           return;
         }
 
-        const d = { id, ...snap.data() };
+        const d = { id: String(id), ...snap.data() };
         setData(d);
 
         setTitle(String(d.title || ''));
@@ -265,6 +277,7 @@ export default function EditListingPage() {
         setServiceTypeText(String(d.serviceTypeText || ''));
 
         setDidInitCategory(true);
+
         setPhone(String(d.phone || ''));
         setIsWhatsapp(d.isWhatsapp !== false);
 
@@ -272,7 +285,7 @@ export default function EditListingPage() {
         const origCur = String(d.originalCurrency || 'YER');
         const origPrice = d.originalPrice ?? '';
         setCurrency(['YER', 'SAR', 'USD'].includes(origCur) ? origCur : 'YER');
-        setPrice(origPrice !== '' ? String(origPrice) : (d.priceYER ? String(d.priceYER) : ''));
+        setPrice(origPrice !== '' ? String(origPrice) : d.priceYER ? String(d.priceYER) : '');
 
         // موقع
         const c = d.coords;
@@ -305,10 +318,10 @@ export default function EditListingPage() {
     };
   }, [id, router]);
 
-  
   // ✅ عند تغيير القسم: صفّر الفروع (بعد التحميل فقط)
   useEffect(() => {
     if (!didInitCategory) return;
+
     setCarMake('');
     setCarMakeText('');
     setPhoneBrand('');
@@ -355,18 +368,9 @@ export default function EditListingPage() {
 
     setServiceType('');
     setServiceTypeText('');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    // ✅ عند تغيير ماركة السيارة: صفّر الموديل
-  useEffect(() => {
-    if (catKey !== 'cars') return;
-    setCarModel('');
-    setCarModelText('');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [carMake]);
+  }, [category, didInitCategory]);
 
-}, [category]);
-
-// ====== Previews for new images ======
+  // ====== Previews for new images ======
   useEffect(() => {
     if (!newImages.length) {
       setNewPreviews([]);
@@ -405,75 +409,72 @@ export default function EditListingPage() {
     }
 
     // ✅ فروع الأقسام (لثبات الخريطة/الأقسام)
-    const catKey = normalizeCatKey(category);
+    const cKey = normalizeCatKey(category);
 
-    if (catKey === 'cars') {
+    if (cKey === 'cars') {
       if (!carMake) e.carMake = 'اختر ماركة السيارة';
       if (carMake === 'other' && !carMakeText.trim()) e.carMakeText = 'اكتب ماركة السيارة';
-
-      // carModel اختياري، لكن إذا اختار المستخدم "أخرى" لازم يكتب الاسم
       if (carModel === 'other' && !carModelText.trim()) e.carModelText = 'اكتب موديل السيارة';
     }
 
-    if (catKey === 'phones') {
+    if (cKey === 'phones') {
       if (!phoneBrand) e.phoneBrand = 'اختر ماركة الجوال';
       if (phoneBrand === 'other' && !phoneBrandText.trim()) e.phoneBrandText = 'اكتب ماركة الجوال';
     }
 
-    if (catKey === 'realestate') {
+    if (cKey === 'realestate') {
       if (!dealType) e.dealType = 'اختر (بيع / إيجار)';
       if (!propertyType) e.propertyType = 'اختر نوع العقار';
       if (propertyType === 'other' && !propertyTypeText.trim()) e.propertyTypeText = 'اكتب نوع العقار';
     }
 
-    if (catKey === 'electronics') {
+    if (cKey === 'electronics') {
       if (electronicsType === 'other' && !electronicsTypeText.trim()) e.electronicsTypeText = 'اكتب نوع الإلكترونيات';
     }
 
-    if (catKey === 'motorcycles') {
+    if (cKey === 'motorcycles') {
       if (motorcycleBrand === 'other' && !motorcycleBrandText.trim()) e.motorcycleBrandText = 'اكتب ماركة الدراجة';
     }
 
-    if (catKey === 'heavy_equipment') {
+    if (cKey === 'heavy_equipment') {
       if (heavyEquipmentType === 'other' && !heavyEquipmentTypeText.trim()) e.heavyEquipmentTypeText = 'اكتب نوع المعدة';
     }
 
-    if (catKey === 'solar') {
+    if (cKey === 'solar') {
       if (solarType === 'other' && !solarTypeText.trim()) e.solarTypeText = 'اكتب نوع الطاقة الشمسية';
     }
 
-    if (catKey === 'networks') {
+    if (cKey === 'networks') {
       if (networkType === 'other' && !networkTypeText.trim()) e.networkTypeText = 'اكتب نوع الشبكات';
     }
 
-    if (catKey === 'maintenance') {
+    if (cKey === 'maintenance') {
       if (maintenanceType === 'other' && !maintenanceTypeText.trim()) e.maintenanceTypeText = 'اكتب نوع الصيانة';
     }
 
-    if (catKey === 'furniture') {
+    if (cKey === 'furniture') {
       if (furnitureType === 'other' && !furnitureTypeText.trim()) e.furnitureTypeText = 'اكتب نوع الأثاث';
     }
 
-    if (catKey === 'home_tools') {
+    if (cKey === 'home_tools') {
       if (homeToolsType === 'other' && !homeToolsTypeText.trim()) e.homeToolsTypeText = 'اكتب نوع الأدوات المنزلية';
     }
 
-    if (catKey === 'clothes') {
+    if (cKey === 'clothes') {
       if (clothesType === 'other' && !clothesTypeText.trim()) e.clothesTypeText = 'اكتب نوع الملابس';
     }
 
-    if (catKey === 'animals') {
+    if (cKey === 'animals') {
       if (animalType === 'other' && !animalTypeText.trim()) e.animalTypeText = 'اكتب نوع الحيوانات';
     }
 
-    if (catKey === 'jobs') {
+    if (cKey === 'jobs') {
       if (jobType === 'other' && !jobTypeText.trim()) e.jobTypeText = 'اكتب نوع الوظيفة';
     }
 
-    if (catKey === 'services') {
+    if (cKey === 'services') {
       if (serviceType === 'other' && !serviceTypeText.trim()) e.serviceTypeText = 'اكتب نوع الخدمة';
     }
-
 
     const keptExisting = existingImages.length;
     const total = keptExisting + newImages.length;
@@ -484,17 +485,9 @@ export default function EditListingPage() {
   };
 
   // ====== Helpers ======
-  const onPick = (c, lbl, cityName) => {
+  const onPick = (c, lbl) => {
     setCoords(c);
     setLocationLabel(lbl || '');
-    
-    // تعبئة المدينة تلقائياً إذا تم الحصول على اسم مدينة من الموقع
-    if (cityName && cityName.trim()) {
-      setCity(cityName.trim());
-      // إزالة خطأ المدينة إذا كان موجود
-      if (errors.city) setErrors((p) => ({ ...p, city: undefined }));
-    }
-    
     if (errors.location) setErrors((p) => ({ ...p, location: undefined }));
   };
 
@@ -533,7 +526,6 @@ export default function EditListingPage() {
       const ref = storage.refFromURL(url);
       await ref.delete();
     } catch (e) {
-      // لا نوقف العملية لو فشل الحذف (قد تكون الصورة قديمة/صلاحيات)
       console.warn('Storage delete failed:', url, e);
     }
   };
@@ -557,7 +549,8 @@ export default function EditListingPage() {
 
     setSaving(true);
     try {
-      const priceYER = toYER(price, currency, rates);
+      const cKey = normalizeCatKey(category);
+      const priceYER = toYERLocal(price, currency);
       const phoneDigits = String(phone || '').replace(/\D/g, '');
 
       const uploaded = await uploadNewImages();
@@ -567,71 +560,74 @@ export default function EditListingPage() {
         title: title.trim(),
         description: desc.trim(),
         city: city.trim(),
-        category: String(category || 'solar'),
+        category: cKey || String(category || 'solar'),
 
         // ✅ فروع الأقسام (Taxonomy)
-        carMake: catKey === 'cars' ? (carMake || null) : null,
-        carMakeText: catKey === 'cars' && carMake === 'other' ? (carMakeText.trim() || null) : null,
+        carMake: cKey === 'cars' ? (carMake || null) : null,
+        carMakeText: cKey === 'cars' && carMake === 'other' ? (carMakeText.trim() || null) : null,
 
         carModel:
-          catKey === 'cars'
-            ? (carModel && carModel !== 'other'
-                ? carModel
-                : (carModelText.trim() ? slugKey(carModelText) : null))
+          cKey === 'cars'
+            ? carModel && carModel !== 'other'
+              ? carModel
+              : carModelText.trim()
+                ? slugKey(carModelText)
+                : null
             : null,
         carModelText:
-          catKey === 'cars' && (carModel === 'other' || (carModelText.trim() && carModel !== 'other'))
+          cKey === 'cars' && (carModel === 'other' || (carModelText.trim() && carModel !== 'other'))
             ? (carModelText.trim() || null)
             : null,
 
-        phoneBrand: catKey === 'phones' ? (phoneBrand || null) : null,
-        phoneBrandText: catKey === 'phones' && phoneBrand === 'other' ? (phoneBrandText.trim() || null) : null,
+        phoneBrand: cKey === 'phones' ? (phoneBrand || null) : null,
+        phoneBrandText: cKey === 'phones' && phoneBrand === 'other' ? (phoneBrandText.trim() || null) : null,
 
-        dealType: catKey === 'realestate' ? (dealType || null) : null,
-        propertyType: catKey === 'realestate' ? (propertyType || null) : null,
-        propertyTypeText:
-          catKey === 'realestate' && propertyType === 'other'
-            ? (propertyTypeText.trim() || null)
+        dealType: cKey === 'realestate' ? (dealType || null) : null,
+        propertyType: cKey === 'realestate' ? (propertyType || null) : null,
+        propertyTypeText: cKey === 'realestate' && propertyType === 'other' ? (propertyTypeText.trim() || null) : null,
+
+        electronicsType: cKey === 'electronics' ? (electronicsType || null) : null,
+        electronicsTypeText:
+          cKey === 'electronics' && electronicsType === 'other' ? (electronicsTypeText.trim() || null) : null,
+
+        motorcycleBrand: cKey === 'motorcycles' ? (motorcycleBrand || null) : null,
+        motorcycleBrandText:
+          cKey === 'motorcycles' && motorcycleBrand === 'other' ? (motorcycleBrandText.trim() || null) : null,
+
+        heavyEquipmentType: cKey === 'heavy_equipment' ? (heavyEquipmentType || null) : null,
+        heavyEquipmentTypeText:
+          cKey === 'heavy_equipment' && heavyEquipmentType === 'other'
+            ? (heavyEquipmentTypeText.trim() || null)
             : null,
 
-        electronicsType: catKey === 'electronics' ? (electronicsType || null) : null,
-        electronicsTypeText: catKey === 'electronics' && electronicsType === 'other' ? (electronicsTypeText.trim() || null) : null,
+        solarType: cKey === 'solar' ? (solarType || null) : null,
+        solarTypeText: cKey === 'solar' && solarType === 'other' ? (solarTypeText.trim() || null) : null,
 
-        motorcycleBrand: catKey === 'motorcycles' ? (motorcycleBrand || null) : null,
-        motorcycleBrandText: catKey === 'motorcycles' && motorcycleBrand === 'other' ? (motorcycleBrandText.trim() || null) : null,
+        networkType: cKey === 'networks' ? (networkType || null) : null,
+        networkTypeText: cKey === 'networks' && networkType === 'other' ? (networkTypeText.trim() || null) : null,
 
-        heavyEquipmentType: catKey === 'heavy_equipment' ? (heavyEquipmentType || null) : null,
-        heavyEquipmentTypeText:
-          catKey === 'heavy_equipment' && heavyEquipmentType === 'other' ? (heavyEquipmentTypeText.trim() || null) : null,
-
-        solarType: catKey === 'solar' ? (solarType || null) : null,
-        solarTypeText: catKey === 'solar' && solarType === 'other' ? (solarTypeText.trim() || null) : null,
-
-        networkType: catKey === 'networks' ? (networkType || null) : null,
-        networkTypeText: catKey === 'networks' && networkType === 'other' ? (networkTypeText.trim() || null) : null,
-
-        maintenanceType: catKey === 'maintenance' ? (maintenanceType || null) : null,
+        maintenanceType: cKey === 'maintenance' ? (maintenanceType || null) : null,
         maintenanceTypeText:
-          catKey === 'maintenance' && maintenanceType === 'other' ? (maintenanceTypeText.trim() || null) : null,
+          cKey === 'maintenance' && maintenanceType === 'other' ? (maintenanceTypeText.trim() || null) : null,
 
-        furnitureType: catKey === 'furniture' ? (furnitureType || null) : null,
-        furnitureTypeText: catKey === 'furniture' && furnitureType === 'other' ? (furnitureTypeText.trim() || null) : null,
+        furnitureType: cKey === 'furniture' ? (furnitureType || null) : null,
+        furnitureTypeText: cKey === 'furniture' && furnitureType === 'other' ? (furnitureTypeText.trim() || null) : null,
 
-        homeToolsType: catKey === 'home_tools' ? (homeToolsType || null) : null,
+        homeToolsType: cKey === 'home_tools' ? (homeToolsType || null) : null,
         homeToolsTypeText:
-          catKey === 'home_tools' && homeToolsType === 'other' ? (homeToolsTypeText.trim() || null) : null,
+          cKey === 'home_tools' && homeToolsType === 'other' ? (homeToolsTypeText.trim() || null) : null,
 
-        clothesType: catKey === 'clothes' ? (clothesType || null) : null,
-        clothesTypeText: catKey === 'clothes' && clothesType === 'other' ? (clothesTypeText.trim() || null) : null,
+        clothesType: cKey === 'clothes' ? (clothesType || null) : null,
+        clothesTypeText: cKey === 'clothes' && clothesType === 'other' ? (clothesTypeText.trim() || null) : null,
 
-        animalType: catKey === 'animals' ? (animalType || null) : null,
-        animalTypeText: catKey === 'animals' && animalType === 'other' ? (animalTypeText.trim() || null) : null,
+        animalType: cKey === 'animals' ? (animalType || null) : null,
+        animalTypeText: cKey === 'animals' && animalType === 'other' ? (animalTypeText.trim() || null) : null,
 
-        jobType: catKey === 'jobs' ? (jobType || null) : null,
-        jobTypeText: catKey === 'jobs' && jobType === 'other' ? (jobTypeText.trim() || null) : null,
+        jobType: cKey === 'jobs' ? (jobType || null) : null,
+        jobTypeText: cKey === 'jobs' && jobType === 'other' ? (jobTypeText.trim() || null) : null,
 
-        serviceType: catKey === 'services' ? (serviceType || null) : null,
-        serviceTypeText: catKey === 'services' && serviceType === 'other' ? (serviceTypeText.trim() || null) : null,
+        serviceType: cKey === 'services' ? (serviceType || null) : null,
+        serviceTypeText: cKey === 'services' && serviceType === 'other' ? (serviceTypeText.trim() || null) : null,
 
         phone: phoneDigits || null,
         isWhatsapp: !!isWhatsapp,
@@ -646,13 +642,12 @@ export default function EditListingPage() {
 
         images: finalImages,
 
-        // ✅ status (مفيد لملفك الشخصي + إعلاناتي)
         status: status === 'sold' ? 'sold' : 'active',
 
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       };
 
-      await db.collection('listings').doc(id).update(payload);
+      await db.collection('listings').doc(String(id)).update(payload);
 
       // بعد حفظ الدوك: نحاول نحذف الصور التي أزلتها من التخزين
       if (removedExisting.length) {
@@ -685,9 +680,8 @@ export default function EditListingPage() {
     setDeleting(true);
     try {
       const urls = Array.isArray(existingImages) ? existingImages : [];
-      await db.collection('listings').doc(id).delete();
+      await db.collection('listings').doc(String(id)).delete();
 
-      // Best effort delete all images
       await Promise.all(urls.map(bestEffortDeleteStorageUrl));
 
       alert('🗑️ تم حذف الإعلان نهائياً');
@@ -704,12 +698,12 @@ export default function EditListingPage() {
     if (!price || isNaN(price)) return null;
     if (currency === 'YER') return null;
     try {
-      const yer = toYER(price, currency, rates);
+      const yer = toYERLocal(price, currency);
       return Math.round(yer).toLocaleString('ar-YE');
     } catch {
       return null;
     }
-  }, [price, currency, rates]);
+  }, [price, currency]);
 
   // ====== Guards ======
   if (authLoading || docLoading) {
@@ -731,8 +725,12 @@ export default function EditListingPage() {
           <h2 style={{ marginTop: 0 }}>🔒 تسجيل الدخول مطلوب</h2>
           <p>يجب تسجيل الدخول لتعديل الإعلان.</p>
           <div className="row">
-            <Link className="btn primary" href="/login">تسجيل الدخول</Link>
-            <Link className="btn" href="/">العودة للرئيسية</Link>
+            <Link className="btn primary" href="/login">
+              تسجيل الدخول
+            </Link>
+            <Link className="btn" href="/">
+              العودة للرئيسية
+            </Link>
           </div>
         </div>
         <style jsx>{styles}</style>
@@ -746,7 +744,9 @@ export default function EditListingPage() {
         <div className="card">
           <h2 style={{ marginTop: 0 }}>غير موجود</h2>
           <p>الإعلان غير موجود.</p>
-          <Link className="btn" href="/my-listings">إعلاناتي</Link>
+          <Link className="btn" href="/my-listings">
+            إعلاناتي
+          </Link>
         </div>
         <style jsx>{styles}</style>
       </div>
@@ -760,8 +760,12 @@ export default function EditListingPage() {
           <h2 style={{ marginTop: 0 }}>🛑 غير مصرح</h2>
           <p>ليست لديك صلاحية تعديل هذا الإعلان.</p>
           <div className="row">
-            <Link className="btn" href="/">الرئيسية</Link>
-            <Link className="btn" href="/my-listings">إعلاناتي</Link>
+            <Link className="btn" href="/">
+              الرئيسية
+            </Link>
+            <Link className="btn" href="/my-listings">
+              إعلاناتي
+            </Link>
           </div>
         </div>
         <style jsx>{styles}</style>
@@ -775,18 +779,13 @@ export default function EditListingPage() {
       <div className="hero">
         <div>
           <h1>تعديل الإعلان</h1>
-          <p className="muted">
-            عدّل بيانات إعلانك، الصور، والموقع بسهولة.
-          </p>
+          <p className="muted">عدّل بيانات إعلانك، الصور، والموقع بسهولة.</p>
         </div>
         <div className="heroActions">
-          <button className="btn" onClick={() => router.back()}>← رجوع</button>
-          <button
-            className="btn danger"
-            onClick={deleteListing}
-            disabled={deleting}
-            title="حذف نهائي"
-          >
+          <button className="btn" onClick={() => router.back()}>
+            ← رجوع
+          </button>
+          <button className="btn danger" onClick={deleteListing} disabled={deleting} title="حذف نهائي">
             {deleting ? 'جاري الحذف…' : '🗑️ حذف نهائي'}
           </button>
         </div>
@@ -867,13 +866,17 @@ export default function EditListingPage() {
                     className={`input ${errors.carMake ? 'err' : ''}`}
                     value={carMake}
                     onChange={(e) => {
-                      setCarMake(e.target.value);
+                      const v = e.target.value;
+                      setCarMake(v);
+                      // عند تغيير الماركة: صفّر الموديل (بدون useEffect عشان ما يصفّر عند التحميل)
+                      setCarModel('');
+                      setCarModelText('');
                       if (submitAttempted) setErrors((p) => ({ ...p, carMake: undefined }));
                     }}
                   >
                     <option value="">— اختر —</option>
                     {CAR_MAKES.map((m) => (
-                      <option key={m.value} value={m.value}>
+                      <option key={m.key} value={m.key}>
                         {m.label}
                       </option>
                     ))}
@@ -911,7 +914,7 @@ export default function EditListingPage() {
                     >
                       <option value="">— غير محدد —</option>
                       {carModelsForMake.map((x) => (
-                        <option key={x.value} value={x.value}>
+                        <option key={x.key} value={x.key}>
                           {x.label}
                         </option>
                       ))}
@@ -970,7 +973,7 @@ export default function EditListingPage() {
                   >
                     <option value="">— اختر —</option>
                     {PHONE_BRANDS.map((b) => (
-                      <option key={b.value} value={b.value}>
+                      <option key={b.key} value={b.key}>
                         {b.label}
                       </option>
                     ))}
@@ -1017,7 +1020,7 @@ export default function EditListingPage() {
                   >
                     <option value="">— اختر —</option>
                     {DEAL_TYPES.map((d) => (
-                      <option key={d.value} value={d.value}>
+                      <option key={d.key} value={d.key}>
                         {d.label}
                       </option>
                     ))}
@@ -1037,7 +1040,7 @@ export default function EditListingPage() {
                   >
                     <option value="">— اختر —</option>
                     {PROPERTY_TYPES.map((p) => (
-                      <option key={p.value} value={p.value}>
+                      <option key={p.key} value={p.key}>
                         {p.label}
                       </option>
                     ))}
@@ -1074,7 +1077,9 @@ export default function EditListingPage() {
                   <select className="input" value={electronicsType} onChange={(e) => setElectronicsType(e.target.value)}>
                     <option value="">— غير محدد —</option>
                     {ELECTRONICS_TYPES.map((x) => (
-                      <option key={x.value} value={x.value}>{x.label}</option>
+                      <option key={x.key} value={x.key}>
+                        {x.label}
+                      </option>
                     ))}
                     <option value="other">أخرى…</option>
                   </select>
@@ -1105,7 +1110,9 @@ export default function EditListingPage() {
                   <select className="input" value={motorcycleBrand} onChange={(e) => setMotorcycleBrand(e.target.value)}>
                     <option value="">— غير محدد —</option>
                     {MOTORCYCLE_BRANDS.map((x) => (
-                      <option key={x.value} value={x.value}>{x.label}</option>
+                      <option key={x.key} value={x.key}>
+                        {x.label}
+                      </option>
                     ))}
                     <option value="other">أخرى…</option>
                   </select>
@@ -1136,7 +1143,9 @@ export default function EditListingPage() {
                   <select className="input" value={heavyEquipmentType} onChange={(e) => setHeavyEquipmentType(e.target.value)}>
                     <option value="">— غير محدد —</option>
                     {HEAVY_EQUIPMENT_TYPES.map((x) => (
-                      <option key={x.value} value={x.value}>{x.label}</option>
+                      <option key={x.key} value={x.key}>
+                        {x.label}
+                      </option>
                     ))}
                     <option value="other">أخرى…</option>
                   </select>
@@ -1167,7 +1176,9 @@ export default function EditListingPage() {
                   <select className="input" value={solarType} onChange={(e) => setSolarType(e.target.value)}>
                     <option value="">— غير محدد —</option>
                     {SOLAR_TYPES.map((x) => (
-                      <option key={x.value} value={x.value}>{x.label}</option>
+                      <option key={x.key} value={x.key}>
+                        {x.label}
+                      </option>
                     ))}
                     <option value="other">أخرى…</option>
                   </select>
@@ -1198,7 +1209,9 @@ export default function EditListingPage() {
                   <select className="input" value={networkType} onChange={(e) => setNetworkType(e.target.value)}>
                     <option value="">— غير محدد —</option>
                     {NETWORK_TYPES.map((x) => (
-                      <option key={x.value} value={x.value}>{x.label}</option>
+                      <option key={x.key} value={x.key}>
+                        {x.label}
+                      </option>
                     ))}
                     <option value="other">أخرى…</option>
                   </select>
@@ -1229,7 +1242,9 @@ export default function EditListingPage() {
                   <select className="input" value={maintenanceType} onChange={(e) => setMaintenanceType(e.target.value)}>
                     <option value="">— غير محدد —</option>
                     {MAINTENANCE_TYPES.map((x) => (
-                      <option key={x.value} value={x.value}>{x.label}</option>
+                      <option key={x.key} value={x.key}>
+                        {x.label}
+                      </option>
                     ))}
                     <option value="other">أخرى…</option>
                   </select>
@@ -1260,7 +1275,9 @@ export default function EditListingPage() {
                   <select className="input" value={furnitureType} onChange={(e) => setFurnitureType(e.target.value)}>
                     <option value="">— غير محدد —</option>
                     {FURNITURE_TYPES.map((x) => (
-                      <option key={x.value} value={x.value}>{x.label}</option>
+                      <option key={x.key} value={x.key}>
+                        {x.label}
+                      </option>
                     ))}
                     <option value="other">أخرى…</option>
                   </select>
@@ -1291,7 +1308,9 @@ export default function EditListingPage() {
                   <select className="input" value={homeToolsType} onChange={(e) => setHomeToolsType(e.target.value)}>
                     <option value="">— غير محدد —</option>
                     {HOME_TOOLS_TYPES.map((x) => (
-                      <option key={x.value} value={x.value}>{x.label}</option>
+                      <option key={x.key} value={x.key}>
+                        {x.label}
+                      </option>
                     ))}
                     <option value="other">أخرى…</option>
                   </select>
@@ -1322,7 +1341,9 @@ export default function EditListingPage() {
                   <select className="input" value={clothesType} onChange={(e) => setClothesType(e.target.value)}>
                     <option value="">— غير محدد —</option>
                     {CLOTHES_TYPES.map((x) => (
-                      <option key={x.value} value={x.value}>{x.label}</option>
+                      <option key={x.key} value={x.key}>
+                        {x.label}
+                      </option>
                     ))}
                     <option value="other">أخرى…</option>
                   </select>
@@ -1353,7 +1374,9 @@ export default function EditListingPage() {
                   <select className="input" value={animalType} onChange={(e) => setAnimalType(e.target.value)}>
                     <option value="">— غير محدد —</option>
                     {ANIMAL_TYPES.map((x) => (
-                      <option key={x.value} value={x.value}>{x.label}</option>
+                      <option key={x.key} value={x.key}>
+                        {x.label}
+                      </option>
                     ))}
                     <option value="other">أخرى…</option>
                   </select>
@@ -1384,7 +1407,9 @@ export default function EditListingPage() {
                   <select className="input" value={jobType} onChange={(e) => setJobType(e.target.value)}>
                     <option value="">— غير محدد —</option>
                     {JOB_TYPES.map((x) => (
-                      <option key={x.value} value={x.value}>{x.label}</option>
+                      <option key={x.key} value={x.key}>
+                        {x.label}
+                      </option>
                     ))}
                     <option value="other">أخرى…</option>
                   </select>
@@ -1415,7 +1440,9 @@ export default function EditListingPage() {
                   <select className="input" value={serviceType} onChange={(e) => setServiceType(e.target.value)}>
                     <option value="">— غير محدد —</option>
                     {SERVICE_TYPES.map((x) => (
-                      <option key={x.value} value={x.value}>{x.label}</option>
+                      <option key={x.key} value={x.key}>
+                        {x.label}
+                      </option>
                     ))}
                     <option value="other">أخرى…</option>
                   </select>
@@ -1438,8 +1465,6 @@ export default function EditListingPage() {
           ) : null}
 
           <div className="row2">
-            <div className="field">
-              <label className="label req">السعر</label>
             <div className="field">
               <label className="label req">السعر</label>
               <input
@@ -1471,7 +1496,9 @@ export default function EditListingPage() {
                 ))}
               </div>
               {convertedPrice && (
-                <div className="help">سيتم الحفظ كـ <b>{convertedPrice}</b> ريال يمني (priceYER)</div>
+                <div className="help">
+                  سيتم الحفظ كـ <b>{convertedPrice}</b> ريال يمني (priceYER)
+                </div>
               )}
             </div>
           </div>
@@ -1534,7 +1561,9 @@ export default function EditListingPage() {
                   💰 تم البيع
                 </button>
               </div>
-              <div className="help">هذه تضيف/تحدث الحقل <b>status</b> داخل الإعلان</div>
+              <div className="help">
+                هذه تضيف/تحدث الحقل <b>status</b> داخل الإعلان
+              </div>
             </div>
 
             <div className="field">
@@ -1593,7 +1622,9 @@ export default function EditListingPage() {
                   setNewImages((prev) => [...prev, ...files]);
                 }}
               />
-              <label htmlFor="upl" className="uploadBtn">📷 اختر صور</label>
+              <label htmlFor="upl" className="uploadBtn">
+                📷 اختر صور
+              </label>
               <div className="help">حد أقصى {MAX_IMAGES} صور للإعلان</div>
             </div>
 
@@ -1602,12 +1633,7 @@ export default function EditListingPage() {
                 {newPreviews.map((p, idx) => (
                   <div key={idx} className="imgBox">
                     <img src={p} alt={`new-${idx}`} className="img" />
-                    <button
-                      type="button"
-                      className="x"
-                      onClick={() => handleRemoveNewImage(idx)}
-                      aria-label="حذف"
-                    >
+                    <button type="button" className="x" onClick={() => handleRemoveNewImage(idx)} aria-label="حذف">
                       ×
                     </button>
                   </div>
@@ -1617,7 +1643,9 @@ export default function EditListingPage() {
           </div>
 
           <div className="footerRow">
-            <button className="btn" onClick={() => router.back()}>إلغاء</button>
+            <button className="btn" onClick={() => router.back()}>
+              إلغاء
+            </button>
             <button className="btn primary" onClick={save} disabled={saving}>
               {saving ? 'جاري الحفظ…' : '💾 حفظ التعديلات'}
             </button>
@@ -1631,9 +1659,7 @@ export default function EditListingPage() {
           <div className="map">
             <LocationPicker value={coords} onChange={onPick} />
           </div>
-          <div className="help">
-            {coords ? `Lat: ${coords[0]} — Lng: ${coords[1]}` : 'لم يتم تحديد موقع بعد'}
-          </div>
+          <div className="help">{coords ? `Lat: ${coords[0]} — Lng: ${coords[1]}` : 'لم يتم تحديد موقع بعد'}</div>
         </div>
       </div>
 
