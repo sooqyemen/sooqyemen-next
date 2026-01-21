@@ -41,10 +41,10 @@ function formatAmount(cur, value) {
   if (!isFinite(n) || n <= 0) return '—';
 
   if (c === 'YER') {
-    return new Intl.NumberFormat('ar-YE', { maximumFractionDigits: 0 }).format(Math.round(n));
+    return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(n));
   }
   // SAR / USD
-  return new Intl.NumberFormat('ar-YE', { maximumFractionDigits: 2 }).format(n);
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(n);
 }
 
 /**
