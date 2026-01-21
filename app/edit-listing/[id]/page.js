@@ -38,6 +38,26 @@ const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
 
 const MAX_IMAGES = 10;
 
+// ✅ الأقسام الافتراضية (Fallback) — لازم تطابق مفاتيح Firestore والتصنيف
+const DEFAULT_CATEGORIES = [
+  { slug: 'cars', name: 'سيارات' },
+  { slug: 'realestate', name: 'عقارات' },
+  { slug: 'phones', name: 'جوالات' },
+  { slug: 'electronics', name: 'إلكترونيات' },
+  { slug: 'motorcycles', name: 'دراجات نارية' },
+  { slug: 'heavy_equipment', name: 'معدات ثقيلة' },
+  { slug: 'solar', name: 'طاقة شمسية' },
+  { slug: 'networks', name: 'نت وشبكات' },
+  { slug: 'maintenance', name: 'صيانة' },
+  { slug: 'furniture', name: 'أثاث' },
+  { slug: 'home_tools', name: 'أدوات منزلية' },
+  { slug: 'clothes', name: 'ملابس' },
+  { slug: 'animals', name: 'حيوانات' },
+  { slug: 'jobs', name: 'وظائف' },
+  { slug: 'services', name: 'خدمات' },
+  { slug: 'other', name: 'أخرى' },
+];
+
 const DEFAULT_EXCHANGE = {
   // تقدر تغيّرها من .env.local (قيم تقريبية افتراضية)
   SAR_TO_YER: Number(process.env.NEXT_PUBLIC_SAR_TO_YER || process.env.NEXT_PUBLIC_RATE_SAR_TO_YER || 600),
@@ -52,6 +72,7 @@ function toYERLocal(amount, cur) {
   if (cur === 'USD') return n * DEFAULT_EXCHANGE.USD_TO_YER;
   return n;
 }
+
 
 function normalizeCatKey(v) {
   const raw = String(v || '').trim();
@@ -114,6 +135,11 @@ export default function EditListingPage() {
   const [desc, setDesc] = useState('');
   const [city, setCity] = useState('');
   const [category, setCategory] = useState('solar');
+
+  // ✅ أقسام (من Firestore إن وجدت) + Fallback
+  const [cats, setCats] = useState(DEFAULT_CATEGORIES);
+  const [catsLoading, setCatsLoading] = useState(true);
+  const [catsSource, setCatsSource] = useState('loading'); // firestore | fallback | loading
 
   // ✅ فروع الأقسام (هرمية)
   const [carMake, setCarMake] = useState('');
@@ -189,6 +215,78 @@ export default function EditListingPage() {
   const [errors, setErrors] = useState({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
+  // ✅ تحميل الأقسام (من Firestore إن توفر، وإلا Fallback)
+  useEffect(() => {
+    let unsub = null;
+
+    try {
+      unsub = db.collection('categories').onSnapshot(
+        (snap) => {
+          const arr = snap.docs
+            .map((doc) => {
+              const d = doc.data() || {};
+              const slug = normalizeCatKey(d.slug || d.key || d.id || doc.id);
+              const name = String(d.name || d.label || slug || '').trim();
+              const active = d.active !== false;
+              if (!slug || !name || !active) return null;
+              return { slug, name };
+            })
+            .filter(Boolean);
+
+          // إزالة التكرار
+          const uniq = [];
+          for (const c of arr) {
+            if (!uniq.some((x) => x.slug === c.slug)) uniq.push(c);
+          }
+
+          uniq.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+
+          if (uniq.length) {
+            setCats(uniq);
+            setCatsSource('firestore');
+          } else {
+            setCats(DEFAULT_CATEGORIES);
+            setCatsSource('fallback');
+          }
+          setCatsLoading(false);
+        },
+        (err) => {
+          console.warn('Categories snapshot failed:', err);
+          setCats(DEFAULT_CATEGORIES);
+          setCatsSource('fallback');
+          setCatsLoading(false);
+        }
+      );
+    } catch (e) {
+      console.warn('Categories init failed:', e);
+      setCats(DEFAULT_CATEGORIES);
+      setCatsSource('fallback');
+      setCatsLoading(false);
+    }
+
+    return () => {
+      try {
+        if (unsub) unsub();
+      } catch {}
+    };
+  }, []);
+
+  // ✅ تأكد أن قيمة القسم مطابقة للقائمة (تطبيع + Fallback)
+  useEffect(() => {
+    if (catsLoading) return;
+
+    const norm = normalizeCatKey(category);
+    if (!norm) return;
+
+    const exists = cats.some((x) => x.slug === norm);
+    if (!exists) {
+      if (category !== 'other') setCategory('other');
+      return;
+    }
+    if (category !== norm) setCategory(norm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catsLoading, cats, category]);
+
   const catKey = useMemo(() => normalizeCatKey(category), [category]);
 
   const carModelsForMake = useMemo(() => {
@@ -223,7 +321,7 @@ export default function EditListingPage() {
         setTitle(String(d.title || ''));
         setDesc(String(d.description || ''));
         setCity(String(d.city || ''));
-        setCategory(String(d.category || 'solar'));
+        setCategory(normalizeCatKey(d.category || 'solar') || 'other');
 
         // ✅ فروع الأقسام (Taxonomy)
         setCarMake(String(d.carMake || ''));
@@ -398,6 +496,9 @@ export default function EditListingPage() {
 
     if (!city.trim()) e.city = 'الرجاء إدخال المدينة';
 
+    const cKey = normalizeCatKey(category);
+    if (!cKey) e.category = 'الرجاء اختيار القسم';
+
     if (!price || isNaN(price) || Number(price) <= 0) e.price = 'الرجاء إدخال سعر صحيح';
 
     const phoneDigits = String(phone || '').replace(/\D/g, '');
@@ -408,7 +509,6 @@ export default function EditListingPage() {
     }
 
     // ✅ فروع الأقسام (لثبات الخريطة/الأقسام)
-    const cKey = normalizeCatKey(category);
 
     if (cKey === 'cars') {
       if (!carMake) e.carMake = 'اختر ماركة السيارة';
@@ -559,7 +659,7 @@ export default function EditListingPage() {
         title: title.trim(),
         description: desc.trim(),
         city: city.trim(),
-        category: cKey || String(category || 'solar'),
+        category: cKey || 'other',
 
         // ✅ فروع الأقسام (Taxonomy)
         carMake: cKey === 'cars' ? (carMake || null) : null,
@@ -842,14 +942,31 @@ export default function EditListingPage() {
             </div>
 
             <div className="field">
-              <label className="label">القسم</label>
-              <input
-                className="input"
+              <label className="label req">القسم</label>
+              <select
+                className={`input ${errors.category ? 'err' : ''}`}
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="مثال: solar"
-              />
-              <div className="help">نفس قيمة القسم في إضافة الإعلان</div>
+                onChange={(e) => {
+                  setCategory(e.target.value);
+                  if (submitAttempted) setErrors((p) => ({ ...p, category: undefined }));
+                }}
+                disabled={catsLoading}
+              >
+                <option value="">— اختر —</option>
+                {cats.map((c) => (
+                  <option key={c.slug} value={c.slug}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              {errors.category && <div className="errMsg">{errors.category}</div>}
+              <div className="help">
+                {catsLoading
+                  ? 'جاري تحميل الأقسام…'
+                  : catsSource === 'firestore'
+                    ? 'الأقسام من قاعدة البيانات'
+                    : 'الأقسام الافتراضية (Fallback)'}
+              </div>
             </div>
           </div>
 
