@@ -53,7 +53,6 @@ function toYERLocal(amount, cur) {
   return n;
 }
 
-
 function normalizeCatKey(v) {
   const raw = String(v || '').trim();
   if (!raw) return '';
