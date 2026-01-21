@@ -128,6 +128,14 @@ function pickTaxonomy(listing, categoryKey) {
   if (categoryKey === 'cars') {
     if (listing?.carMake) out.carMake = listing.carMake;
     if (listing?.carMakeText) out.carMakeText = listing.carMakeText;
+
+    // carModel (يدعم بيانات جديدة + استنتاج من النص للإعلانات القديمة)
+    if (listing?.carModel) out.carModel = listing.carModel;
+    if (listing?.carModelText) out.carModelText = listing.carModelText;
+    if (!out.carModel) {
+      const detected = detectCarModel(listing, out.carMake);
+      if (detected) out.carModel = detected;
+    }
   }
   if (categoryKey === 'phones') {
     if (listing?.phoneBrand) out.phoneBrand = listing.phoneBrand;
@@ -251,6 +259,54 @@ function carModelLabelLocal(makeKey, modelKey) {
   return found?.label || modelKey || 'أخرى';
 }
 
+// ✅ محاولة استنتاج موديل السيارة من الحقول أو من العنوان/الوصف (fallback)
+function detectCarModel(listing, makeKey) {
+  const mk = safeStr(makeKey).toLowerCase();
+  if (!mk) return '';
+
+  const raw =
+    listing?.carModel ??
+    listing?.model ??
+    listing?.vehicleModel ??
+    listing?.subModel ??
+    listing?.subType ??
+    listing?.modelName ??
+    '';
+
+  const normalize = (v) =>
+    safeStr(v)
+      .toLowerCase()
+      .replace(/\s+/g, '_')
+      .replace(/-/g, '_')
+      .replace(/__+/g, '_');
+
+  const rawNorm = normalize(raw);
+  if (rawNorm) return rawNorm;
+
+  const txt = `${safeStr(listing?.title)} ${safeStr(listing?.description)}`.toLowerCase();
+  const presets = CAR_MODELS_BY_MAKE[mk] || [];
+
+  for (const it of presets) {
+    const key = safeStr(it.key).toLowerCase();
+    const label = safeStr(it.label).toLowerCase();
+    const variants = [key, label];
+
+    // مرادفات انجليزي شائعة لبعض الموديلات
+    if (key === 'land_cruiser') variants.push('landcruiser', 'land cruiser', 'lc');
+    if (key === 'hilux') variants.push('hi lux');
+    if (key === 'xtrail') variants.push('x-trail', 'xtrail');
+    if (key === 'crv') variants.push('cr-v', 'crv');
+    if (key === 'mazda3') variants.push('mazda 3');
+    if (key === 'mazda6') variants.push('mazda 6');
+
+    for (const v of variants) {
+      const vv = String(v || '').trim();
+      if (vv && txt.includes(vv)) return key;
+    }
+  }
+
+  return '';
+}
 
 
 
@@ -347,14 +403,16 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const variants = useMemo(() => categoryVariants(single), [single]);
 
   // ✅ States للفروع الهرمية
-  const [carMake, setCarMake] = useState('');   const [carModel, setCarModel] = useState('');
-// '' = الكل
+  const [carMake, setCarMake] = useState('');
+  const [carModel, setCarModel] = useState('');
+  // '' = الكل
   const [phoneBrand, setPhoneBrand] = useState('');
   const [dealType, setDealType] = useState(''); // '' = الكل
   const [propertyType, setPropertyType] = useState('');
 
   useEffect(() => {
     setCarMake('');
+    setCarModel('');
     setPhoneBrand('');
     setDealType('');
     setPropertyType('');
@@ -572,6 +630,18 @@ export default function CategoryListings({ category, initialListings = [] }) {
       if (catKey === 'realestate') inc(out.dealTypes, t.dealType || '');
     }
 
+    // carModels: نعرضها فقط عندما تختار ماركة
+    if (catKey === 'cars') {
+      const mk = safeStr(carMake);
+      if (mk) {
+        for (const l of itemsWithTax) {
+          const t = l._tax || {};
+          if (safeStr(t.carMake || 'other') !== mk) continue;
+          inc(out.carModels, t.carModel || 'other');
+        }
+      }
+    }
+
     if (catKey === 'realestate') {
       const dealFilter = safeStr(dealType);
       for (const l of itemsWithTax) {
@@ -590,8 +660,13 @@ export default function CategoryListings({ category, initialListings = [] }) {
     let arr = itemsWithTax;
 
     if (catKey === 'cars') {
-      const sel = safeStr(carMake);
-      if (sel) arr = arr.filter((l) => safeStr(l?._tax?.carMake || 'other') === sel);
+      const selMake = safeStr(carMake);
+      const selModel = safeStr(carModel);
+
+      if (selMake) arr = arr.filter((l) => safeStr(l?._tax?.carMake || 'other') === selMake);
+      if (selMake && selModel) {
+        arr = arr.filter((l) => safeStr(l?._tax?.carModel || 'other') === selModel);
+      }
     }
     if (catKey === 'phones') {
       const sel = safeStr(phoneBrand);
@@ -909,44 +984,29 @@ const phoneBrandOptions = useMemo(() => {
   return (
     <div>
       <div className="sooq-filterShell">
-        <div className="sooq-topBar">
-          <div className="sooq-viewSwitch" role="tablist" aria-label="تبديل العرض">
-            <button
-              type="button"
-              className={`sooq-viewBtn ${view === 'grid' ? 'isActive' : ''}`}
-              onClick={() => setView('grid')}
-            >
-              ◼️ <span className="sooq-viewTxt">شبكة</span>
-            </button>
-            <button
-              type="button"
-              className={`sooq-viewBtn ${view === 'list' ? 'isActive' : ''}`}
-              onClick={() => setView('list')}
-            >
-              ☰ <span className="sooq-viewTxt">قائمة</span>
-            </button>
-            <button
-              type="button"
-              className={`sooq-viewBtn ${view === 'map' ? 'isActive' : ''}`}
-              onClick={() => setView('map')}
-            >
-              🗺️ <span className="sooq-viewTxt">خريطة</span>
-            </button>
-          </div>
+        <TaxonomyInner />
 
-          <div className="sooq-searchWrap">
-            <span className="sooq-searchIcon" aria-hidden="true">🔎</span>
+        <div className="sooq-controlsRow">
+          <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className="row" style={{ gap: 8 }}>
+              <button className={`btn ${view === 'grid' ? 'btnPrimary' : ''}`} onClick={() => setView('grid')}>
+                ◼️ شبكة
+              </button>
+              <button className={`btn ${view === 'list' ? 'btnPrimary' : ''}`} onClick={() => setView('list')}>
+                ☰ قائمة
+              </button>
+              <button className={`btn ${view === 'map' ? 'btnPrimary' : ''}`} onClick={() => setView('map')}>
+                🗺️ خريطة
+              </button>
+            </div>
+
             <input
-              className="input sooq-searchInput"
+              className="input sooq-search"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="ابحث داخل القسم..."
             />
           </div>
-        </div>
-
-        <div className="sooq-chipsShell">
-          <TaxonomyInner />
         </div>
       </div>
 
@@ -963,13 +1023,15 @@ const phoneBrandOptions = useMemo(() => {
         <HomeMapView listings={filtered} />
       ) : (
         <>
-          <div className={`sooq-results ${view === 'list' ? 'isList' : 'isGrid'}`}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: view === 'grid' ? 'repeat(auto-fill, minmax(240px, 1fr))' : '1fr',
+              gap: 12,
+            }}
+          >
             {filtered.map((l) => (
-              <ListingCard
-                key={l.id}
-                listing={l}
-                variant={view === 'list' ? 'list' : 'grid'}
-              />
+              <ListingCard key={l.id} listing={l} />
             ))}
           </div>
 
@@ -994,14 +1056,7 @@ const phoneBrandOptions = useMemo(() => {
         </>
       )}
 
-      {/*
-        IMPORTANT:
-        The taxonomy chips are rendered inside nested components (TaxonomyInner/Chip).
-        With styled-jsx scoping, those nested components won't inherit the parent's scope
-        attribute, so their styles can appear "بدون ستايل".
-        We use global styled-jsx here (classes are namespaced with "sooq-" so it's safe).
-      */}
-      <style jsx global>{`
+      <style jsx>{`
         .tax-wrap {
           margin-bottom: 12px;
           padding: 10px 12px;
@@ -1169,89 +1224,6 @@ const phoneBrandOptions = useMemo(() => {
           .sooq-chip { padding: 8px 9px; font-size: 12px; }
         }
 
-
-
-        /* ====== Top bar (حل B: Glass/Blur + Chips) ====== */
-        .sooq-topBar {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-          flex-wrap: wrap;
-        }
-        .sooq-viewSwitch {
-          display: inline-flex;
-          gap: 6px;
-          padding: 6px;
-          border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.10);
-          background: rgba(255, 255, 255, 0.70);
-          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.06);
-          backdrop-filter: blur(10px);
-        }
-        .sooq-viewBtn {
-          border: 0;
-          background: transparent;
-          cursor: pointer;
-          padding: 10px 12px;
-          border-radius: 999px;
-          font-weight: 900;
-          font-size: 13px;
-          color: #0f172a;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          user-select: none;
-        }
-        .sooq-viewBtn.isActive {
-          background: #0f172a;
-          color: #fff;
-          box-shadow: 0 12px 18px rgba(15, 23, 42, 0.25);
-        }
-        .sooq-searchWrap {
-          position: relative;
-          flex: 1;
-          min-width: 220px;
-          max-width: 520px;
-        }
-        .sooq-searchIcon {
-          position: absolute;
-          left: 10px;
-          top: 50%;
-          transform: translateY(-50%);
-          font-size: 14px;
-          opacity: 0.75;
-          pointer-events: none;
-        }
-        .sooq-searchInput {
-          width: 100%;
-          padding-left: 34px !important;
-          border-radius: 999px !important;
-          border: 1px solid rgba(0, 0, 0, 0.10) !important;
-          background: rgba(255, 255, 255, 0.75) !important;
-          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.06);
-        }
-        .sooq-chipsShell {
-          margin-top: 12px;
-          padding-top: 10px;
-          border-top: 1px solid rgba(0, 0, 0, 0.08);
-        }
-
-        /* ====== Results grid/list ====== */
-        .sooq-results {
-          display: grid;
-          gap: 12px;
-        }
-        .sooq-results.isList {
-          grid-template-columns: 1fr;
-        }
-        .sooq-results.isGrid {
-          grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-        }
-        @media (max-width: 520px) {
-          .sooq-viewTxt { display: none; }
-          .sooq-results.isGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        }
       `}</style>
     </div>
   );
