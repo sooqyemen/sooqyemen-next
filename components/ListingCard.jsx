@@ -1,9 +1,8 @@
 'use client';
 
-import { useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRates, toYER } from '@/lib/rates';
+import Price from '@/components/Price';
 
 // ✅ تحويل slug إلى اسم عربي (fallback فقط إذا ما توفر categoryName)
 const CATEGORY_LABELS = {
@@ -32,117 +31,7 @@ function getCategoryLabel(listing) {
   return CATEGORY_LABELS[raw] || raw;
 }
 
-// ✅ عرض السعر: العملة الأصلية كعملة رئيسية + تحويلات تحتها (بدون إجبار YER كعملة عرض)
-const FALLBACK_SAR_TO_YER = 425;
-const FALLBACK_USD_TO_YER = 1632;
-
-function getYerPerSAR(rates) {
-  const r = rates || {};
-  const v = Number(r.SAR || r.sar || r.sarRate || r.sarToYer || r.sar_yer || FALLBACK_SAR_TO_YER);
-  return v > 0 ? v : FALLBACK_SAR_TO_YER;
-}
-
-function getYerPerUSD(rates) {
-  const r = rates || {};
-  const v = Number(r.USD || r.usd || r.usdRate || r.usdToYer || r.usd_yer || FALLBACK_USD_TO_YER);
-  return v > 0 ? v : FALLBACK_USD_TO_YER;
-}
-
-
-function parseMoney(val) {
-  if (val === undefined || val === null) return NaN;
-  if (typeof val === 'number') return val;
-  let s = String(val).trim();
-  if (!s) return NaN;
-
-  // Normalize Arabic-Indic digits (٠١٢٣٤٥٦٧٨٩) and Eastern Arabic digits (۰۱۲۳۴۵۶۷۸۹)
-  const map = {
-    '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9',
-    '۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9',
-  };
-  s = s.replace(/[٠-٩۰-۹]/g, (d) => map[d] || d);
-
-  // Remove common separators and any non-numeric chars except dot
-  s = s.replace(/[,\s]/g, '');
-  s = s.replace(/[^0-9.]/g, '');
-
-  const n = Number(s);
-  return isFinite(n) ? n : NaN;
-}
-
-function currencyLabel(cur) {
-  const c = String(cur || 'YER').toUpperCase();
-  if (c === 'SAR') return 'ريال سعودي';
-  if (c === 'USD') return 'دولار';
-  return 'ريال يمني';
-}
-
-function formatAmount(cur, value) {
-  const c = String(cur || 'YER').toUpperCase();
-  const n = Number(value);
-  if (!isFinite(n) || n <= 0) return '—';
-
-  if (c === 'YER') {
-    return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(n));
-  }
-  if (c === 'USD') {
-    return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
-  }
-  // SAR وغيره
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(n);
-}
-
-function computePriceDisplay(listing, priceYER, rates) {
-  const yer = Math.max(0, Number(priceYER) || 0);
-  const yerPerSAR = getYerPerSAR(rates);
-  const yerPerUSD = getYerPerUSD(rates);
-
-  const sar = yerPerSAR > 0 ? yer / yerPerSAR : null;
-  const usd = yerPerUSD > 0 ? yer / yerPerUSD : null;
-
-  const rawCur = String(listing?.originalCurrency || 'YER').toUpperCase();
-  const rawOrig = listing?.originalPrice;
-
-  const hasOriginal = rawOrig !== undefined && rawOrig !== null && String(rawOrig).trim() !== '';
-  const origNum = parseMoney(rawOrig);
-
-  let mainCur = rawCur || 'YER';
-  let mainVal = null;
-
-  if (hasOriginal && isFinite(origNum) && origNum > 0) {
-    mainVal = origNum;
-  } else {
-    if (mainCur === 'SAR') mainVal = sar;
-    else if (mainCur === 'USD') mainVal = usd;
-    else mainVal = yer;
-
-    if (!isFinite(Number(mainVal)) || Number(mainVal) <= 0) {
-      mainCur = 'YER';
-      mainVal = yer;
-    }
-  }
-
-  const all = { YER: yer, SAR: sar, USD: usd };
-
-  const main = {
-    cur: mainCur,
-    num: formatAmount(mainCur, mainVal),
-    label: currencyLabel(mainCur),
-  };
-
-  const subs = ['YER', 'SAR', 'USD']
-    .filter((c) => c !== mainCur)
-    .map((c) => ({
-      cur: c,
-      num: formatAmount(c, all[c]),
-      label: currencyLabel(c),
-    }));
-
-  return { main, subs };
-}
-
 export default function ListingCard({ listing, variant = 'grid' }) {
-  const rates = useRates();
   const img = (Array.isArray(listing?.images) && listing.images[0]) || listing?.image || null;
 
   // المدينة (إن وجدت)
@@ -151,50 +40,6 @@ export default function ListingCard({ listing, variant = 'grid' }) {
   // وصف مختصر
   const rawDesc = String(listing?.description || '');
   const shortDesc = rawDesc.length > 90 ? rawDesc.slice(0, 90) + '…' : rawDesc;
-
-  
-  /**
-   * ✅ السعر:
-   * - التخزين/الفرز يعتمد على priceYER (عملة معيارية واحدة)
-   * - العرض: العملة الأصلية التي أدخلها صاحب الإعلان + تحويلات محسوبة بأسعار الصرف الحالية
-   *
-   * ملاحظة مهمة:
-   * بعض الإعلانات القديمة قد تكون خزّنت originalPrice كسلسلة (مثلاً "١٠٠٠" أو "1,000").
-   * لذلك نعمل parsing آمن.
-   */
-  const rawOrigCur = String(listing?.originalCurrency || 'YER').toUpperCase();
-  const origPriceNum = parseMoney(listing?.originalPrice);
-
-  const hasOrig =
-    (rawOrigCur === 'YER' || rawOrigCur === 'SAR' || rawOrigCur === 'USD') &&
-    isFinite(origPriceNum) &&
-    origPriceNum > 0;
-
-  // السعر المخزن (للإعلانات/المزاد)
-  const storedYER = Number(listing?.currentBidYER ?? listing?.priceYER ?? 0) || 0;
-
-  // ✅ سعر عرض/تحويل "فعلي": لو عندنا أصل الإعلان نحسبه بأسعار الصرف الحالية
-  // هذا يجعل تغيير الصرف من Firestore ينعكس على كل المعروض فوراً (في التحويلات).
-  let effectiveYER = storedYER;
-
-  // المزاد: نعتمد على currentBidYER لأنه ديناميكي
-  const hasBid = Number(listing?.currentBidYER || 0) > 0;
-
-  if (!hasBid && hasOrig) {
-    // يحسب YER من الأصل باستخدام نفس دالة النظام
-    effectiveYER = Number(toYER(origPriceNum, rawOrigCur, rates)) || storedYER;
-  }
-
-  // Fallback أخير لو ما فيه شيء
-  if (!effectiveYER && hasOrig) {
-    effectiveYER = Number(toYER(origPriceNum, rawOrigCur, rates));
-  }
-
-  const priceYER = effectiveYER;
-
-  const priceView = useMemo(() => {
-    return computePriceDisplay(listing, Number(priceYER) || 0, rates);
-  }, [listing?.originalPrice, listing?.originalCurrency, priceYER, rates]);
 
   const href = `/listing/${listing?.id}`;
 
@@ -237,16 +82,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
 
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
               <span className="badge">{getCategoryLabel(listing)}</span>
-              <div className="lc-price">
-                <div className="lc-priceMain">
-                  <span className="lc-priceNum" dir="ltr">{priceView.main.num}</span> {priceView.main.label}
-                </div>
-                {priceView.subs?.length ? (
-                  <div className="lc-priceSub">
-                    ≈ {priceView.subs.map((x) => `${x.num} ${x.label}`).join(' • ')}
-                  </div>
-                ) : null}
-              </div>
+              <Price listing={listing} variant="compact" />
             </div>
 
             <div className="muted lc-desc" style={{ marginTop: 8 }}>{shortDesc || ""}</div>
@@ -300,27 +136,6 @@ export default function ListingCard({ listing, variant = 'grid' }) {
             overflow: hidden;
           }
 
-          .lc-priceMain{
-            font-weight: 900;
-            font-size: 14px;
-            line-height: 1.15;
-            text-align: right;
-            direction: rtl;
-          }
-          .lc-priceNum{
-            direction: ltr;
-            unicode-bidi: isolate;
-            font-variant-numeric: tabular-nums;
-          }
-          .lc-priceSub{
-            margin-top: 2px;
-            font-size: 11px;
-            color: #64748b;
-            line-height: 1.25;
-            text-align: right;
-            direction: rtl;
-          }
-
           @media (max-width: 480px) {
             .lc-thumb { width: 105px; height: 88px; }
             .lc-title { font-size: 14px; min-height: 39px; }
@@ -369,17 +184,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
         {/* القسم + السعر */}
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
           <span className="badge">{getCategoryLabel(listing)}</span>
-
-                        <div className="lc-price">
-                <div className="lc-priceMain">
-                  <span className="lc-priceNum" dir="ltr">{priceView.main.num}</span> {priceView.main.label}
-                </div>
-                {priceView.subs?.length ? (
-                  <div className="lc-priceSub">
-                    ≈ {priceView.subs.map((x) => `${x.num} ${x.label}`).join(' • ')}
-                  </div>
-                ) : null}
-              </div>
+          <Price listing={listing} variant="compact" />
         </div>
 
         {/* وصف مختصر */}
@@ -398,24 +203,23 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           flex-direction: column;
         }
 
-        /* ✅ تم تعديل هذا الجزء لتوحيد الارتفاع */
         .lc-imgWrap{
           overflow: hidden;
           border-radius: 12px;
           border: 1px solid #e2e8f0;
           background: #ffffff;
-          height: 200px; /* ارتفاع ثابت للحاوية */
+          height: 200px;
           width: 100%;
           position: relative;
         }
         .lc-img{
           width: 100%;
-          height: 100%; /* تملأ الحاوية بالكامل */
+          height: 100%;
           object-fit: cover;
           display: block;
         }
         .lc-imgEmpty{
-          height: 200px; /* نفس ارتفاع الصورة */
+          height: 200px;
           border-radius: 12px;
           border: 1px solid #e2e8f0;
           background: #f8fafc;
@@ -448,33 +252,10 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           overflow: hidden;
         }
 
-        .lc-priceMain{
-          font-weight: 900;
-          font-size: 14px;
-          line-height: 1.15;
-          text-align: right;
-          direction: rtl;
-        }
-        .lc-priceNum{
-          direction: ltr;
-          unicode-bidi: isolate;
-          font-variant-numeric: tabular-nums;
-        }
-        .lc-priceSub{
-          margin-top: 2px;
-          font-size: 11px;
-          color: #64748b;
-          line-height: 1.25;
-          text-align: right;
-          direction: rtl;
-        }
-
         @media (max-width: 768px) {
-          /* تصغير الارتفاع قليلاً في التابلت */
           .lc-imgWrap, .lc-imgEmpty { height: 170px; }
         }
         @media (max-width: 480px) {
-          /* تصغير الارتفاع في الجوال */
           .lc-imgWrap, .lc-imgEmpty { height: 155px; }
           .lc-title { font-size: 14px; min-height: 39px; }
         }
