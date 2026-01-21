@@ -9,9 +9,22 @@ import Link from 'next/link';
 // ✅ Taxonomy (تصنيف هرمي للفروع)
 import {
   CAR_MAKES,
+  CAR_MODELS_BY_MAKE,
   PHONE_BRANDS,
   DEAL_TYPES,
   PROPERTY_TYPES,
+  ELECTRONICS_TYPES,
+  HEAVY_EQUIPMENT_TYPES,
+  SOLAR_TYPES,
+  NETWORK_TYPES,
+  MAINTENANCE_TYPES,
+  FURNITURE_TYPES,
+  HOME_TOOLS_TYPES,
+  CLOTHES_TYPES,
+  ANIMAL_TYPES,
+  JOB_TYPES,
+  SERVICE_TYPES,
+  MOTORCYCLE_BRANDS,
 } from '@/lib/taxonomy';
 
 import { db, firebase, storage } from '@/lib/firebaseClient';
@@ -90,6 +103,47 @@ export default function EditListingPage() {
   const [propertyType, setPropertyType] = useState('');
   const [propertyTypeText, setPropertyTypeText] = useState('');
 
+  // ✅ cars: موديل (اختياري لكنه مهم للفلترة)
+  const [carModel, setCarModel] = useState('');
+  const [carModelText, setCarModelText] = useState('');
+
+  // ✅ بقية الأقسام (اختياري لتحسين البحث/الفلترة)
+  const [electronicsType, setElectronicsType] = useState('');
+  const [electronicsTypeText, setElectronicsTypeText] = useState('');
+
+  const [motorcycleBrand, setMotorcycleBrand] = useState('');
+  const [motorcycleBrandText, setMotorcycleBrandText] = useState('');
+
+  const [heavyEquipmentType, setHeavyEquipmentType] = useState('');
+  const [heavyEquipmentTypeText, setHeavyEquipmentTypeText] = useState('');
+
+  const [solarType, setSolarType] = useState('');
+  const [solarTypeText, setSolarTypeText] = useState('');
+
+  const [networkType, setNetworkType] = useState('');
+  const [networkTypeText, setNetworkTypeText] = useState('');
+
+  const [maintenanceType, setMaintenanceType] = useState('');
+  const [maintenanceTypeText, setMaintenanceTypeText] = useState('');
+
+  const [furnitureType, setFurnitureType] = useState('');
+  const [furnitureTypeText, setFurnitureTypeText] = useState('');
+
+  const [homeToolsType, setHomeToolsType] = useState('');
+  const [homeToolsTypeText, setHomeToolsTypeText] = useState('');
+
+  const [clothesType, setClothesType] = useState('');
+  const [clothesTypeText, setClothesTypeText] = useState('');
+
+  const [animalType, setAnimalType] = useState('');
+  const [animalTypeText, setAnimalTypeText] = useState('');
+
+  const [jobType, setJobType] = useState('');
+  const [jobTypeText, setJobTypeText] = useState('');
+
+  const [serviceType, setServiceType] = useState('');
+  const [serviceTypeText, setServiceTypeText] = useState('');
+
   // ✅ لتصفير الفروع فقط عند تغيير القسم "بعد التحميل"
   const [didInitCategory, setDidInitCategory] = useState(false);
 
@@ -113,6 +167,25 @@ export default function EditListingPage() {
 
   const [errors, setErrors] = useState({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
+
+
+  const catKey = normalizeCatKey(category);
+
+  const carModelsForMake = (() => {
+    const mk = String(carMake || '').trim();
+    if (!mk || mk === 'other') return [];
+    return Array.isArray(CAR_MODELS_BY_MAKE?.[mk]) ? CAR_MODELS_BY_MAKE[mk] : [];
+  })();
+
+  const slugKey = (v) =>
+    String(v || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_')
+      .replace(/-+/g, '_')
+      .replace(/__+/g, '_')
+      .replace(/[^a-z0-9_\u0600-\u06FF]/g, '')
+      .slice(0, 60);
 
   // ====== Load doc ======
   useEffect(() => {
@@ -149,6 +222,47 @@ export default function EditListingPage() {
         setDealType(String(d.dealType || ''));
         setPropertyType(String(d.propertyType || ''));
         setPropertyTypeText(String(d.propertyTypeText || ''));
+
+        // cars: موديل
+        setCarModel(String(d.carModel || ''));
+        setCarModelText(String(d.carModelText || ''));
+
+        // بقية الأقسام
+        setElectronicsType(String(d.electronicsType || ''));
+        setElectronicsTypeText(String(d.electronicsTypeText || ''));
+
+        setMotorcycleBrand(String(d.motorcycleBrand || ''));
+        setMotorcycleBrandText(String(d.motorcycleBrandText || ''));
+
+        setHeavyEquipmentType(String(d.heavyEquipmentType || ''));
+        setHeavyEquipmentTypeText(String(d.heavyEquipmentTypeText || ''));
+
+        setSolarType(String(d.solarType || ''));
+        setSolarTypeText(String(d.solarTypeText || ''));
+
+        setNetworkType(String(d.networkType || ''));
+        setNetworkTypeText(String(d.networkTypeText || ''));
+
+        setMaintenanceType(String(d.maintenanceType || ''));
+        setMaintenanceTypeText(String(d.maintenanceTypeText || ''));
+
+        setFurnitureType(String(d.furnitureType || ''));
+        setFurnitureTypeText(String(d.furnitureTypeText || ''));
+
+        setHomeToolsType(String(d.homeToolsType || ''));
+        setHomeToolsTypeText(String(d.homeToolsTypeText || ''));
+
+        setClothesType(String(d.clothesType || ''));
+        setClothesTypeText(String(d.clothesTypeText || ''));
+
+        setAnimalType(String(d.animalType || ''));
+        setAnimalTypeText(String(d.animalTypeText || ''));
+
+        setJobType(String(d.jobType || ''));
+        setJobTypeText(String(d.jobTypeText || ''));
+
+        setServiceType(String(d.serviceType || ''));
+        setServiceTypeText(String(d.serviceTypeText || ''));
 
         setDidInitCategory(true);
         setPhone(String(d.phone || ''));
@@ -202,8 +316,55 @@ export default function EditListingPage() {
     setDealType('');
     setPropertyType('');
     setPropertyTypeText('');
+
+    setCarModel('');
+    setCarModelText('');
+
+    setElectronicsType('');
+    setElectronicsTypeText('');
+
+    setMotorcycleBrand('');
+    setMotorcycleBrandText('');
+
+    setHeavyEquipmentType('');
+    setHeavyEquipmentTypeText('');
+
+    setSolarType('');
+    setSolarTypeText('');
+
+    setNetworkType('');
+    setNetworkTypeText('');
+
+    setMaintenanceType('');
+    setMaintenanceTypeText('');
+
+    setFurnitureType('');
+    setFurnitureTypeText('');
+
+    setHomeToolsType('');
+    setHomeToolsTypeText('');
+
+    setClothesType('');
+    setClothesTypeText('');
+
+    setAnimalType('');
+    setAnimalTypeText('');
+
+    setJobType('');
+    setJobTypeText('');
+
+    setServiceType('');
+    setServiceTypeText('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category]);
+    // ✅ عند تغيير ماركة السيارة: صفّر الموديل
+  useEffect(() => {
+    if (catKey !== 'cars') return;
+    setCarModel('');
+    setCarModelText('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carMake]);
+
+}, [category]);
 
 // ====== Previews for new images ======
   useEffect(() => {
@@ -249,6 +410,9 @@ export default function EditListingPage() {
     if (catKey === 'cars') {
       if (!carMake) e.carMake = 'اختر ماركة السيارة';
       if (carMake === 'other' && !carMakeText.trim()) e.carMakeText = 'اكتب ماركة السيارة';
+
+      // carModel اختياري، لكن إذا اختار المستخدم "أخرى" لازم يكتب الاسم
+      if (carModel === 'other' && !carModelText.trim()) e.carModelText = 'اكتب موديل السيارة';
     }
 
     if (catKey === 'phones') {
@@ -260,6 +424,54 @@ export default function EditListingPage() {
       if (!dealType) e.dealType = 'اختر (بيع / إيجار)';
       if (!propertyType) e.propertyType = 'اختر نوع العقار';
       if (propertyType === 'other' && !propertyTypeText.trim()) e.propertyTypeText = 'اكتب نوع العقار';
+    }
+
+    if (catKey === 'electronics') {
+      if (electronicsType === 'other' && !electronicsTypeText.trim()) e.electronicsTypeText = 'اكتب نوع الإلكترونيات';
+    }
+
+    if (catKey === 'motorcycles') {
+      if (motorcycleBrand === 'other' && !motorcycleBrandText.trim()) e.motorcycleBrandText = 'اكتب ماركة الدراجة';
+    }
+
+    if (catKey === 'heavy_equipment') {
+      if (heavyEquipmentType === 'other' && !heavyEquipmentTypeText.trim()) e.heavyEquipmentTypeText = 'اكتب نوع المعدة';
+    }
+
+    if (catKey === 'solar') {
+      if (solarType === 'other' && !solarTypeText.trim()) e.solarTypeText = 'اكتب نوع الطاقة الشمسية';
+    }
+
+    if (catKey === 'networks') {
+      if (networkType === 'other' && !networkTypeText.trim()) e.networkTypeText = 'اكتب نوع الشبكات';
+    }
+
+    if (catKey === 'maintenance') {
+      if (maintenanceType === 'other' && !maintenanceTypeText.trim()) e.maintenanceTypeText = 'اكتب نوع الصيانة';
+    }
+
+    if (catKey === 'furniture') {
+      if (furnitureType === 'other' && !furnitureTypeText.trim()) e.furnitureTypeText = 'اكتب نوع الأثاث';
+    }
+
+    if (catKey === 'home_tools') {
+      if (homeToolsType === 'other' && !homeToolsTypeText.trim()) e.homeToolsTypeText = 'اكتب نوع الأدوات المنزلية';
+    }
+
+    if (catKey === 'clothes') {
+      if (clothesType === 'other' && !clothesTypeText.trim()) e.clothesTypeText = 'اكتب نوع الملابس';
+    }
+
+    if (catKey === 'animals') {
+      if (animalType === 'other' && !animalTypeText.trim()) e.animalTypeText = 'اكتب نوع الحيوانات';
+    }
+
+    if (catKey === 'jobs') {
+      if (jobType === 'other' && !jobTypeText.trim()) e.jobTypeText = 'اكتب نوع الوظيفة';
+    }
+
+    if (catKey === 'services') {
+      if (serviceType === 'other' && !serviceTypeText.trim()) e.serviceTypeText = 'اكتب نوع الخدمة';
     }
 
 
@@ -358,18 +570,68 @@ export default function EditListingPage() {
         category: String(category || 'solar'),
 
         // ✅ فروع الأقسام (Taxonomy)
-        carMake: normalizeCatKey(category) === 'cars' ? (carMake || null) : null,
-        carMakeText: normalizeCatKey(category) === 'cars' && carMake === 'other' ? (carMakeText.trim() || null) : null,
+        carMake: catKey === 'cars' ? (carMake || null) : null,
+        carMakeText: catKey === 'cars' && carMake === 'other' ? (carMakeText.trim() || null) : null,
 
-        phoneBrand: normalizeCatKey(category) === 'phones' ? (phoneBrand || null) : null,
-        phoneBrandText: normalizeCatKey(category) === 'phones' && phoneBrand === 'other' ? (phoneBrandText.trim() || null) : null,
+        carModel:
+          catKey === 'cars'
+            ? (carModel && carModel !== 'other'
+                ? carModel
+                : (carModelText.trim() ? slugKey(carModelText) : null))
+            : null,
+        carModelText:
+          catKey === 'cars' && (carModel === 'other' || (carModelText.trim() && carModel !== 'other'))
+            ? (carModelText.trim() || null)
+            : null,
 
-        dealType: normalizeCatKey(category) === 'realestate' ? (dealType || null) : null,
-        propertyType: normalizeCatKey(category) === 'realestate' ? (propertyType || null) : null,
+        phoneBrand: catKey === 'phones' ? (phoneBrand || null) : null,
+        phoneBrandText: catKey === 'phones' && phoneBrand === 'other' ? (phoneBrandText.trim() || null) : null,
+
+        dealType: catKey === 'realestate' ? (dealType || null) : null,
+        propertyType: catKey === 'realestate' ? (propertyType || null) : null,
         propertyTypeText:
-          normalizeCatKey(category) === 'realestate' && propertyType === 'other'
+          catKey === 'realestate' && propertyType === 'other'
             ? (propertyTypeText.trim() || null)
             : null,
+
+        electronicsType: catKey === 'electronics' ? (electronicsType || null) : null,
+        electronicsTypeText: catKey === 'electronics' && electronicsType === 'other' ? (electronicsTypeText.trim() || null) : null,
+
+        motorcycleBrand: catKey === 'motorcycles' ? (motorcycleBrand || null) : null,
+        motorcycleBrandText: catKey === 'motorcycles' && motorcycleBrand === 'other' ? (motorcycleBrandText.trim() || null) : null,
+
+        heavyEquipmentType: catKey === 'heavy_equipment' ? (heavyEquipmentType || null) : null,
+        heavyEquipmentTypeText:
+          catKey === 'heavy_equipment' && heavyEquipmentType === 'other' ? (heavyEquipmentTypeText.trim() || null) : null,
+
+        solarType: catKey === 'solar' ? (solarType || null) : null,
+        solarTypeText: catKey === 'solar' && solarType === 'other' ? (solarTypeText.trim() || null) : null,
+
+        networkType: catKey === 'networks' ? (networkType || null) : null,
+        networkTypeText: catKey === 'networks' && networkType === 'other' ? (networkTypeText.trim() || null) : null,
+
+        maintenanceType: catKey === 'maintenance' ? (maintenanceType || null) : null,
+        maintenanceTypeText:
+          catKey === 'maintenance' && maintenanceType === 'other' ? (maintenanceTypeText.trim() || null) : null,
+
+        furnitureType: catKey === 'furniture' ? (furnitureType || null) : null,
+        furnitureTypeText: catKey === 'furniture' && furnitureType === 'other' ? (furnitureTypeText.trim() || null) : null,
+
+        homeToolsType: catKey === 'home_tools' ? (homeToolsType || null) : null,
+        homeToolsTypeText:
+          catKey === 'home_tools' && homeToolsType === 'other' ? (homeToolsTypeText.trim() || null) : null,
+
+        clothesType: catKey === 'clothes' ? (clothesType || null) : null,
+        clothesTypeText: catKey === 'clothes' && clothesType === 'other' ? (clothesTypeText.trim() || null) : null,
+
+        animalType: catKey === 'animals' ? (animalType || null) : null,
+        animalTypeText: catKey === 'animals' && animalType === 'other' ? (animalTypeText.trim() || null) : null,
+
+        jobType: catKey === 'jobs' ? (jobType || null) : null,
+        jobTypeText: catKey === 'jobs' && jobType === 'other' ? (jobTypeText.trim() || null) : null,
+
+        serviceType: catKey === 'services' ? (serviceType || null) : null,
+        serviceTypeText: catKey === 'services' && serviceType === 'other' ? (serviceTypeText.trim() || null) : null,
 
         phone: phoneDigits || null,
         isWhatsapp: !!isWhatsapp,
@@ -593,7 +855,591 @@ export default function EditListingPage() {
             </div>
           </div>
 
+          {/* ✅ تفاصيل القسم (تصنيف هرمي) */}
+          {catKey === 'cars' ? (
+            <div className="taxBox">
+              <div className="taxTitle">تفاصيل السيارة</div>
+
+              <div className="row2">
+                <div className="field">
+                  <label className="label req">ماركة السيارة</label>
+                  <select
+                    className={`input ${errors.carMake ? 'err' : ''}`}
+                    value={carMake}
+                    onChange={(e) => {
+                      setCarMake(e.target.value);
+                      if (submitAttempted) setErrors((p) => ({ ...p, carMake: undefined }));
+                    }}
+                  >
+                    <option value="">— اختر —</option>
+                    {CAR_MAKES.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.carMake && <div className="errMsg">{errors.carMake}</div>}
+
+                  {carMake === 'other' ? (
+                    <>
+                      <div style={{ height: 8 }} />
+                      <input
+                        className={`input ${errors.carMakeText ? 'err' : ''}`}
+                        value={carMakeText}
+                        onChange={(e) => {
+                          setCarMakeText(e.target.value);
+                          if (submitAttempted) setErrors((p) => ({ ...p, carMakeText: undefined }));
+                        }}
+                        placeholder="اكتب الماركة"
+                      />
+                      {errors.carMakeText && <div className="errMsg">{errors.carMakeText}</div>}
+                    </>
+                  ) : null}
+                </div>
+
+                <div className="field">
+                  <label className="label">موديل السيارة</label>
+
+                  {carModelsForMake.length ? (
+                    <select
+                      className={`input ${errors.carModelText ? 'err' : ''}`}
+                      value={carModel}
+                      onChange={(e) => {
+                        setCarModel(e.target.value);
+                        if (submitAttempted) setErrors((p) => ({ ...p, carModelText: undefined }));
+                      }}
+                    >
+                      <option value="">— غير محدد —</option>
+                      {carModelsForMake.map((x) => (
+                        <option key={x.value} value={x.value}>
+                          {x.label}
+                        </option>
+                      ))}
+                      <option value="other">أخرى…</option>
+                    </select>
+                  ) : (
+                    <select
+                      className={`input ${errors.carModelText ? 'err' : ''}`}
+                      value={carModel}
+                      onChange={(e) => {
+                        setCarModel(e.target.value);
+                        if (submitAttempted) setErrors((p) => ({ ...p, carModelText: undefined }));
+                      }}
+                    >
+                      <option value="">— غير محدد —</option>
+                      <option value="other">اكتب الموديل…</option>
+                    </select>
+                  )}
+
+                  {carModel === 'other' ? (
+                    <>
+                      <div style={{ height: 8 }} />
+                      <input
+                        className={`input ${errors.carModelText ? 'err' : ''}`}
+                        value={carModelText}
+                        onChange={(e) => {
+                          setCarModelText(e.target.value);
+                          if (submitAttempted) setErrors((p) => ({ ...p, carModelText: undefined }));
+                        }}
+                        placeholder="مثال: هايلوكس / لاندكروزر / سنتافي…"
+                      />
+                      {errors.carModelText && <div className="errMsg">{errors.carModelText}</div>}
+                    </>
+                  ) : null}
+
+                  <div className="help">يساعد في فلترة موديلات السيارات.</div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {catKey === 'phones' ? (
+            <div className="taxBox">
+              <div className="taxTitle">تفاصيل الجوال</div>
+
+              <div className="row2">
+                <div className="field">
+                  <label className="label req">ماركة الجوال</label>
+                  <select
+                    className={`input ${errors.phoneBrand ? 'err' : ''}`}
+                    value={phoneBrand}
+                    onChange={(e) => {
+                      setPhoneBrand(e.target.value);
+                      if (submitAttempted) setErrors((p) => ({ ...p, phoneBrand: undefined }));
+                    }}
+                  >
+                    <option value="">— اختر —</option>
+                    {PHONE_BRANDS.map((b) => (
+                      <option key={b.value} value={b.value}>
+                        {b.label}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.phoneBrand && <div className="errMsg">{errors.phoneBrand}</div>}
+
+                  {phoneBrand === 'other' ? (
+                    <>
+                      <div style={{ height: 8 }} />
+                      <input
+                        className={`input ${errors.phoneBrandText ? 'err' : ''}`}
+                        value={phoneBrandText}
+                        onChange={(e) => {
+                          setPhoneBrandText(e.target.value);
+                          if (submitAttempted) setErrors((p) => ({ ...p, phoneBrandText: undefined }));
+                        }}
+                        placeholder="اكتب الماركة"
+                      />
+                      {errors.phoneBrandText && <div className="errMsg">{errors.phoneBrandText}</div>}
+                    </>
+                  ) : null}
+                </div>
+                <div className="field">
+                  <div className="help">اختياري، لكنه يحسّن البحث والفلترة.</div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {catKey === 'realestate' ? (
+            <div className="taxBox">
+              <div className="taxTitle">تفاصيل العقار</div>
+
+              <div className="row2">
+                <div className="field">
+                  <label className="label req">نوع العرض</label>
+                  <select
+                    className={`input ${errors.dealType ? 'err' : ''}`}
+                    value={dealType}
+                    onChange={(e) => {
+                      setDealType(e.target.value);
+                      if (submitAttempted) setErrors((p) => ({ ...p, dealType: undefined }));
+                    }}
+                  >
+                    <option value="">— اختر —</option>
+                    {DEAL_TYPES.map((d) => (
+                      <option key={d.value} value={d.value}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.dealType && <div className="errMsg">{errors.dealType}</div>}
+                </div>
+
+                <div className="field">
+                  <label className="label req">نوع العقار</label>
+                  <select
+                    className={`input ${errors.propertyType ? 'err' : ''}`}
+                    value={propertyType}
+                    onChange={(e) => {
+                      setPropertyType(e.target.value);
+                      if (submitAttempted) setErrors((p) => ({ ...p, propertyType: undefined }));
+                    }}
+                  >
+                    <option value="">— اختر —</option>
+                    {PROPERTY_TYPES.map((p) => (
+                      <option key={p.value} value={p.value}>
+                        {p.label}
+                      </option>
+                    ))}
+                    <option value="other">أخرى…</option>
+                  </select>
+                  {errors.propertyType && <div className="errMsg">{errors.propertyType}</div>}
+
+                  {propertyType === 'other' ? (
+                    <>
+                      <div style={{ height: 8 }} />
+                      <input
+                        className={`input ${errors.propertyTypeText ? 'err' : ''}`}
+                        value={propertyTypeText}
+                        onChange={(e) => {
+                          setPropertyTypeText(e.target.value);
+                          if (submitAttempted) setErrors((p) => ({ ...p, propertyTypeText: undefined }));
+                        }}
+                        placeholder="اكتب نوع العقار"
+                      />
+                      {errors.propertyTypeText && <div className="errMsg">{errors.propertyTypeText}</div>}
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {catKey === 'electronics' ? (
+            <div className="taxBox">
+              <div className="taxTitle">تفاصيل الإلكترونيات</div>
+              <div className="row2">
+                <div className="field">
+                  <label className="label">النوع</label>
+                  <select className="input" value={electronicsType} onChange={(e) => setElectronicsType(e.target.value)}>
+                    <option value="">— غير محدد —</option>
+                    {ELECTRONICS_TYPES.map((x) => (
+                      <option key={x.value} value={x.value}>{x.label}</option>
+                    ))}
+                    <option value="other">أخرى…</option>
+                  </select>
+
+                  {electronicsType === 'other' ? (
+                    <>
+                      <div style={{ height: 8 }} />
+                      <input
+                        className={`input ${errors.electronicsTypeText ? 'err' : ''}`}
+                        value={electronicsTypeText}
+                        onChange={(e) => setElectronicsTypeText(e.target.value)}
+                        placeholder="اكتب نوع الإلكترونيات"
+                      />
+                      {errors.electronicsTypeText && <div className="errMsg">{errors.electronicsTypeText}</div>}
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {catKey === 'motorcycles' ? (
+            <div className="taxBox">
+              <div className="taxTitle">تفاصيل الدراجات</div>
+              <div className="row2">
+                <div className="field">
+                  <label className="label">الماركة</label>
+                  <select className="input" value={motorcycleBrand} onChange={(e) => setMotorcycleBrand(e.target.value)}>
+                    <option value="">— غير محدد —</option>
+                    {MOTORCYCLE_BRANDS.map((x) => (
+                      <option key={x.value} value={x.value}>{x.label}</option>
+                    ))}
+                    <option value="other">أخرى…</option>
+                  </select>
+
+                  {motorcycleBrand === 'other' ? (
+                    <>
+                      <div style={{ height: 8 }} />
+                      <input
+                        className={`input ${errors.motorcycleBrandText ? 'err' : ''}`}
+                        value={motorcycleBrandText}
+                        onChange={(e) => setMotorcycleBrandText(e.target.value)}
+                        placeholder="اكتب ماركة الدراجة"
+                      />
+                      {errors.motorcycleBrandText && <div className="errMsg">{errors.motorcycleBrandText}</div>}
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {catKey === 'heavy_equipment' ? (
+            <div className="taxBox">
+              <div className="taxTitle">تفاصيل المعدات الثقيلة</div>
+              <div className="row2">
+                <div className="field">
+                  <label className="label">النوع</label>
+                  <select className="input" value={heavyEquipmentType} onChange={(e) => setHeavyEquipmentType(e.target.value)}>
+                    <option value="">— غير محدد —</option>
+                    {HEAVY_EQUIPMENT_TYPES.map((x) => (
+                      <option key={x.value} value={x.value}>{x.label}</option>
+                    ))}
+                    <option value="other">أخرى…</option>
+                  </select>
+
+                  {heavyEquipmentType === 'other' ? (
+                    <>
+                      <div style={{ height: 8 }} />
+                      <input
+                        className={`input ${errors.heavyEquipmentTypeText ? 'err' : ''}`}
+                        value={heavyEquipmentTypeText}
+                        onChange={(e) => setHeavyEquipmentTypeText(e.target.value)}
+                        placeholder="اكتب نوع المعدة"
+                      />
+                      {errors.heavyEquipmentTypeText && <div className="errMsg">{errors.heavyEquipmentTypeText}</div>}
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {catKey === 'solar' ? (
+            <div className="taxBox">
+              <div className="taxTitle">تفاصيل الطاقة الشمسية</div>
+              <div className="row2">
+                <div className="field">
+                  <label className="label">النوع</label>
+                  <select className="input" value={solarType} onChange={(e) => setSolarType(e.target.value)}>
+                    <option value="">— غير محدد —</option>
+                    {SOLAR_TYPES.map((x) => (
+                      <option key={x.value} value={x.value}>{x.label}</option>
+                    ))}
+                    <option value="other">أخرى…</option>
+                  </select>
+
+                  {solarType === 'other' ? (
+                    <>
+                      <div style={{ height: 8 }} />
+                      <input
+                        className={`input ${errors.solarTypeText ? 'err' : ''}`}
+                        value={solarTypeText}
+                        onChange={(e) => setSolarTypeText(e.target.value)}
+                        placeholder="اكتب نوع الطاقة الشمسية"
+                      />
+                      {errors.solarTypeText && <div className="errMsg">{errors.solarTypeText}</div>}
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {catKey === 'networks' ? (
+            <div className="taxBox">
+              <div className="taxTitle">تفاصيل الشبكات</div>
+              <div className="row2">
+                <div className="field">
+                  <label className="label">النوع</label>
+                  <select className="input" value={networkType} onChange={(e) => setNetworkType(e.target.value)}>
+                    <option value="">— غير محدد —</option>
+                    {NETWORK_TYPES.map((x) => (
+                      <option key={x.value} value={x.value}>{x.label}</option>
+                    ))}
+                    <option value="other">أخرى…</option>
+                  </select>
+
+                  {networkType === 'other' ? (
+                    <>
+                      <div style={{ height: 8 }} />
+                      <input
+                        className={`input ${errors.networkTypeText ? 'err' : ''}`}
+                        value={networkTypeText}
+                        onChange={(e) => setNetworkTypeText(e.target.value)}
+                        placeholder="اكتب نوع الشبكات"
+                      />
+                      {errors.networkTypeText && <div className="errMsg">{errors.networkTypeText}</div>}
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {catKey === 'maintenance' ? (
+            <div className="taxBox">
+              <div className="taxTitle">تفاصيل الصيانة</div>
+              <div className="row2">
+                <div className="field">
+                  <label className="label">النوع</label>
+                  <select className="input" value={maintenanceType} onChange={(e) => setMaintenanceType(e.target.value)}>
+                    <option value="">— غير محدد —</option>
+                    {MAINTENANCE_TYPES.map((x) => (
+                      <option key={x.value} value={x.value}>{x.label}</option>
+                    ))}
+                    <option value="other">أخرى…</option>
+                  </select>
+
+                  {maintenanceType === 'other' ? (
+                    <>
+                      <div style={{ height: 8 }} />
+                      <input
+                        className={`input ${errors.maintenanceTypeText ? 'err' : ''}`}
+                        value={maintenanceTypeText}
+                        onChange={(e) => setMaintenanceTypeText(e.target.value)}
+                        placeholder="اكتب نوع الصيانة"
+                      />
+                      {errors.maintenanceTypeText && <div className="errMsg">{errors.maintenanceTypeText}</div>}
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {catKey === 'furniture' ? (
+            <div className="taxBox">
+              <div className="taxTitle">تفاصيل الأثاث</div>
+              <div className="row2">
+                <div className="field">
+                  <label className="label">النوع</label>
+                  <select className="input" value={furnitureType} onChange={(e) => setFurnitureType(e.target.value)}>
+                    <option value="">— غير محدد —</option>
+                    {FURNITURE_TYPES.map((x) => (
+                      <option key={x.value} value={x.value}>{x.label}</option>
+                    ))}
+                    <option value="other">أخرى…</option>
+                  </select>
+
+                  {furnitureType === 'other' ? (
+                    <>
+                      <div style={{ height: 8 }} />
+                      <input
+                        className={`input ${errors.furnitureTypeText ? 'err' : ''}`}
+                        value={furnitureTypeText}
+                        onChange={(e) => setFurnitureTypeText(e.target.value)}
+                        placeholder="اكتب نوع الأثاث"
+                      />
+                      {errors.furnitureTypeText && <div className="errMsg">{errors.furnitureTypeText}</div>}
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {catKey === 'home_tools' ? (
+            <div className="taxBox">
+              <div className="taxTitle">تفاصيل الأدوات المنزلية</div>
+              <div className="row2">
+                <div className="field">
+                  <label className="label">النوع</label>
+                  <select className="input" value={homeToolsType} onChange={(e) => setHomeToolsType(e.target.value)}>
+                    <option value="">— غير محدد —</option>
+                    {HOME_TOOLS_TYPES.map((x) => (
+                      <option key={x.value} value={x.value}>{x.label}</option>
+                    ))}
+                    <option value="other">أخرى…</option>
+                  </select>
+
+                  {homeToolsType === 'other' ? (
+                    <>
+                      <div style={{ height: 8 }} />
+                      <input
+                        className={`input ${errors.homeToolsTypeText ? 'err' : ''}`}
+                        value={homeToolsTypeText}
+                        onChange={(e) => setHomeToolsTypeText(e.target.value)}
+                        placeholder="اكتب نوع الأدوات المنزلية"
+                      />
+                      {errors.homeToolsTypeText && <div className="errMsg">{errors.homeToolsTypeText}</div>}
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {catKey === 'clothes' ? (
+            <div className="taxBox">
+              <div className="taxTitle">تفاصيل الملابس</div>
+              <div className="row2">
+                <div className="field">
+                  <label className="label">النوع</label>
+                  <select className="input" value={clothesType} onChange={(e) => setClothesType(e.target.value)}>
+                    <option value="">— غير محدد —</option>
+                    {CLOTHES_TYPES.map((x) => (
+                      <option key={x.value} value={x.value}>{x.label}</option>
+                    ))}
+                    <option value="other">أخرى…</option>
+                  </select>
+
+                  {clothesType === 'other' ? (
+                    <>
+                      <div style={{ height: 8 }} />
+                      <input
+                        className={`input ${errors.clothesTypeText ? 'err' : ''}`}
+                        value={clothesTypeText}
+                        onChange={(e) => setClothesTypeText(e.target.value)}
+                        placeholder="اكتب نوع الملابس"
+                      />
+                      {errors.clothesTypeText && <div className="errMsg">{errors.clothesTypeText}</div>}
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {catKey === 'animals' ? (
+            <div className="taxBox">
+              <div className="taxTitle">تفاصيل الحيوانات</div>
+              <div className="row2">
+                <div className="field">
+                  <label className="label">النوع</label>
+                  <select className="input" value={animalType} onChange={(e) => setAnimalType(e.target.value)}>
+                    <option value="">— غير محدد —</option>
+                    {ANIMAL_TYPES.map((x) => (
+                      <option key={x.value} value={x.value}>{x.label}</option>
+                    ))}
+                    <option value="other">أخرى…</option>
+                  </select>
+
+                  {animalType === 'other' ? (
+                    <>
+                      <div style={{ height: 8 }} />
+                      <input
+                        className={`input ${errors.animalTypeText ? 'err' : ''}`}
+                        value={animalTypeText}
+                        onChange={(e) => setAnimalTypeText(e.target.value)}
+                        placeholder="اكتب نوع الحيوانات"
+                      />
+                      {errors.animalTypeText && <div className="errMsg">{errors.animalTypeText}</div>}
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {catKey === 'jobs' ? (
+            <div className="taxBox">
+              <div className="taxTitle">تفاصيل الوظائف</div>
+              <div className="row2">
+                <div className="field">
+                  <label className="label">نوع الوظيفة</label>
+                  <select className="input" value={jobType} onChange={(e) => setJobType(e.target.value)}>
+                    <option value="">— غير محدد —</option>
+                    {JOB_TYPES.map((x) => (
+                      <option key={x.value} value={x.value}>{x.label}</option>
+                    ))}
+                    <option value="other">أخرى…</option>
+                  </select>
+
+                  {jobType === 'other' ? (
+                    <>
+                      <div style={{ height: 8 }} />
+                      <input
+                        className={`input ${errors.jobTypeText ? 'err' : ''}`}
+                        value={jobTypeText}
+                        onChange={(e) => setJobTypeText(e.target.value)}
+                        placeholder="اكتب نوع الوظيفة"
+                      />
+                      {errors.jobTypeText && <div className="errMsg">{errors.jobTypeText}</div>}
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {catKey === 'services' ? (
+            <div className="taxBox">
+              <div className="taxTitle">تفاصيل الخدمات</div>
+              <div className="row2">
+                <div className="field">
+                  <label className="label">نوع الخدمة</label>
+                  <select className="input" value={serviceType} onChange={(e) => setServiceType(e.target.value)}>
+                    <option value="">— غير محدد —</option>
+                    {SERVICE_TYPES.map((x) => (
+                      <option key={x.value} value={x.value}>{x.label}</option>
+                    ))}
+                    <option value="other">أخرى…</option>
+                  </select>
+
+                  {serviceType === 'other' ? (
+                    <>
+                      <div style={{ height: 8 }} />
+                      <input
+                        className={`input ${errors.serviceTypeText ? 'err' : ''}`}
+                        value={serviceTypeText}
+                        onChange={(e) => setServiceTypeText(e.target.value)}
+                        placeholder="اكتب نوع الخدمة"
+                      />
+                      {errors.serviceTypeText && <div className="errMsg">{errors.serviceTypeText}</div>}
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           <div className="row2">
+            <div className="field">
+              <label className="label req">السعر</label>
             <div className="field">
               <label className="label req">السعر</label>
               <input
@@ -833,6 +1679,16 @@ const styles = `
   padding:16px;
   box-shadow: 0 8px 26px rgba(0,0,0,.05);
 }
+
+.taxBox{
+  margin-top:12px;
+  padding:14px;
+  border:1px solid rgba(0,0,0,.08);
+  border-radius:16px;
+  background: linear-gradient(135deg, rgba(2,132,199,.06), rgba(79,70,229,.06));
+}
+.taxTitle{font-weight:900; color:#0f172a; margin-bottom:10px;}
+
 .center{display:flex; flex-direction:column; align-items:center; gap:10px; padding:28px;}
 .spinner{
   width:44px; height:44px;
