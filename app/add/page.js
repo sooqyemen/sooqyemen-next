@@ -812,9 +812,6 @@ export default function AddPage() {
             </div>
           )}
 
-            </div>
-          )}
-
           {category === 'phones' && (
             <div className="form-group">
               <label className="form-label required">ماركة الجوال</label>
