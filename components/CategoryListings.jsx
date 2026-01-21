@@ -57,11 +57,17 @@ function normalizeSlug(v) {
     .replace(/-+/g, '_');
 }
 
+// ✅ وضع صارم: يطابق category قيمة القسم الرسمية فقط (بدون توسعة لقيَم قديمة)
+// إذا عندك إعلانات قديمة محفوظة بقيم غير مطابقة (مثل real_estate / real estate / عربي..)، لن تظهر عند تفعيل هذا.
+// بما أنك ناوي تنظّف الإعلانات القديمة، خليه true.
+const STRICT_CATEGORY_MATCH = true;
+
 // ✅ لتفادي ظهور أقسام "فاضية" بسبب اختلافات حفظ قيمة category في الإعلانات القديمة
 // نجلب نفس القسم بعدة قيم محتملة (حتى 10 قيم - حد Firestore لــ in)
 function categoryVariants(single) {
   const s = normalizeSlug(single);
   if (!s) return [];
+  if (STRICT_CATEGORY_MATCH) return [s];
 
   const variantsMap = {
     realestate: ['realestate', 'real_estate', 'real-estate', 'real estate', 'عقارات', 'العقارات'],
@@ -101,6 +107,17 @@ function categoryVariants(single) {
     if (uniq.length >= 10) break;
   }
   return uniq.length ? uniq : [s];
+}
+
+// تطبيق فلترة القسم على استعلام Firestore
+function applyCategoryWhere(q, categoryKey) {
+  const key = normalizeSlug(categoryKey);
+  if (!key) return q;
+  if (STRICT_CATEGORY_MATCH) return q.where('category', '==', key);
+  const vars = categoryVariants(key);
+  if (!vars.length) return q.where('category', '==', key);
+  if (vars.length === 1) return q.where('category', '==', vars[0]);
+  return q.where('category', 'in', vars);
 }
 
 function safeStr(v) {
