@@ -1,35 +1,25 @@
+
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import Link from 'next/link';
-
-import { db, firebase } from '@/lib/firebaseClient';
+import { db, firebase, storage } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import { toYER, useRates } from '@/lib/rates';
+import Link from 'next/link';
 
 // ✅ Taxonomy (تصنيف هرمي للفروع)
 import {
   CAR_MAKES,
-  CAR_MODELS_BY_MAKE,
   PHONE_BRANDS,
   DEAL_TYPES,
   PROPERTY_TYPES,
-  ELECTRONICS_TYPES,
-  HEAVY_EQUIPMENT_TYPES,
-  SOLAR_TYPES,
-  NETWORK_TYPES,
-  MAINTENANCE_TYPES,
-  FURNITURE_TYPES,
-  HOME_TOOLS_TYPES,
-  CLOTHES_TYPES,
-  ANIMAL_TYPES,
-  JOB_TYPES,
-  SERVICE_TYPES,
-  MOTORCYCLE_BRANDS,
 } from '@/lib/taxonomy';
 
-const LocationPicker = dynamic(() => import('@/components/Map/LocationPicker'), { ssr: false });
+const LocationPicker = dynamic(
+  () => import('@/components/Map/LocationPicker'),
+  { ssr: false }
+);
 
 // ✅ الأقسام الافتراضية (مطابقة تمامًا لمفاتيح Firestore عندك)
 const DEFAULT_CATEGORIES = [
@@ -55,71 +45,19 @@ export default function AddPage() {
   const { user, loading } = useAuth();
   const rates = useRates();
 
-  // ✅ FIX: لا تعتمد على export اسمه storage — خذه من firebase مباشرة (compat)
-  const storage = useMemo(() => {
-    try {
-      return firebase.storage();
-    } catch (e) {
-      console.error('Firebase storage not available. Ensure firebase/compat/storage is imported in firebaseClient.js', e);
-      return null;
-    }
-  }, []);
-
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [city, setCity] = useState('');
   // ✅ مهم: لا يوجد قسم افتراضي
   const [category, setCategory] = useState('');
-
   // ✅ فروع الأقسام (هرمية)
   const [carMake, setCarMake] = useState(''); // cars
   const [carMakeText, setCarMakeText] = useState('');
-  const [carModel, setCarModel] = useState('');
-  const [carModelText, setCarModelText] = useState('');
-
   const [phoneBrand, setPhoneBrand] = useState(''); // phones
   const [phoneBrandText, setPhoneBrandText] = useState('');
   const [dealType, setDealType] = useState(''); // realestate: sale/rent
   const [propertyType, setPropertyType] = useState(''); // realestate: land/house...
   const [propertyTypeText, setPropertyTypeText] = useState('');
-
-  // ✅ بقية الأقسام
-  const [electronicsType, setElectronicsType] = useState('');
-  const [electronicsTypeText, setElectronicsTypeText] = useState('');
-
-  const [motorcycleBrand, setMotorcycleBrand] = useState('');
-  const [motorcycleBrandText, setMotorcycleBrandText] = useState('');
-
-  const [heavyEquipmentType, setHeavyEquipmentType] = useState('');
-  const [heavyEquipmentTypeText, setHeavyEquipmentTypeText] = useState('');
-
-  const [solarType, setSolarType] = useState('');
-  const [solarTypeText, setSolarTypeText] = useState('');
-
-  const [networkType, setNetworkType] = useState('');
-  const [networkTypeText, setNetworkTypeText] = useState('');
-
-  const [maintenanceType, setMaintenanceType] = useState('');
-  const [maintenanceTypeText, setMaintenanceTypeText] = useState('');
-
-  const [furnitureType, setFurnitureType] = useState('');
-  const [furnitureTypeText, setFurnitureTypeText] = useState('');
-
-  const [homeToolsType, setHomeToolsType] = useState('');
-  const [homeToolsTypeText, setHomeToolsTypeText] = useState('');
-
-  const [clothesType, setClothesType] = useState('');
-  const [clothesTypeText, setClothesTypeText] = useState('');
-
-  const [animalType, setAnimalType] = useState('');
-  const [animalTypeText, setAnimalTypeText] = useState('');
-
-  const [jobType, setJobType] = useState('');
-  const [jobTypeText, setJobTypeText] = useState('');
-
-  const [serviceType, setServiceType] = useState('');
-  const [serviceTypeText, setServiceTypeText] = useState('');
-
   const [phone, setPhone] = useState('');
   const [isWhatsapp, setIsWhatsapp] = useState(true);
 
@@ -128,7 +66,7 @@ export default function AddPage() {
 
   const [coords, setCoords] = useState(null); // [lat, lng]
   const [locationLabel, setLocationLabel] = useState('');
-  const [showMap, setShowMap] = useState(false);
+  const [showMap, setShowMap] = useState(false); // ✅ للتحميل عند الطلب
 
   const [images, setImages] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
@@ -152,23 +90,30 @@ export default function AddPage() {
           .map((d) => {
             const data = d.data() || {};
             return {
-              slug: d.id,
+              slug: d.id, // ✅ مفتاح القسم = id
               name: String(data.name || '').trim(),
               active: data.active,
             };
           })
           .filter((c) => c.slug && c.name && c.active !== false);
 
+        // ترتيب عربي لطيف
         arr.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
         if (arr.length) {
           setCats(arr);
           setCatsSource('firestore');
-          if (category && !arr.some((x) => x.slug === category)) setCategory('');
+
+          // ✅ إذا القسم الحالي غير موجود، صفّره
+          if (category && !arr.some((x) => x.slug === category)) {
+            setCategory('');
+          }
         } else {
           setCats(DEFAULT_CATEGORIES);
           setCatsSource('fallback');
-          if (category && !DEFAULT_CATEGORIES.some((x) => x.slug === category)) setCategory('');
+          if (category && !DEFAULT_CATEGORIES.some((x) => x.slug === category)) {
+            setCategory('');
+          }
         }
 
         setCatsLoading(false);
@@ -178,7 +123,10 @@ export default function AddPage() {
         setCats(DEFAULT_CATEGORIES);
         setCatsLoading(false);
         setCatsSource('fallback');
-        if (category && !DEFAULT_CATEGORIES.some((x) => x.slug === category)) setCategory('');
+
+        if (category && !DEFAULT_CATEGORIES.some((x) => x.slug === category)) {
+          setCategory('');
+        }
       }
     );
 
@@ -186,58 +134,20 @@ export default function AddPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  
   // ✅ عند تغيير القسم: صفّر الفروع
   useEffect(() => {
     setCarMake('');
     setCarMakeText('');
-    setCarModel('');
-    setCarModelText('');
-
     setPhoneBrand('');
     setPhoneBrandText('');
-
     setDealType('');
     setPropertyType('');
     setPropertyTypeText('');
-
-    setElectronicsType('');
-    setElectronicsTypeText('');
-
-    setMotorcycleBrand('');
-    setMotorcycleBrandText('');
-
-    setHeavyEquipmentType('');
-    setHeavyEquipmentTypeText('');
-
-    setSolarType('');
-    setSolarTypeText('');
-
-    setNetworkType('');
-    setNetworkTypeText('');
-
-    setMaintenanceType('');
-    setMaintenanceTypeText('');
-
-    setFurnitureType('');
-    setFurnitureTypeText('');
-
-    setHomeToolsType('');
-    setHomeToolsTypeText('');
-
-    setClothesType('');
-    setClothesTypeText('');
-
-    setAnimalType('');
-    setAnimalTypeText('');
-
-    setJobType('');
-    setJobTypeText('');
-
-    setServiceType('');
-    setServiceTypeText('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category]);
 
-  // ✅ معاينة الصور
+// ✅ معاينة الصور
   useEffect(() => {
     if (images.length === 0) {
       setImagePreviews([]);
@@ -257,7 +167,7 @@ export default function AddPage() {
     });
   }, [images]);
 
-  // ✅ Helpers for rates
+  // ✅ Helpers for rates (fallback إذا rates ما وصل)
   const getYerPerUSD = () => {
     const r = rates || {};
     return Number(r.USD || r.usd || r.usdRate || r.usdToYer || r.usd_yer || 1632);
@@ -267,23 +177,6 @@ export default function AddPage() {
     const r = rates || {};
     return Number(r.SAR || r.sar || r.sarRate || r.sarToYer || r.sar_yer || 425);
   };
-
-  // ✅ موديلات السيارة حسب الماركة
-  const carModelsForMake = useMemo(() => {
-    const mk = String(carMake || '').trim();
-    if (!mk || mk === 'other') return [];
-    return Array.isArray(CAR_MODELS_BY_MAKE?.[mk]) ? CAR_MODELS_BY_MAKE[mk] : [];
-  }, [carMake]);
-
-  const slugKey = (v) =>
-    String(v || '')
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, '_')
-      .replace(/-+/g, '_')
-      .replace(/__+/g, '_')
-      .replace(/[^a-z0-9_\u0600-\u06FF]/g, '')
-      .slice(0, 60);
 
   // ✅ التحقق من الأخطاء
   const validateForm = () => {
@@ -297,18 +190,22 @@ export default function AddPage() {
 
     if (!city.trim()) newErrors.city = 'الرجاء إدخال المدينة';
 
+    // ✅ القسم إجباري
     if (!category) newErrors.category = 'الرجاء اختيار القسم';
 
     if (!price || isNaN(price) || Number(price) <= 0) newErrors.price = 'الرجاء إدخال سعر صحيح';
 
     const phoneDigits = phone.replace(/\D/g, '');
-    if (!phoneDigits) newErrors.phone = 'رقم التواصل مطلوب';
-    else if (!/^[0-9]{9,15}$/.test(phoneDigits)) newErrors.phone = 'رقم الهاتف غير صحيح';
+    if (!phoneDigits) {
+      newErrors.phone = 'رقم التواصل مطلوب';
+    } else if (!/^[0-9]{9,15}$/.test(phoneDigits)) {
+      newErrors.phone = 'رقم الهاتف غير صحيح';
+    }
 
+    // ✅ فروع الأقسام (للمستقبل + الخريطة)
     if (category === 'cars') {
       if (!carMake) newErrors.carMake = 'اختر ماركة السيارة';
       if (carMake === 'other' && !carMakeText.trim()) newErrors.carMakeText = 'اكتب ماركة السيارة';
-      if (carModel === 'other' && !carModelText.trim()) newErrors.carModelText = 'اكتب موديل السيارة';
     }
 
     if (category === 'phones') {
@@ -322,44 +219,9 @@ export default function AddPage() {
       if (propertyType === 'other' && !propertyTypeText.trim()) newErrors.propertyTypeText = 'اكتب نوع العقار';
     }
 
-    if (category === 'electronics' && electronicsType === 'other' && !electronicsTypeText.trim())
-      newErrors.electronicsTypeText = 'اكتب نوع الإلكترونيات';
-
-    if (category === 'motorcycles' && motorcycleBrand === 'other' && !motorcycleBrandText.trim())
-      newErrors.motorcycleBrandText = 'اكتب ماركة الدراجة';
-
-    if (category === 'heavy_equipment' && heavyEquipmentType === 'other' && !heavyEquipmentTypeText.trim())
-      newErrors.heavyEquipmentTypeText = 'اكتب نوع المعدة';
-
-    if (category === 'solar' && solarType === 'other' && !solarTypeText.trim())
-      newErrors.solarTypeText = 'اكتب نوع الطاقة الشمسية';
-
-    if (category === 'networks' && networkType === 'other' && !networkTypeText.trim())
-      newErrors.networkTypeText = 'اكتب نوع الشبكات';
-
-    if (category === 'maintenance' && maintenanceType === 'other' && !maintenanceTypeText.trim())
-      newErrors.maintenanceTypeText = 'اكتب نوع الصيانة';
-
-    if (category === 'furniture' && furnitureType === 'other' && !furnitureTypeText.trim())
-      newErrors.furnitureTypeText = 'اكتب نوع الأثاث';
-
-    if (category === 'home_tools' && homeToolsType === 'other' && !homeToolsTypeText.trim())
-      newErrors.homeToolsTypeText = 'اكتب نوع الأدوات المنزلية';
-
-    if (category === 'clothes' && clothesType === 'other' && !clothesTypeText.trim())
-      newErrors.clothesTypeText = 'اكتب نوع الملابس';
-
-    if (category === 'animals' && animalType === 'other' && !animalTypeText.trim())
-      newErrors.animalTypeText = 'اكتب نوع الحيوانات';
-
-    if (category === 'jobs' && jobType === 'other' && !jobTypeText.trim())
-      newErrors.jobTypeText = 'اكتب نوع الوظيفة';
-
-    if (category === 'services' && serviceType === 'other' && !serviceTypeText.trim())
-      newErrors.serviceTypeText = 'اكتب نوع الخدمة';
-
-    if (auctionEnabled && (!auctionMinutes || Number(auctionMinutes) < 1))
+    if (auctionEnabled && (!auctionMinutes || Number(auctionMinutes) < 1)) {
       newErrors.auctionMinutes = 'مدة المزاد يجب أن تكون دقيقة واحدة على الأقل';
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -373,11 +235,8 @@ export default function AddPage() {
 
   const uploadImages = async () => {
     if (!images.length) return [];
-    if (!storage) {
-      throw new Error('Storage not initialized. Check firebaseClient compat storage import.');
-    }
-
     const out = [];
+
     for (const file of images) {
       const safeName = String(file.name || 'img').replace(/[^a-zA-Z0-9._-]/g, '_');
       const path = `listings/${user.uid}/${Date.now()}_${safeName}`;
@@ -386,6 +245,7 @@ export default function AddPage() {
       const url = await ref.getDownloadURL();
       out.push(url);
     }
+
     return out;
   };
 
@@ -430,59 +290,12 @@ export default function AddPage() {
         description: desc.trim(),
         city: city.trim(),
 
+        // ✅ مهم جدًا: نخزّن key الإنجليزي المطابق لـ Firestore
         category: String(category || '').trim(),
 
+        // ✅ فروع الأقسام (Taxonomy)
         carMake: category === 'cars' ? (carMake || null) : null,
         carMakeText: category === 'cars' && carMake === 'other' ? (carMakeText.trim() || null) : null,
-        carModel:
-          category === 'cars'
-            ? (carModel && carModel !== 'other'
-                ? carModel
-                : (carModelText.trim() ? slugKey(carModelText) : null))
-            : null,
-        carModelText:
-          category === 'cars' && (carModel === 'other' || (carModelText.trim() && carModel !== 'other'))
-            ? (carModelText.trim() || null)
-            : null,
-
-        electronicsType: category === 'electronics' ? (electronicsType || null) : null,
-        electronicsTypeText: category === 'electronics' && electronicsType === 'other' ? (electronicsTypeText.trim() || null) : null,
-
-        motorcycleBrand: category === 'motorcycles' ? (motorcycleBrand || null) : null,
-        motorcycleBrandText: category === 'motorcycles' && motorcycleBrand === 'other' ? (motorcycleBrandText.trim() || null) : null,
-
-        heavyEquipmentType: category === 'heavy_equipment' ? (heavyEquipmentType || null) : null,
-        heavyEquipmentTypeText:
-          category === 'heavy_equipment' && heavyEquipmentType === 'other' ? (heavyEquipmentTypeText.trim() || null) : null,
-
-        solarType: category === 'solar' ? (solarType || null) : null,
-        solarTypeText: category === 'solar' && solarType === 'other' ? (solarTypeText.trim() || null) : null,
-
-        networkType: category === 'networks' ? (networkType || null) : null,
-        networkTypeText: category === 'networks' && networkType === 'other' ? (networkTypeText.trim() || null) : null,
-
-        maintenanceType: category === 'maintenance' ? (maintenanceType || null) : null,
-        maintenanceTypeText:
-          category === 'maintenance' && maintenanceType === 'other' ? (maintenanceTypeText.trim() || null) : null,
-
-        furnitureType: category === 'furniture' ? (furnitureType || null) : null,
-        furnitureTypeText: category === 'furniture' && furnitureType === 'other' ? (furnitureTypeText.trim() || null) : null,
-
-        homeToolsType: category === 'home_tools' ? (homeToolsType || null) : null,
-        homeToolsTypeText:
-          category === 'home_tools' && homeToolsType === 'other' ? (homeToolsTypeText.trim() || null) : null,
-
-        clothesType: category === 'clothes' ? (clothesType || null) : null,
-        clothesTypeText: category === 'clothes' && clothesType === 'other' ? (clothesTypeText.trim() || null) : null,
-
-        animalType: category === 'animals' ? (animalType || null) : null,
-        animalTypeText: category === 'animals' && animalType === 'other' ? (animalTypeText.trim() || null) : null,
-
-        jobType: category === 'jobs' ? (jobType || null) : null,
-        jobTypeText: category === 'jobs' && jobType === 'other' ? (jobTypeText.trim() || null) : null,
-
-        serviceType: category === 'services' ? (serviceType || null) : null,
-        serviceTypeText: category === 'services' && serviceType === 'other' ? (serviceTypeText.trim() || null) : null,
 
         phoneBrand: category === 'phones' ? (phoneBrand || null) : null,
         phoneBrandText: category === 'phones' && phoneBrand === 'other' ? (phoneBrandText.trim() || null) : null,
@@ -500,6 +313,7 @@ export default function AddPage() {
         originalCurrency: currency,
         currencyBase: 'YER',
 
+        // ✅ نخزّن أكثر من صيغة لتضمن عمل الخريطة في كل مكان
         coords: lat != null && lng != null ? [lat, lng] : null,
         lat: lat != null ? lat : null,
         lng: lng != null ? lng : null,
@@ -596,22 +410,10 @@ export default function AddPage() {
       </div>
 
       <div className="form-tips">
-        <div className="tip-item">
-          <span className="tip-icon">📸</span>
-          <span>أضف صور واضحة وجودة عالية</span>
-        </div>
-        <div className="tip-item">
-          <span className="tip-icon">📝</span>
-          <span>اكتب وصفاً مفصلاً ودقيقاً</span>
-        </div>
-        <div className="tip-item">
-          <span className="tip-icon">💰</span>
-          <span>حدد سعراً مناسباً ومنافساً</span>
-        </div>
-        <div className="tip-item">
-          <span className="tip-icon">📍</span>
-          <span>اختر الموقع الدقيق لإعلانك</span>
-        </div>
+        <div className="tip-item"><span className="tip-icon">📸</span><span>أضف صور واضحة وجودة عالية</span></div>
+        <div className="tip-item"><span className="tip-icon">📝</span><span>اكتب وصفاً مفصلاً ودقيقاً</span></div>
+        <div className="tip-item"><span className="tip-icon">💰</span><span>حدد سعراً مناسباً ومنافساً</span></div>
+        <div className="tip-item"><span className="tip-icon">📍</span><span>اختر الموقع الدقيق لإعلانك</span></div>
       </div>
 
       <div className="form-grid">
@@ -707,110 +509,45 @@ export default function AddPage() {
             </div>
           </div>
 
+
           {/* ✅ فرع القسم (هرمي) */}
           {category === 'cars' && (
-            <div className="card" style={{ padding: 12, marginBottom: 12, border: '1px solid #e2e8f0' }}>
-              <div style={{ fontWeight: 900, marginBottom: 10 }}>تفاصيل السيارة</div>
+            <div className="form-group">
+              <label className="form-label required">ماركة السيارة</label>
+              <select
+                className={`form-select ${errors.carMake ? 'error' : ''}`}
+                value={carMake}
+                onChange={(e) => {
+                  setCarMake(e.target.value);
+                  if (submitAttempted) setErrors((prev) => ({ ...prev, carMake: undefined, carMakeText: undefined }));
+                }}
+              >
+                <option value="" disabled>
+                  اختر الماركة
+                </option>
+                {CAR_MAKES.map((m) => (
+                  <option key={m.key} value={m.key}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+              {errors.carMake && <div className="form-error">{errors.carMake}</div>}
 
-              <div className="form-row" style={{ marginBottom: 0 }}>
-                <div className="form-group">
-                  <label className="form-label required">ماركة السيارة</label>
-                  <select
-                    className={`form-select ${errors.carMake ? 'error' : ''}`}
-                    value={carMake}
+              {carMake === 'other' && (
+                <div style={{ marginTop: 10 }}>
+                  <input
+                    className={`form-input ${errors.carMakeText ? 'error' : ''}`}
+                    value={carMakeText}
                     onChange={(e) => {
-                      setCarMake(e.target.value);
-                      setCarModel('');
-                      setCarModelText('');
-                      if (submitAttempted)
-                        setErrors((prev) => ({
-                          ...prev,
-                          carMake: undefined,
-                          carMakeText: undefined,
-                          carModelText: undefined,
-                        }));
+                      setCarMakeText(e.target.value);
+                      if (submitAttempted) setErrors((prev) => ({ ...prev, carMakeText: undefined }));
                     }}
-                  >
-                    <option value="" disabled>
-                      اختر الماركة
-                    </option>
-                    {CAR_MAKES.map((m) => (
-                      <option key={m.key} value={m.key}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.carMake && <div className="form-error">{errors.carMake}</div>}
-
-                  {carMake === 'other' && (
-                    <div style={{ marginTop: 10 }}>
-                      <input
-                        className={`form-input ${errors.carMakeText ? 'error' : ''}`}
-                        value={carMakeText}
-                        onChange={(e) => {
-                          setCarMakeText(e.target.value);
-                          if (submitAttempted) setErrors((prev) => ({ ...prev, carMakeText: undefined }));
-                        }}
-                        placeholder="اكتب الماركة"
-                        maxLength={40}
-                      />
-                      {errors.carMakeText && <div className="form-error">{errors.carMakeText}</div>}
-                    </div>
-                  )}
+                    placeholder="اكتب الماركة"
+                    maxLength={40}
+                  />
+                  {errors.carMakeText && <div className="form-error">{errors.carMakeText}</div>}
                 </div>
-
-                <div className="form-group">
-                  <label className="form-label">موديل السيارة (اختياري)</label>
-
-                  {carMake && carMake !== 'other' && carModelsForMake.length > 0 ? (
-                    <select
-                      className="form-select"
-                      value={carModel}
-                      onChange={(e) => {
-                        setCarModel(e.target.value);
-                        if (submitAttempted) setErrors((prev) => ({ ...prev, carModelText: undefined }));
-                      }}
-                    >
-                      <option value="">كل الموديلات</option>
-                      {carModelsForMake.map((mm) => (
-                        <option key={mm.key} value={mm.key}>
-                          {mm.label}
-                        </option>
-                      ))}
-                      <option value="other">أخرى</option>
-                    </select>
-                  ) : (
-                    <input
-                      className={`form-input ${errors.carModelText ? 'error' : ''}`}
-                      value={carModelText}
-                      onChange={(e) => {
-                        setCarModelText(e.target.value);
-                        setCarModel(e.target.value ? 'other' : '');
-                        if (submitAttempted) setErrors((prev) => ({ ...prev, carModelText: undefined }));
-                      }}
-                      placeholder={carMake ? 'اكتب الموديل (مثال: هايلوكس)' : 'اختر الماركة أولاً'}
-                      disabled={!carMake}
-                      maxLength={50}
-                    />
-                  )}
-
-                  {carMake && carMake !== 'other' && carModelsForMake.length > 0 && carModel === 'other' && (
-                    <div style={{ marginTop: 10 }}>
-                      <input
-                        className={`form-input ${errors.carModelText ? 'error' : ''}`}
-                        value={carModelText}
-                        onChange={(e) => {
-                          setCarModelText(e.target.value);
-                          if (submitAttempted) setErrors((prev) => ({ ...prev, carModelText: undefined }));
-                        }}
-                        placeholder="اكتب الموديل"
-                        maxLength={50}
-                      />
-                      {errors.carModelText && <div className="form-error">{errors.carModelText}</div>}
-                    </div>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -859,6 +596,7 @@ export default function AddPage() {
             <div className="card" style={{ padding: 12, marginBottom: 12, border: '1px solid #e2e8f0' }}>
               <div style={{ fontWeight: 900, marginBottom: 10 }}>تفاصيل العقار</div>
 
+              {/* بيع / إيجار */}
               <div className="form-row" style={{ marginBottom: 0 }}>
                 <div className="form-group">
                   <label className="form-label required">نوع العملية</label>
@@ -870,12 +608,7 @@ export default function AddPage() {
                       setPropertyType('');
                       setPropertyTypeText('');
                       if (submitAttempted)
-                        setErrors((prev) => ({
-                          ...prev,
-                          dealType: undefined,
-                          propertyType: undefined,
-                          propertyTypeText: undefined,
-                        }));
+                        setErrors((prev) => ({ ...prev, dealType: undefined, propertyType: undefined, propertyTypeText: undefined }));
                     }}
                   >
                     <option value="" disabled>
@@ -898,11 +631,7 @@ export default function AddPage() {
                     onChange={(e) => {
                       setPropertyType(e.target.value);
                       if (submitAttempted)
-                        setErrors((prev) => ({
-                          ...prev,
-                          propertyType: undefined,
-                          propertyTypeText: undefined,
-                        }));
+                        setErrors((prev) => ({ ...prev, propertyType: undefined, propertyTypeText: undefined }));
                     }}
                     disabled={!dealType}
                     title={!dealType ? 'اختر بيع/إيجار أولاً' : ''}
@@ -935,451 +664,6 @@ export default function AddPage() {
                   )}
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* ✅ فروع الأقسام الأخرى (اختياري) */}
-          {category === 'electronics' && (
-            <div className="form-group">
-              <label className="form-label">نوع الإلكترونيات</label>
-              <select
-                className="form-select"
-                value={electronicsType}
-                onChange={(e) => {
-                  setElectronicsType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, electronicsTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر النوع (اختياري)</option>
-                {ELECTRONICS_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
-
-              {electronicsType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.electronicsTypeText ? 'error' : ''}`}
-                    value={electronicsTypeText}
-                    onChange={(e) => {
-                      setElectronicsTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, electronicsTypeText: undefined }));
-                    }}
-                    placeholder="اكتب النوع"
-                    maxLength={60}
-                  />
-                  {errors.electronicsTypeText && <div className="form-error">{errors.electronicsTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {category === 'motorcycles' && (
-            <div className="form-group">
-              <label className="form-label">ماركة الدراجة</label>
-              <select
-                className="form-select"
-                value={motorcycleBrand}
-                onChange={(e) => {
-                  setMotorcycleBrand(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, motorcycleBrandText: undefined }));
-                }}
-              >
-                <option value="">اختر الماركة (اختياري)</option>
-                {MOTORCYCLE_BRANDS.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
-
-              {motorcycleBrand === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.motorcycleBrandText ? 'error' : ''}`}
-                    value={motorcycleBrandText}
-                    onChange={(e) => {
-                      setMotorcycleBrandText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, motorcycleBrandText: undefined }));
-                    }}
-                    placeholder="اكتب الماركة"
-                    maxLength={60}
-                  />
-                  {errors.motorcycleBrandText && <div className="form-error">{errors.motorcycleBrandText}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {category === 'heavy_equipment' && (
-            <div className="form-group">
-              <label className="form-label">نوع المعدة</label>
-              <select
-                className="form-select"
-                value={heavyEquipmentType}
-                onChange={(e) => {
-                  setHeavyEquipmentType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, heavyEquipmentTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر النوع (اختياري)</option>
-                {HEAVY_EQUIPMENT_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
-
-              {heavyEquipmentType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.heavyEquipmentTypeText ? 'error' : ''}`}
-                    value={heavyEquipmentTypeText}
-                    onChange={(e) => {
-                      setHeavyEquipmentTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, heavyEquipmentTypeText: undefined }));
-                    }}
-                    placeholder="اكتب النوع"
-                    maxLength={60}
-                  />
-                  {errors.heavyEquipmentTypeText && <div className="form-error">{errors.heavyEquipmentTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {category === 'solar' && (
-            <div className="form-group">
-              <label className="form-label">فئة الطاقة الشمسية</label>
-              <select
-                className="form-select"
-                value={solarType}
-                onChange={(e) => {
-                  setSolarType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, solarTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر الفئة (اختياري)</option>
-                {SOLAR_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
-
-              {solarType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.solarTypeText ? 'error' : ''}`}
-                    value={solarTypeText}
-                    onChange={(e) => {
-                      setSolarTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, solarTypeText: undefined }));
-                    }}
-                    placeholder="اكتب الفئة"
-                    maxLength={60}
-                  />
-                  {errors.solarTypeText && <div className="form-error">{errors.solarTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {category === 'networks' && (
-            <div className="form-group">
-              <label className="form-label">فئة الشبكات</label>
-              <select
-                className="form-select"
-                value={networkType}
-                onChange={(e) => {
-                  setNetworkType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, networkTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر الفئة (اختياري)</option>
-                {NETWORK_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
-
-              {networkType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.networkTypeText ? 'error' : ''}`}
-                    value={networkTypeText}
-                    onChange={(e) => {
-                      setNetworkTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, networkTypeText: undefined }));
-                    }}
-                    placeholder="اكتب الفئة"
-                    maxLength={60}
-                  />
-                  {errors.networkTypeText && <div className="form-error">{errors.networkTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {category === 'maintenance' && (
-            <div className="form-group">
-              <label className="form-label">نوع الصيانة</label>
-              <select
-                className="form-select"
-                value={maintenanceType}
-                onChange={(e) => {
-                  setMaintenanceType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, maintenanceTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر النوع (اختياري)</option>
-                {MAINTENANCE_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
-
-              {maintenanceType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.maintenanceTypeText ? 'error' : ''}`}
-                    value={maintenanceTypeText}
-                    onChange={(e) => {
-                      setMaintenanceTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, maintenanceTypeText: undefined }));
-                    }}
-                    placeholder="اكتب النوع"
-                    maxLength={60}
-                  />
-                  {errors.maintenanceTypeText && <div className="form-error">{errors.maintenanceTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {category === 'furniture' && (
-            <div className="form-group">
-              <label className="form-label">نوع الأثاث</label>
-              <select
-                className="form-select"
-                value={furnitureType}
-                onChange={(e) => {
-                  setFurnitureType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, furnitureTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر النوع (اختياري)</option>
-                {FURNITURE_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
-
-              {furnitureType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.furnitureTypeText ? 'error' : ''}`}
-                    value={furnitureTypeText}
-                    onChange={(e) => {
-                      setFurnitureTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, furnitureTypeText: undefined }));
-                    }}
-                    placeholder="اكتب النوع"
-                    maxLength={60}
-                  />
-                  {errors.furnitureTypeText && <div className="form-error">{errors.furnitureTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {category === 'home_tools' && (
-            <div className="form-group">
-              <label className="form-label">نوع الأدوات المنزلية</label>
-              <select
-                className="form-select"
-                value={homeToolsType}
-                onChange={(e) => {
-                  setHomeToolsType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, homeToolsTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر النوع (اختياري)</option>
-                {HOME_TOOLS_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
-
-              {homeToolsType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.homeToolsTypeText ? 'error' : ''}`}
-                    value={homeToolsTypeText}
-                    onChange={(e) => {
-                      setHomeToolsTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, homeToolsTypeText: undefined }));
-                    }}
-                    placeholder="اكتب النوع"
-                    maxLength={60}
-                  />
-                  {errors.homeToolsTypeText && <div className="form-error">{errors.homeToolsTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {category === 'clothes' && (
-            <div className="form-group">
-              <label className="form-label">نوع الملابس</label>
-              <select
-                className="form-select"
-                value={clothesType}
-                onChange={(e) => {
-                  setClothesType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, clothesTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر النوع (اختياري)</option>
-                {CLOTHES_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
-
-              {clothesType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.clothesTypeText ? 'error' : ''}`}
-                    value={clothesTypeText}
-                    onChange={(e) => {
-                      setClothesTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, clothesTypeText: undefined }));
-                    }}
-                    placeholder="اكتب النوع"
-                    maxLength={60}
-                  />
-                  {errors.clothesTypeText && <div className="form-error">{errors.clothesTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {category === 'animals' && (
-            <div className="form-group">
-              <label className="form-label">نوع الحيوانات</label>
-              <select
-                className="form-select"
-                value={animalType}
-                onChange={(e) => {
-                  setAnimalType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, animalTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر النوع (اختياري)</option>
-                {ANIMAL_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
-
-              {animalType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.animalTypeText ? 'error' : ''}`}
-                    value={animalTypeText}
-                    onChange={(e) => {
-                      setAnimalTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, animalTypeText: undefined }));
-                    }}
-                    placeholder="اكتب النوع"
-                    maxLength={60}
-                  />
-                  {errors.animalTypeText && <div className="form-error">{errors.animalTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {category === 'jobs' && (
-            <div className="form-group">
-              <label className="form-label">نوع الوظيفة</label>
-              <select
-                className="form-select"
-                value={jobType}
-                onChange={(e) => {
-                  setJobType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, jobTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر النوع (اختياري)</option>
-                {JOB_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
-
-              {jobType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.jobTypeText ? 'error' : ''}`}
-                    value={jobTypeText}
-                    onChange={(e) => {
-                      setJobTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, jobTypeText: undefined }));
-                    }}
-                    placeholder="اكتب النوع"
-                    maxLength={60}
-                  />
-                  {errors.jobTypeText && <div className="form-error">{errors.jobTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {category === 'services' && (
-            <div className="form-group">
-              <label className="form-label">نوع الخدمة</label>
-              <select
-                className="form-select"
-                value={serviceType}
-                onChange={(e) => {
-                  setServiceType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, serviceTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر النوع (اختياري)</option>
-                {SERVICE_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
-
-              {serviceType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.serviceTypeText ? 'error' : ''}`}
-                    value={serviceTypeText}
-                    onChange={(e) => {
-                      setServiceTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, serviceTypeText: undefined }));
-                    }}
-                    placeholder="اكتب النوع"
-                    maxLength={60}
-                  />
-                  {errors.serviceTypeText && <div className="form-error">{errors.serviceTypeText}</div>}
-                </div>
-              )}
             </div>
           )}
 
@@ -1418,6 +702,7 @@ export default function AddPage() {
             </div>
           </div>
 
+          {/* السعر المحول */}
           {convertedPrice && (
             <div className="price-conversion">
               <span className="conversion-label">السعر المحول:</span>
@@ -1453,11 +738,19 @@ export default function AddPage() {
             <div className="form-group">
               <label className="form-label">طريقة التواصل</label>
               <div className="communication-toggle">
-                <button type="button" className={`toggle-btn ${isWhatsapp ? 'active' : ''}`} onClick={() => setIsWhatsapp(true)}>
+                <button
+                  type="button"
+                  className={`toggle-btn ${isWhatsapp ? 'active' : ''}`}
+                  onClick={() => setIsWhatsapp(true)}
+                >
                   <span className="toggle-icon">💬</span>
                   واتساب
                 </button>
-                <button type="button" className={`toggle-btn ${!isWhatsapp ? 'active' : ''}`} onClick={() => setIsWhatsapp(false)}>
+                <button
+                  type="button"
+                  className={`toggle-btn ${!isWhatsapp ? 'active' : ''}`}
+                  onClick={() => setIsWhatsapp(false)}
+                >
                   <span className="toggle-icon">📞</span>
                   مكالمة
                 </button>
@@ -1496,7 +789,12 @@ export default function AddPage() {
                 {imagePreviews.map((preview, index) => (
                   <div key={index} className="image-preview">
                     <img src={preview} alt={`معاينة ${index + 1}`} className="preview-img" />
-                    <button type="button" className="remove-image-btn" onClick={() => handleRemoveImage(index)} aria-label="حذف الصورة">
+                    <button
+                      type="button"
+                      className="remove-image-btn"
+                      onClick={() => handleRemoveImage(index)}
+                      aria-label="حذف الصورة"
+                    >
                       ×
                     </button>
                     <span className="image-number">{index + 1}</span>
@@ -1514,7 +812,11 @@ export default function AddPage() {
                 <span>تفعيل نظام المزاد</span>
               </div>
               <label className="switch">
-                <input type="checkbox" checked={auctionEnabled} onChange={(e) => setAuctionEnabled(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  checked={auctionEnabled}
+                  onChange={(e) => setAuctionEnabled(e.target.checked)}
+                />
                 <span className="slider"></span>
               </label>
             </div>
@@ -1557,32 +859,30 @@ export default function AddPage() {
 
           <div className="map-wrapper">
             {!showMap ? (
-              <div
-                className="map-placeholder"
-                style={{
-                  padding: '60px 20px',
-                  textAlign: 'center',
-                  background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
-                  borderRadius: '12px',
-                  border: '2px dashed #0ea5e9',
-                }}
-              >
-                <div style={{ fontSize: '48px', marginBottom: '16px' }} role="img" aria-label="أيقونة الخريطة">
-                  🗺️
-                </div>
+              <div className="map-placeholder" style={{
+                padding: '60px 20px',
+                textAlign: 'center',
+                background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                borderRadius: '12px',
+                border: '2px dashed #0ea5e9'
+              }}>
+                <div style={{ fontSize: '48px', marginBottom: '16px' }} role="img" aria-label="أيقونة الخريطة">🗺️</div>
                 <button
                   type="button"
                   onClick={() => setShowMap(true)}
                   className="btn btnPrimary"
-                  style={{ padding: '12px 24px', fontSize: '16px', fontWeight: 'bold' }}
+                  style={{
+                    padding: '12px 24px',
+                    fontSize: '16px',
+                    fontWeight: 'bold'
+                  }}
                   aria-label="تحميل الخريطة لتحديد الموقع"
                 >
-                  <span role="img" aria-label="أيقونة موقع">
-                    📍
-                  </span>{' '}
-                  تحميل الخريطة
+                  <span role="img" aria-label="أيقونة موقع">📍</span> تحميل الخريطة
                 </button>
-                <p style={{ marginTop: '12px', color: '#64748b', fontSize: '14px' }}>اضغط لتحديد موقع الإعلان على الخريطة</p>
+                <p style={{ marginTop: '12px', color: '#64748b', fontSize: '14px' }}>
+                  اضغط لتحديد موقع الإعلان على الخريطة
+                </p>
               </div>
             ) : (
               <LocationPicker value={coords} onChange={onPick} />
@@ -1660,7 +960,8 @@ export default function AddPage() {
           margin: 0 auto;
           width: 100%;
         }
-        .cats-note {
+
+        .cats-note{
           margin: 10px 0 18px;
           padding: 12px 14px;
           border-radius: 12px;
@@ -1671,6 +972,7 @@ export default function AddPage() {
           font-size: 13px;
           line-height: 1.6;
         }
+
         .add-page-header {
           text-align: center;
           padding: 30px 20px;
@@ -1680,11 +982,13 @@ export default function AddPage() {
           border-radius: 20px;
           box-shadow: 0 8px 25px rgba(79, 70, 229, 0.2);
         }
+
         .add-page-header h1 {
           font-size: 32px;
           margin-bottom: 10px;
           font-weight: 900;
         }
+
         .form-tips {
           display: flex;
           justify-content: center;
@@ -1696,6 +1000,7 @@ export default function AddPage() {
           border-radius: 12px;
           border: 1px solid #e2e8f0;
         }
+
         .tip-item {
           display: flex;
           align-items: center;
@@ -1708,20 +1013,24 @@ export default function AddPage() {
           color: #475569;
           border: 1px solid #e2e8f0;
         }
+
         .tip-icon {
           font-size: 16px;
         }
+
         .form-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 30px;
           margin-bottom: 40px;
         }
+
         @media (max-width: 1024px) {
           .form-grid {
             grid-template-columns: 1fr;
           }
         }
+
         .form-container {
           background: white;
           border-radius: 20px;
@@ -1729,6 +1038,7 @@ export default function AddPage() {
           box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
           border: 1px solid #e2e8f0;
         }
+
         .form-section-title {
           font-size: 22px;
           color: #1e293b;
@@ -1739,17 +1049,20 @@ export default function AddPage() {
           align-items: center;
           gap: 10px;
         }
+
         .form-row {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 20px;
           margin-bottom: 20px;
         }
+
         @media (max-width: 768px) {
           .form-row {
             grid-template-columns: 1fr;
           }
         }
+
         .form-label {
           display: block;
           margin-bottom: 8px;
@@ -1757,10 +1070,12 @@ export default function AddPage() {
           color: #1e293b;
           font-size: 15px;
         }
+
         .form-label.required::after {
           content: ' *';
           color: #dc2626;
         }
+
         .form-input,
         .form-textarea,
         .form-select {
@@ -1773,6 +1088,7 @@ export default function AddPage() {
           background: #f8fafc;
           color: #1e293b;
         }
+
         .form-input:focus,
         .form-textarea:focus,
         .form-select:focus {
@@ -1781,12 +1097,14 @@ export default function AddPage() {
           background: white;
           box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
         }
+
         .form-input.error,
         .form-textarea.error,
         .form-select.error {
           border-color: #dc2626;
           background: #fef2f2;
         }
+
         .form-helper {
           display: flex;
           justify-content: space-between;
@@ -1794,9 +1112,11 @@ export default function AddPage() {
           font-size: 13px;
           color: #64748b;
         }
+
         .char-count {
           font-weight: 500;
         }
+
         .form-error {
           color: #dc2626;
           font-size: 13px;
@@ -1805,14 +1125,17 @@ export default function AddPage() {
           align-items: center;
           gap: 6px;
         }
+
         .form-error::before {
           content: '⚠️';
         }
+
         .currency-selector {
           display: flex;
           gap: 8px;
           flex-wrap: wrap;
         }
+
         .currency-btn {
           padding: 10px 20px;
           border: 2px solid #e2e8f0;
@@ -1826,11 +1149,13 @@ export default function AddPage() {
           text-align: center;
           min-width: 80px;
         }
+
         .currency-btn.active {
           background: #4f46e5;
           color: white;
           border-color: #4f46e5;
         }
+
         .price-conversion {
           background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
           padding: 15px 20px;
@@ -1838,6 +1163,7 @@ export default function AddPage() {
           margin: 20px 0;
           border: 1px solid #e2e8f0;
         }
+
         .conversion-label {
           display: block;
           font-weight: 600;
@@ -1845,23 +1171,28 @@ export default function AddPage() {
           margin-bottom: 8px;
           font-size: 14px;
         }
+
         .converted-prices {
           display: flex;
           flex-direction: column;
           gap: 8px;
         }
+
         .converted-price {
           color: #1e293b;
           font-size: 15px;
         }
+
         .converted-price strong {
           color: #4f46e5;
         }
+
         .communication-toggle {
           display: flex;
           gap: 10px;
           margin-top: 8px;
         }
+
         .toggle-btn {
           flex: 1;
           padding: 12px 16px;
@@ -1877,17 +1208,21 @@ export default function AddPage() {
           justify-content: center;
           gap: 8px;
         }
+
         .toggle-btn.active {
           background: #4f46e5;
           color: white;
           border-color: #4f46e5;
         }
+
         .toggle-icon {
           font-size: 18px;
         }
+
         .image-upload-input {
           display: none;
         }
+
         .image-upload-label {
           display: flex;
           flex-direction: column;
@@ -1901,22 +1236,26 @@ export default function AddPage() {
           transition: all 0.2s ease;
           text-align: center;
         }
+
         .upload-icon {
           font-size: 40px;
           margin-bottom: 10px;
           opacity: 0.6;
         }
+
         .upload-hint {
           font-size: 13px;
           color: #94a3b8;
           margin-top: 5px;
         }
+
         .image-previews {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
           gap: 10px;
           margin-top: 15px;
         }
+
         .image-preview {
           position: relative;
           aspect-ratio: 1;
@@ -1924,11 +1263,13 @@ export default function AddPage() {
           overflow: hidden;
           border: 2px solid #e2e8f0;
         }
+
         .preview-img {
           width: 100%;
           height: 100%;
           object-fit: cover;
         }
+
         .remove-image-btn {
           position: absolute;
           top: 5px;
@@ -1946,6 +1287,7 @@ export default function AddPage() {
           font-size: 16px;
           font-weight: bold;
         }
+
         .image-number {
           position: absolute;
           bottom: 5px;
@@ -1956,6 +1298,7 @@ export default function AddPage() {
           border-radius: 10px;
           font-size: 12px;
         }
+
         .auction-section {
           background: #f8fafc;
           padding: 20px;
@@ -1963,23 +1306,27 @@ export default function AddPage() {
           margin-top: 30px;
           border: 1px solid #e2e8f0;
         }
+
         .auction-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
           margin-bottom: 15px;
         }
+
         .switch {
           position: relative;
           display: inline-block;
           width: 60px;
           height: 30px;
         }
+
         .switch input {
           opacity: 0;
           width: 0;
           height: 0;
         }
+
         .slider {
           position: absolute;
           cursor: pointer;
@@ -1991,6 +1338,7 @@ export default function AddPage() {
           transition: 0.4s;
           border-radius: 34px;
         }
+
         .slider:before {
           position: absolute;
           content: '';
@@ -2002,12 +1350,15 @@ export default function AddPage() {
           transition: 0.4s;
           border-radius: 50%;
         }
+
         input:checked + .slider {
           background-color: #4f46e5;
         }
+
         input:checked + .slider:before {
           transform: translateX(30px);
         }
+
         .map-container {
           background: white;
           border-radius: 20px;
@@ -2017,6 +1368,7 @@ export default function AddPage() {
           display: flex;
           flex-direction: column;
         }
+
         .map-wrapper {
           flex: 1;
           min-height: 400px;
@@ -2025,23 +1377,23 @@ export default function AddPage() {
           border: 1px solid #e2e8f0;
           margin-bottom: 20px;
         }
+
         .mobile-submit-section {
           display: none;
           margin-top: 30px;
         }
+
         .desktop-submit-section {
           margin-top: 40px;
           padding-top: 30px;
           border-top: 2px solid #f1f5f9;
         }
+
         @media (max-width: 1024px) {
-          .mobile-submit-section {
-            display: block;
-          }
-          .desktop-submit-section {
-            display: none;
-          }
+          .mobile-submit-section { display: block; }
+          .desktop-submit-section { display: none; }
         }
+
         .submit-btn-large {
           width: 100%;
           max-width: 400px;
@@ -2058,23 +1410,26 @@ export default function AddPage() {
           justify-content: center;
           gap: 10px;
         }
+
         .submit-btn-large:disabled {
           opacity: 0.7;
           cursor: not-allowed;
         }
+
         .cancel-link {
           color: #64748b;
           text-decoration: none;
           font-weight: 700;
         }
-        .final-notes,
-        .form-notes {
+
+        .final-notes, .form-notes{
           margin-top: 20px;
           padding: 15px;
           background: #f8fafc;
           border-radius: 10px;
           border: 1px solid #e2e8f0;
         }
+
         .note-item {
           color: #475569;
           font-size: 14px;
@@ -2083,6 +1438,7 @@ export default function AddPage() {
           align-items: center;
           gap: 8px;
         }
+
         .loading-container {
           display: flex;
           flex-direction: column;
@@ -2091,6 +1447,7 @@ export default function AddPage() {
           min-height: 300px;
           gap: 20px;
         }
+
         .loading-spinner-large {
           width: 60px;
           height: 60px;
@@ -2099,6 +1456,7 @@ export default function AddPage() {
           border-radius: 50%;
           animation: spin 1s linear infinite;
         }
+
         .loading-spinner-small {
           width: 20px;
           height: 20px;
@@ -2107,11 +1465,11 @@ export default function AddPage() {
           border-radius: 50%;
           animation: spin 0.8s linear infinite;
         }
+
         @keyframes spin {
-          to {
-            transform: rotate(360deg);
-          }
+          to { transform: rotate(360deg); }
         }
+
         .auth-required-card {
           max-width: 500px;
           margin: 50px auto;
@@ -2122,17 +1480,20 @@ export default function AddPage() {
           text-align: center;
           border: 1px solid #e2e8f0;
         }
+
         .lock-icon-large {
           font-size: 70px;
           margin-bottom: 20px;
           opacity: 0.7;
         }
+
         .auth-actions {
           display: flex;
           flex-direction: column;
           gap: 15px;
           margin-top: 25px;
         }
+
         .auth-btn {
           padding: 14px;
           border-radius: 10px;
@@ -2140,15 +1501,18 @@ export default function AddPage() {
           font-weight: 700;
           text-align: center;
         }
+
         .btn-primary.auth-btn {
           background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
           color: white;
         }
+
         .btn-secondary.auth-btn {
           background: #f8fafc;
           color: #4f46e5;
           border: 2px solid #e2e8f0;
         }
+
         .back-home-btn {
           color: #64748b;
           text-decoration: none;
@@ -2156,41 +1520,20 @@ export default function AddPage() {
           margin-top: 10px;
           display: inline-block;
         }
+
         @media (max-width: 768px) {
-          .add-page-header {
-            padding: 25px 15px;
-            border-radius: 16px;
-          }
-          .add-page-header h1 {
-            font-size: 24px;
-          }
-          .form-container,
-          .map-container {
-            padding: 20px;
-            border-radius: 16px;
-          }
-          .form-section-title {
-            font-size: 18px;
-          }
-          .currency-btn {
-            padding: 8px 12px;
-            font-size: 14px;
-          }
+          .add-page-header { padding: 25px 15px; border-radius: 16px; }
+          .add-page-header h1 { font-size: 24px; }
+          .form-container, .map-container { padding: 20px; border-radius: 16px; }
+          .form-section-title { font-size: 18px; }
+          .currency-btn { padding: 8px 12px; font-size: 14px; }
         }
+
         @media (max-width: 480px) {
-          .form-row {
-            grid-template-columns: 1fr;
-            gap: 15px;
-          }
-          .currency-selector {
-            flex-direction: column;
-          }
-          .communication-toggle {
-            flex-direction: column;
-          }
-          .image-previews {
-            grid-template-columns: repeat(3, 1fr);
-          }
+          .form-row { grid-template-columns: 1fr; gap: 15px; }
+          .currency-selector { flex-direction: column; }
+          .communication-toggle { flex-direction: column; }
+          .image-previews { grid-template-columns: repeat(3, 1fr); }
         }
       `}</style>
     </div>
