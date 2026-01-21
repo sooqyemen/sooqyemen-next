@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRates } from '@/lib/rates';
+import { useRates, toYER } from '@/lib/rates';
 
 // ✅ تحويل slug إلى اسم عربي (fallback فقط إذا ما توفر categoryName)
 const CATEGORY_LABELS = {
@@ -48,6 +48,28 @@ function getYerPerUSD(rates) {
   return v > 0 ? v : FALLBACK_USD_TO_YER;
 }
 
+
+function parseMoney(val) {
+  if (val === undefined || val === null) return NaN;
+  if (typeof val === 'number') return val;
+  let s = String(val).trim();
+  if (!s) return NaN;
+
+  // Normalize Arabic-Indic digits (٠١٢٣٤٥٦٧٨٩) and Eastern Arabic digits (۰۱۲۳۴۵۶۷۸۹)
+  const map = {
+    '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9',
+    '۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9',
+  };
+  s = s.replace(/[٠-٩۰-۹]/g, (d) => map[d] || d);
+
+  // Remove common separators and any non-numeric chars except dot
+  s = s.replace(/[,\s]/g, '');
+  s = s.replace(/[^0-9.]/g, '');
+
+  const n = Number(s);
+  return isFinite(n) ? n : NaN;
+}
+
 function currencyLabel(cur) {
   const c = String(cur || 'YER').toUpperCase();
   if (c === 'SAR') return 'ريال سعودي';
@@ -61,13 +83,13 @@ function formatAmount(cur, value) {
   if (!isFinite(n) || n <= 0) return '—';
 
   if (c === 'YER') {
-    return new Intl.NumberFormat('ar-YE', { maximumFractionDigits: 0 }).format(Math.round(n));
+    return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(n));
   }
   if (c === 'USD') {
-    return new Intl.NumberFormat('ar-YE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+    return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
   }
   // SAR وغيره
-  return new Intl.NumberFormat('ar-YE', { maximumFractionDigits: 2 }).format(n);
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(n);
 }
 
 function computePriceDisplay(listing, priceYER, rates) {
@@ -82,7 +104,7 @@ function computePriceDisplay(listing, priceYER, rates) {
   const rawOrig = listing?.originalPrice;
 
   const hasOriginal = rawOrig !== undefined && rawOrig !== null && String(rawOrig).trim() !== '';
-  const origNum = Number(rawOrig);
+  const origNum = parseMoney(rawOrig);
 
   let mainCur = rawCur || 'YER';
   let mainVal = null;
@@ -130,23 +152,45 @@ export default function ListingCard({ listing, variant = 'grid' }) {
   const rawDesc = String(listing?.description || '');
   const shortDesc = rawDesc.length > 90 ? rawDesc.slice(0, 90) + '…' : rawDesc;
 
+  
   /**
-   * ✅ السعر المعتمد عندنا: YER فقط
+   * ✅ السعر:
+   * - التخزين/الفرز يعتمد على priceYER (عملة معيارية واحدة)
+   * - العرض: العملة الأصلية التي أدخلها صاحب الإعلان + تحويلات محسوبة بأسعار الصرف الحالية
+   *
+   * ملاحظة مهمة:
+   * بعض الإعلانات القديمة قد تكون خزّنت originalPrice كسلسلة (مثلاً "١٠٠٠" أو "1,000").
+   * لذلك نعمل parsing آمن.
    */
-  let priceYER = listing?.priceYER ?? listing?.currentBidYER ?? 0;
+  const rawOrigCur = String(listing?.originalCurrency || 'YER').toUpperCase();
+  const origPriceNum = parseMoney(listing?.originalPrice);
 
-  // Fallback للإعلانات القديمة (إن وجدت)
-  if (!priceYER && listing?.originalPrice) {
-    const p = Number(listing.originalPrice) || 0;
-    const cur = String(listing.originalCurrency || 'YER').toUpperCase();
+  const hasOrig =
+    (rawOrigCur === 'YER' || rawOrigCur === 'SAR' || rawOrigCur === 'USD') &&
+    isFinite(origPriceNum) &&
+    origPriceNum > 0;
 
-    const SAR_TO_YER = 425;
-    const USD_TO_YER = 1632;
+  // السعر المخزن (للإعلانات/المزاد)
+  const storedYER = Number(listing?.currentBidYER ?? listing?.priceYER ?? 0) || 0;
 
-    if (cur === 'SAR') priceYER = p * SAR_TO_YER;
-    else if (cur === 'USD') priceYER = p * USD_TO_YER;
-    else priceYER = p;
+  // ✅ سعر عرض/تحويل "فعلي": لو عندنا أصل الإعلان نحسبه بأسعار الصرف الحالية
+  // هذا يجعل تغيير الصرف من Firestore ينعكس على كل المعروض فوراً (في التحويلات).
+  let effectiveYER = storedYER;
+
+  // المزاد: نعتمد على currentBidYER لأنه ديناميكي
+  const hasBid = Number(listing?.currentBidYER || 0) > 0;
+
+  if (!hasBid && hasOrig) {
+    // يحسب YER من الأصل باستخدام نفس دالة النظام
+    effectiveYER = Number(toYER(origPriceNum, rawOrigCur, rates)) || storedYER;
   }
+
+  // Fallback أخير لو ما فيه شيء
+  if (!effectiveYER && hasOrig) {
+    effectiveYER = Number(toYER(origPriceNum, rawOrigCur, rates));
+  }
+
+  const priceYER = effectiveYER;
 
   const priceView = useMemo(() => {
     return computePriceDisplay(listing, Number(priceYER) || 0, rates);
