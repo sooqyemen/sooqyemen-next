@@ -469,7 +469,7 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                 <div className="price-section">
                   <div className="price-title">السعر:</div>
                   <div className="price-amount">
-                    <Price priceYER={listing.currentBidYER || listing.priceYER || 0} />
+                    <Price listing={listing} variant="hero" />
                   </div>
                 </div>
 
