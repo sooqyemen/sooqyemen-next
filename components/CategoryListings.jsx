@@ -3,63 +3,94 @@
 
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '@/lib/firebaseClient';
 import ListingCard from '@/components/ListingCard';
 
 // ✅ Taxonomy (الفروع الهرمية)
 import {
+  // base inference (cars/phones/realestate)
   inferListingTaxonomy,
+
+  // cars
+  CAR_MAKES,
+  CAR_MODELS_BY_MAKE,
   carMakeLabel,
+  carModelLabel,
+
+  // phones
+  PHONE_BRANDS,
   phoneBrandLabel,
+
+  // realestate
+  DEAL_TYPES,
+  PROPERTY_TYPES,
   dealTypeLabel,
   propertyTypeLabel,
-  
-  // المتغيرات التي كانت ناقصة في الاستيراد وتستخدم في الكود
-  CAR_MAKES_PRESET,
-  CAR_MODELS_BY_MAKE,
 
-  // ✅ Single-facet categories
+  // other single-facet categories
   ELECTRONICS_TYPES,
   electronicsTypeLabel,
-
-  HEAVY_EQUIPMENT_TYPES,
-  heavyEquipmentTypeLabel,
-
-  SOLAR_TYPES,
-  solarTypeLabel,
-
-  NETWORK_TYPES,
-  networkTypeLabel,
-
-  MAINTENANCE_TYPES,
-  maintenanceTypeLabel,
-
-  FURNITURE_TYPES,
-  furnitureTypeLabel,
-
-  HOME_TOOLS_TYPES,
-  homeToolsTypeLabel,
-
-  CLOTHES_TYPES,
-  clothesTypeLabel,
-
-  ANIMAL_TYPES,
-  animalTypeLabel,
-
-  JOB_TYPES,
-  jobTypeLabel,
-
-  SERVICE_TYPES,
-  serviceTypeLabel,
+  normalizeElectronicsType,
+  detectElectronicsTypeFromText,
 
   MOTORCYCLE_BRANDS,
   motorcycleBrandLabel,
+  normalizeMotorcycleBrand,
+  detectMotorcycleBrandFromText,
+
+  HEAVY_EQUIPMENT_TYPES,
+  heavyEquipmentTypeLabel,
+  normalizeHeavyEquipmentType,
+  detectHeavyEquipmentTypeFromText,
+
+  SOLAR_TYPES,
+  solarTypeLabel,
+  normalizeSolarType,
+  detectSolarTypeFromText,
+
+  NETWORK_TYPES,
+  networkTypeLabel,
+  normalizeNetworkType,
+  detectNetworkTypeFromText,
+
+  MAINTENANCE_TYPES,
+  maintenanceTypeLabel,
+  normalizeMaintenanceType,
+  detectMaintenanceTypeFromText,
+
+  FURNITURE_TYPES,
+  furnitureTypeLabel,
+  normalizeFurnitureType,
+  detectFurnitureTypeFromText,
+
+  HOME_TOOLS_TYPES,
+  homeToolsTypeLabel,
+  normalizeHomeToolsType,
+  detectHomeToolsTypeFromText,
+
+  CLOTHES_TYPES,
+  clothesTypeLabel,
+  normalizeClothesType,
+  detectClothesTypeFromText,
+
+  ANIMAL_TYPES,
+  animalTypeLabel,
+  normalizeAnimalType,
+  detectAnimalTypeFromText,
+
+  JOB_TYPES,
+  jobTypeLabel,
+  normalizeJobType,
+  detectJobTypeFromText,
+
+  SERVICE_TYPES,
+  serviceTypeLabel,
+  normalizeServiceType,
+  detectServiceTypeFromText,
 } from '@/lib/taxonomy';
 
-const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
-  ssr: false,
-});
+const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), { ssr: false });
 
 // ✅ خرائط توافق (عربي/إنجليزي/اختلافات شائعة)
 const ALIASES = {
@@ -102,6 +133,7 @@ function normalizeSlug(v) {
 const STRICT_CATEGORY_MATCH = true;
 
 // ✅ لتفادي ظهور أقسام "فاضية" بسبب اختلافات حفظ قيمة category في الإعلانات القديمة
+// نجلب نفس القسم بعدة قيم محتملة (حتى 10 قيم - حد Firestore لــ in)
 function categoryVariants(single) {
   const s = normalizeSlug(single);
   if (!s) return [];
@@ -113,14 +145,7 @@ function categoryVariants(single) {
     phones: ['phones', 'phone', 'mobiles', 'mobile', 'جوالات', 'الجوالات', 'موبايلات'],
     electronics: ['electronics', 'electronic', 'إلكترونيات', 'الكترونيات', 'الإلكترونيات'],
     motorcycles: ['motorcycles', 'motorcycle', 'دراجات', 'دراجات نارية', 'دراجات_نارية'],
-    heavy_equipment: [
-      'heavy_equipment',
-      'heavy-equipment',
-      'heavy equipment',
-      'heavyequipment',
-      'معدات ثقيلة',
-      'معدات_ثقيلة',
-    ],
+    heavy_equipment: ['heavy_equipment', 'heavy-equipment', 'heavy equipment', 'heavyequipment', 'معدات ثقيلة', 'معدات_ثقيلة'],
     solar: ['solar', 'طاقة شمسية', 'طاقة_شمسية'],
     networks: ['networks', 'network', 'net', 'شبكات', 'نت وشبكات', 'نت_وشبكات', 'نت_و_شبكات'],
     maintenance: ['maintenance', 'صيانة'],
@@ -147,25 +172,25 @@ function categoryVariants(single) {
   return uniq.length ? uniq : [s];
 }
 
-// تطبيق فلترة القسم على استعلام Firestore
-function applyCategoryWhere(q, categoryKey) {
-  const key = normalizeSlug(categoryKey);
-  if (!key) return q;
-  if (STRICT_CATEGORY_MATCH) return q.where('category', '==', key);
-  const vars = categoryVariants(key);
-  if (!vars.length) return q.where('category', '==', key);
-  if (vars.length === 1) return q.where('category', '==', vars[0]);
-  return q.where('category', 'in', vars);
-}
-
 function safeStr(v) {
   return String(v || '').trim();
 }
 
-// ✅ ألوان ثابتة للفلاتر (ماركات/موديلات) - توزيع تلقائي من Palette
+// ✅ ألوان ثابتة للفلاتر - توزيع تلقائي من Palette
 const TAX_PALETTE = [
-  '#2563eb', '#16a34a', '#7c3aed', '#0ea5e9', '#f59e0b', '#f97316',
-  '#ef4444', '#db2777', '#8b5cf6', '#14b8a6', '#84cc16', '#a16207', '#64748b'
+  '#2563eb',
+  '#16a34a',
+  '#7c3aed',
+  '#0ea5e9',
+  '#f59e0b',
+  '#f97316',
+  '#ef4444',
+  '#db2777',
+  '#8b5cf6',
+  '#14b8a6',
+  '#84cc16',
+  '#a16207',
+  '#64748b',
 ];
 
 function colorForKey(key) {
@@ -176,111 +201,25 @@ function colorForKey(key) {
   return TAX_PALETTE[h % TAX_PALETTE.length];
 }
 
-// ✅ تم إصلاح هذه الدالة: كانت مفتوحة وغير مغلقة في الكود الأصلي
-function pickTaxonomy(listing, categoryKey) {
-  return inferListingTaxonomy(listing || {}, categoryKey) || {};
-}
-
-function carModelLabelLocal(makeKey, modelKey) {
-  const mk = safeStr(makeKey).toLowerCase();
-  const md = safeStr(modelKey).toLowerCase();
-  const arr = CAR_MODELS_BY_MAKE ? (CAR_MODELS_BY_MAKE[mk] || []) : [];
-  const found = arr.find((x) => safeStr(x.key).toLowerCase() === md);
-  return found?.label || modelKey || 'أخرى';
-}
-
-// ✅ محاولة استنتاج موديل السيارة من الحقول أو من العنوان/الوصف (fallback)
-function detectCarModel(listing, makeKey) {
-  const mk = safeStr(makeKey).toLowerCase();
-  if (!mk) return '';
-
-  const raw =
-    listing?.carModel ??
-    listing?.model ??
-    listing?.vehicleModel ??
-    listing?.subModel ??
-    listing?.subType ??
-    listing?.modelName ??
-    '';
-
-  const normalize = (v) =>
-    safeStr(v)
-      .toLowerCase()
-      .replace(/\s+/g, '_')
-      .replace(/-/g, '_')
-      .replace(/__+/g, '_');
-
-  const rawNorm = normalize(raw);
-  if (rawNorm) return rawNorm;
-
-  const txt = `${safeStr(listing?.title)} ${safeStr(listing?.description)}`.toLowerCase();
-  const presets = CAR_MODELS_BY_MAKE ? (CAR_MODELS_BY_MAKE[mk] || []) : [];
-
-  for (const it of presets) {
-    const key = safeStr(it.key).toLowerCase();
-    const label = safeStr(it.label).toLowerCase();
-    const variants = [key, label];
-
-    // مرادفات انجليزي شائعة لبعض الموديلات
-    if (key === 'land_cruiser') variants.push('landcruiser', 'land cruiser', 'lc');
-    if (key === 'hilux') variants.push('hi lux');
-    if (key === 'xtrail') variants.push('x-trail', 'xtrail');
-    if (key === 'crv') variants.push('cr-v', 'crv');
-    if (key === 'mazda3') variants.push('mazda 3');
-    if (key === 'mazda6') variants.push('mazda 6');
-
-    for (const v of variants) {
-      const vv = String(v || '').trim();
-      if (vv && txt.includes(vv)) return key;
-    }
-  }
-
-  return '';
-}
-
-const PHONE_BRANDS_PRESET = [
-  { key: 'iphone', label: 'آيفون' },
-  { key: 'samsung', label: 'سامسونج' },
-  { key: 'xiaomi', label: 'ريدمي/شاومي' },
-  { key: 'huawei', label: 'هواوي' },
-  { key: 'oppo', label: 'أوبو' },
-  { key: 'realme', label: 'ريلمي' },
-  { key: 'infinix', label: 'إنفنكس' },
-  { key: 'tecno', label: 'تكنو' },
-  { key: 'nokia', label: 'نوكيا' },
-  { key: 'other', label: 'أخرى' },
-];
-
-// ✅ أنواع العقار + ألوان (تظهر حتى لو 0)
-const PROPERTY_TYPES_PRESET = [
-  { key: 'land', label: 'أرض', color: '#0ea5e9' },
-  { key: 'apartment', label: 'شقة', color: '#7c3aed' },
-  { key: 'house', label: 'بيت', color: '#16a34a' },
-  { key: 'villa', label: 'فيلا', color: '#f97316' },
-  { key: 'building', label: 'عمارة', color: '#a16207' },
-  { key: 'farm', label: 'مزرعة', color: '#84cc16' },
-  { key: 'shop', label: 'محل', color: '#db2777' },
-  { key: 'warehouse', label: 'مستودع', color: '#64748b' },
-  { key: 'office', label: 'مكتب', color: '#334155' },
-  { key: 'room', label: 'غرفة', color: '#14b8a6' },
-  { key: 'other', label: 'أخرى', color: '#475569' },
-];
-
 function presetMergeWithCounts(preset, countsMap) {
-  const safeMap = countsMap && typeof countsMap.get === 'function' && typeof countsMap.entries === 'function' ? countsMap : new Map();
+  const safeMap =
+    countsMap &&
+    typeof countsMap.get === 'function' &&
+    typeof countsMap.entries === 'function'
+      ? countsMap
+      : new Map();
 
   const used = new Set();
   const out = [];
 
   // 1) preset in desired order
-  for (const p of (Array.isArray(preset) ? preset : [])) {
+  for (const p of Array.isArray(preset) ? preset : []) {
     const k = safeStr(p?.key);
     if (!k) continue;
     used.add(k);
     const c = safeMap.get(k) || 0;
     const label = safeStr(p?.label) || k;
     const color = p?.color;
-    // IMPORTANT: return an ARRAY so it can be destructured like ([k,c])
     out.push([k, c, label, color]);
   }
 
@@ -293,11 +232,186 @@ function presetMergeWithCounts(preset, countsMap) {
     extras.push([kk, c || 0, kk, undefined]);
   }
 
-  // Sort extras by count (desc)
   extras.sort((a, b) => (b?.[1] || 0) - (a?.[1] || 0));
   return out.concat(extras);
 }
 
+function pickTaxonomy(listing, categoryKey) {
+  const root = String(categoryKey || '').trim();
+  const inferred = inferListingTaxonomy(listing || {}, root) || {};
+
+  const title = safeStr(listing?.title).toLowerCase();
+  const desc = safeStr(listing?.description).toLowerCase();
+  const text = `${title} ${desc}`.trim();
+
+  const out = {
+    root,
+
+    // cars
+    carMake: inferred.carMake || safeStr(listing?.carMake) || '',
+    carModel: inferred.carModel || safeStr(listing?.carModel) || '',
+
+    // phones
+    phoneBrand: inferred.phoneBrand || safeStr(listing?.phoneBrand) || '',
+
+    // realestate
+    dealType: inferred.dealType || safeStr(listing?.dealType) || '',
+    propertyType: inferred.propertyType || safeStr(listing?.propertyType) || '',
+
+    // other (single facet)
+    electronicsType: '',
+    motorcycleBrand: '',
+    heavyEquipmentType: '',
+    solarType: '',
+    networkType: '',
+    maintenanceType: '',
+    furnitureType: '',
+    homeToolsType: '',
+    clothesType: '',
+    animalType: '',
+    jobType: '',
+    serviceType: '',
+  };
+
+  if (root === 'cars') {
+    out.carMake = out.carMake || 'other';
+    if (out.carMake && out.carMake !== 'other') {
+      // normalize model to make-based key if possible
+      const mk = out.carMake;
+      const rawModel = safeStr(listing?.carModel || inferred.carModel || listing?.model || '');
+      out.carModel = safeStr(rawModel) || '';
+      // keep empty if unknown; filtering logic handles 'other' when missing
+    } else {
+      out.carModel = '';
+    }
+  }
+
+  if (root === 'phones') {
+    out.phoneBrand = out.phoneBrand || 'other';
+  }
+
+  if (root === 'electronics') {
+    const v =
+      listing?.electronicsType ??
+      listing?.electronics ??
+      listing?.electronicType ??
+      listing?.type ??
+      '';
+    out.electronicsType = normalizeElectronicsType(v) || detectElectronicsTypeFromText(text) || 'other';
+  }
+
+  if (root === 'motorcycles') {
+    const v =
+      listing?.motorcycleBrand ??
+      listing?.bikeBrand ??
+      listing?.brand ??
+      '';
+    out.motorcycleBrand = normalizeMotorcycleBrand(v) || detectMotorcycleBrandFromText(text) || 'other';
+  }
+
+  if (root === 'heavy_equipment') {
+    const v =
+      listing?.heavyEquipmentType ??
+      listing?.equipmentType ??
+      listing?.type ??
+      '';
+    out.heavyEquipmentType = normalizeHeavyEquipmentType(v) || detectHeavyEquipmentTypeFromText(text) || 'other';
+  }
+
+  if (root === 'solar') {
+    const v =
+      listing?.solarType ??
+      listing?.type ??
+      '';
+    out.solarType = normalizeSolarType(v) || detectSolarTypeFromText(text) || 'other';
+  }
+
+  if (root === 'networks') {
+    const v =
+      listing?.networkType ??
+      listing?.type ??
+      '';
+    out.networkType = normalizeNetworkType(v) || detectNetworkTypeFromText(text) || 'other';
+  }
+
+  if (root === 'maintenance') {
+    const v =
+      listing?.maintenanceType ??
+      listing?.type ??
+      '';
+    out.maintenanceType = normalizeMaintenanceType(v) || detectMaintenanceTypeFromText(text) || 'other';
+  }
+
+  if (root === 'furniture') {
+    const v =
+      listing?.furnitureType ??
+      listing?.type ??
+      '';
+    out.furnitureType = normalizeFurnitureType(v) || detectFurnitureTypeFromText(text) || 'other';
+  }
+
+  if (root === 'home_tools') {
+    const v =
+      listing?.homeToolsType ??
+      listing?.home_tools_type ??
+      listing?.type ??
+      '';
+    out.homeToolsType = normalizeHomeToolsType(v) || detectHomeToolsTypeFromText(text) || 'other';
+  }
+
+  if (root === 'clothes') {
+    const v =
+      listing?.clothesType ??
+      listing?.type ??
+      '';
+    out.clothesType = normalizeClothesType(v) || detectClothesTypeFromText(text) || 'other';
+  }
+
+  if (root === 'animals') {
+    const v =
+      listing?.animalType ??
+      listing?.type ??
+      '';
+    out.animalType = normalizeAnimalType(v) || detectAnimalTypeFromText(text) || 'other';
+  }
+
+  if (root === 'jobs') {
+    const v =
+      listing?.jobType ??
+      listing?.type ??
+      '';
+    out.jobType = normalizeJobType(v) || detectJobTypeFromText(text) || 'other';
+  }
+
+  if (root === 'services') {
+    const v =
+      listing?.serviceType ??
+      listing?.type ??
+      '';
+    out.serviceType = normalizeServiceType(v) || detectServiceTypeFromText(text) || 'other';
+  }
+
+  return out;
+}
+
+function getCategoryBaseColor(root) {
+  if (root === 'cars') return '#2563eb';
+  if (root === 'phones') return '#7c3aed';
+  if (root === 'realestate') return '#16a34a';
+  if (root === 'electronics') return '#0ea5e9';
+  if (root === 'motorcycles') return '#f97316';
+  if (root === 'heavy_equipment') return '#a16207';
+  if (root === 'solar') return '#f59e0b';
+  if (root === 'networks') return '#0ea5e9';
+  if (root === 'maintenance') return '#ef4444';
+  if (root === 'furniture') return '#8b5cf6';
+  if (root === 'home_tools') return '#14b8a6';
+  if (root === 'clothes') return '#db2777';
+  if (root === 'animals') return '#16a34a';
+  if (root === 'jobs') return '#64748b';
+  if (root === 'services') return '#334155';
+  return '#475569';
+}
 
 export default function CategoryListings({ category, initialListings = [] }) {
   const PAGE_SIZE = 24;
@@ -306,14 +420,15 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const [q, setQ] = useState('');
 
   const [items, setItems] = useState(() => (Array.isArray(initialListings) ? initialListings : []));
-  const [loading, setLoading] = useState(() => (Array.isArray(initialListings) ? initialListings.length === 0 : true));
+  const [loading, setLoading] = useState(() =>
+    Array.isArray(initialListings) ? initialListings.length === 0 : true
+  );
   const [loadingMore, setLoadingMore] = useState(false);
   const [err, setErr] = useState('');
   const [hasMore, setHasMore] = useState(true);
 
   const lastDocRef = useRef(null);
   const cursorReadyRef = useRef(false);
-
   const loadMoreRef = useRef(null);
   const aliveRef = useRef(true);
 
@@ -332,10 +447,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
   // ✅ States للفروع الهرمية
   const [carMake, setCarMake] = useState('');
   const [carModel, setCarModel] = useState('');
-  // '' = الكل
+
   const [phoneBrand, setPhoneBrand] = useState('');
-  const [dealType, setDealType] = useState(''); // '' = الكل
+  const [dealType, setDealType] = useState('');
   const [propertyType, setPropertyType] = useState('');
+
   const [electronicsType, setElectronicsType] = useState('');
   const [motorcycleBrand, setMotorcycleBrand] = useState('');
   const [heavyEquipmentType, setHeavyEquipmentType] = useState('');
@@ -349,7 +465,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const [jobType, setJobType] = useState('');
   const [serviceType, setServiceType] = useState('');
 
-
+  // ✅ reset when category changes
   useEffect(() => {
     setCarMake('');
     setCarModel('');
@@ -371,8 +487,13 @@ export default function CategoryListings({ category, initialListings = [] }) {
     setServiceType('');
   }, [single]);
 
+  const CAT_COLOR = useMemo(() => getCategoryBaseColor(single), [single]);
+
   const normalizeListing = (d) => {
-    const l = { id: d?.id || d?._id || d?.docId || d?.uid || d?.listingId, ...(d || {}) };
+    const l = {
+      id: d?.id || d?._id || d?.docId || d?.uid || d?.listingId,
+      ...(d || {}),
+    };
     if (!l.id) return null;
     if (l.isActive === false || l.hidden === true) return null;
     return l;
@@ -385,18 +506,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
     lastDocRef.current = null;
     cursorReadyRef.current = false;
 
-    if (!cats.length) {
+    if (!cats.length || !single) {
       setItems([]);
       setLoading(false);
       setHasMore(false);
-      return;
-    }
-
-    if (!single) {
-      setItems([]);
-      setLoading(false);
-      setHasMore(false);
-      setErr('إعدادات القسم غير واضحة (أكثر من اسم للقسم).');
+      if (!single && cats.length) setErr('إعدادات القسم غير واضحة (أكثر من اسم للقسم).');
       return;
     }
 
@@ -408,15 +522,15 @@ export default function CategoryListings({ category, initialListings = [] }) {
         .limit(PAGE_SIZE);
 
       const snap = await ref.get();
-
-      const data = snap.docs.map((d) => normalizeListing({ id: d.id, ...d.data() })).filter(Boolean);
+      const data = snap.docs
+        .map((d) => normalizeListing({ id: d.id, ...d.data() }))
+        .filter(Boolean);
 
       if (!aliveRef.current) return;
 
       setItems(data);
 
-      const last = snap.docs[snap.docs.length - 1] || null;
-      lastDocRef.current = last;
+      lastDocRef.current = snap.docs[snap.docs.length - 1] || null;
       cursorReadyRef.current = true;
 
       setHasMore(snap.docs.length === PAGE_SIZE);
@@ -448,7 +562,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
       const page1 = snap.docs.map((d) => normalizeListing({ id: d.id, ...d.data() })).filter(Boolean);
       if (!aliveRef.current) return;
 
-      // merge without duplicates
       setItems((prev) => {
         const existing = new Set(prev.map((x) => x.id));
         return [...prev, ...page1.filter((x) => !existing.has(x.id))];
@@ -461,8 +574,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
   }
 
   async function fetchMore() {
-    if (!hasMore || loadingMore) return;
-    if (!single) return;
+    if (!hasMore || loadingMore || !single) return;
 
     setLoadingMore(true);
     setErr('');
@@ -486,7 +598,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
         .limit(PAGE_SIZE);
 
       const snap = await ref.get();
-
       const data = snap.docs.map((d) => normalizeListing({ id: d.id, ...d.data() })).filter(Boolean);
 
       if (!aliveRef.current) return;
@@ -496,9 +607,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
         return [...prev, ...data.filter((x) => !existing.has(x.id))];
       });
 
-      const newLast = snap.docs[snap.docs.length - 1] || null;
-      lastDocRef.current = newLast;
-
+      lastDocRef.current = snap.docs[snap.docs.length - 1] || null;
       setHasMore(snap.docs.length === PAGE_SIZE);
       setLoadingMore(false);
     } catch (e) {
@@ -553,8 +662,10 @@ export default function CategoryListings({ category, initialListings = [] }) {
     const catKey = single || '';
     return items
       .map((l) => {
-        const tax = catKey ? pickTaxonomy(l, catKey) : { root: catKey };
-        return { ...l, _tax: tax };
+        const nl = normalizeListing(l);
+        if (!nl) return null;
+        const tax = catKey ? pickTaxonomy(nl, catKey) : { root: catKey };
+        return { ...nl, _tax: tax };
       })
       .filter(Boolean);
   }, [items, single]);
@@ -581,7 +692,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
       jobTypes: new Map(),
       serviceTypes: new Map(),
     };
-    if (!catKey) return out;
 
     const inc = (m, k) => {
       const kk = safeStr(k);
@@ -623,6 +733,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
       }
     }
 
+    // propertyTypes: يعتمد على dealType المختار
     if (catKey === 'realestate') {
       const dealFilter = safeStr(dealType);
       for (const l of itemsWithTax) {
@@ -640,24 +751,34 @@ export default function CategoryListings({ category, initialListings = [] }) {
     const query = safeStr(q).toLowerCase();
     let arr = itemsWithTax;
 
+    // cars
     if (catKey === 'cars') {
       const selMake = safeStr(carMake);
       const selModel = safeStr(carModel);
 
       if (selMake) arr = arr.filter((l) => safeStr(l?._tax?.carMake || 'other') === selMake);
-      if (selMake && selModel) {
-        arr = arr.filter((l) => safeStr(l?._tax?.carModel || 'other') === selModel);
-      }
+      if (selMake && selModel) arr = arr.filter((l) => safeStr(l?._tax?.carModel || 'other') === selModel);
     }
+
+    // phones
     if (catKey === 'phones') {
       const sel = safeStr(phoneBrand);
       if (sel) arr = arr.filter((l) => safeStr(l?._tax?.phoneBrand || 'other') === sel);
     }
+
+    // realestate
+    if (catKey === 'realestate') {
+      const selDeal = safeStr(dealType);
+      const selProp = safeStr(propertyType);
+      if (selDeal) arr = arr.filter((l) => safeStr(l?._tax?.dealType) === selDeal);
+      if (selProp) arr = arr.filter((l) => safeStr(l?._tax?.propertyType || 'other') === selProp);
+    }
+
+    // single facet categories
     if (catKey === 'electronics') {
       const sel = safeStr(electronicsType);
       if (sel) arr = arr.filter((l) => safeStr(l?._tax?.electronicsType || 'other') === sel);
     }
-
     if (catKey === 'motorcycles') {
       const sel = safeStr(motorcycleBrand);
       if (sel) arr = arr.filter((l) => safeStr(l?._tax?.motorcycleBrand || 'other') === sel);
@@ -703,13 +824,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
       if (sel) arr = arr.filter((l) => safeStr(l?._tax?.serviceType || 'other') === sel);
     }
 
-    if (catKey === 'realestate') {
-      const selDeal = safeStr(dealType);
-      const selProp = safeStr(propertyType);
-      if (selDeal) arr = arr.filter((l) => safeStr(l?._tax?.dealType) === selDeal);
-      if (selProp) arr = arr.filter((l) => safeStr(l?._tax?.propertyType || 'other') === selProp);
-    }
-
     if (!query) return arr;
 
     return arr.filter((l) => {
@@ -718,200 +832,106 @@ export default function CategoryListings({ category, initialListings = [] }) {
       const desc = safeStr(l.description).toLowerCase();
       return title.includes(query) || city.includes(query) || desc.includes(query);
     });
-  }, [itemsWithTax, single, q, carMake, carModel, phoneBrand, dealType, propertyType, electronicsType, motorcycleBrand, heavyEquipmentType, solarType, networkType, maintenanceType, furnitureType, homeToolsType, clothesType, animalType, jobType, serviceType]);
+  }, [
+    itemsWithTax,
+    single,
+    q,
+    carMake,
+    carModel,
+    phoneBrand,
+    dealType,
+    propertyType,
+    electronicsType,
+    motorcycleBrand,
+    heavyEquipmentType,
+    solarType,
+    networkType,
+    maintenanceType,
+    furnitureType,
+    homeToolsType,
+    clothesType,
+    animalType,
+    jobType,
+    serviceType,
+  ]);
 
-  const showCarsTax = single === 'cars' && taxonomyCounts.carMakes.size > 0;
-  const showPhonesTax = single === 'phones' && taxonomyCounts.phoneBrands.size > 0;
-  const showRealTax = single === 'realestate' && taxonomyCounts.dealTypes.size > 0;
-
-  const showElectronicsTax = single === 'electronics' && taxonomyCounts.electronicsTypes.size > 0;
-  const showMotorcyclesTax = single === 'motorcycles' && taxonomyCounts.motorcycleBrands.size > 0;
-  const showHeavyTax = single === 'heavy_equipment' && taxonomyCounts.heavyEquipmentTypes.size > 0;
-  const showSolarTax = single === 'solar' && taxonomyCounts.solarTypes.size > 0;
-  const showNetworksTax = single === 'networks' && taxonomyCounts.networkTypes.size > 0;
-  const showMaintenanceTax = single === 'maintenance' && taxonomyCounts.maintenanceTypes.size > 0;
-  const showFurnitureTax = single === 'furniture' && taxonomyCounts.furnitureTypes.size > 0;
-  const showHomeToolsTax = single === 'home_tools' && taxonomyCounts.homeToolsTypes.size > 0;
-  const showClothesTax = single === 'clothes' && taxonomyCounts.clothesTypes.size > 0;
-  const showAnimalsTax = single === 'animals' && taxonomyCounts.animalTypes.size > 0;
-  const showJobsTax = single === 'jobs' && taxonomyCounts.jobTypes.size > 0;
-  const showServicesTax = single === 'services' && taxonomyCounts.serviceTypes.size > 0;
-
+  // ====== options for chips ======
   const carMakeOptions = useMemo(() => {
-    // ✅ افتراض أن CAR_MAKES_PRESET مستوردة أو معرفة
-    const preset = CAR_MAKES_PRESET || []; 
-    const merged = presetMergeWithCounts(preset, taxonomyCounts.carMakes);
-    // نعرض حتى 0 عشان تبقى واجهة فخمة وثابتة
-    return merged.slice(0, 40);
+    // use CAR_MAKES as canonical preset order (and include any extras found in data)
+    return presetMergeWithCounts(CAR_MAKES, taxonomyCounts.carMakes).slice(0, 40);
   }, [taxonomyCounts.carMakes]);
 
   const carModelOptions = useMemo(() => {
     const mk = safeStr(carMake);
     if (!mk) return [];
-    const preset = CAR_MODELS_BY_MAKE ? (CAR_MODELS_BY_MAKE[mk] || []) : [];
-    const merged = presetMergeWithCounts(preset, taxonomyCounts.carModels);
-    return merged.slice(0, 80);
+    const preset = CAR_MODELS_BY_MAKE[mk] || [];
+    return presetMergeWithCounts(preset, taxonomyCounts.carModels).slice(0, 80);
   }, [carMake, taxonomyCounts.carModels]);
 
   const phoneBrandOptions = useMemo(() => {
-    const merged = presetMergeWithCounts(PHONE_BRANDS_PRESET, taxonomyCounts.phoneBrands);
-    return merged.slice(0, 40);
+    return presetMergeWithCounts(PHONE_BRANDS, taxonomyCounts.phoneBrands).slice(0, 40);
   }, [taxonomyCounts.phoneBrands]);
 
-  // ✅ تم إصلاح الإغلاق الناقص هنا (كان مفقود ] )
-  const electronicsTypeOptions = useMemo(() => {
-    const preset = (Array.isArray(ELECTRONICS_TYPES) ? ELECTRONICS_TYPES : []).map((x) => ({
-      key: x.key,
-      label: x.label,
-      color: x.color,
-    }));
-    const merged = presetMergeWithCounts(preset, taxonomyCounts.electronicsTypes);
-    return merged.slice(0, 60);
-  }, [taxonomyCounts.electronicsTypes]);
-
-  const motorcycleBrandOptions = useMemo(() => {
-    const preset = (Array.isArray(MOTORCYCLE_BRANDS) ? MOTORCYCLE_BRANDS : []).map((x) => ({
-      key: x.key,
-      label: x.label,
-      color: x.color,
-    }));
-    const merged = presetMergeWithCounts(preset, taxonomyCounts.motorcycleBrands);
-    return merged.slice(0, 60);
-  }, [taxonomyCounts.motorcycleBrands]);
-
-  const heavyEquipmentTypeOptions = useMemo(() => {
-    const preset = (Array.isArray(HEAVY_EQUIPMENT_TYPES) ? HEAVY_EQUIPMENT_TYPES : []).map((x) => ({
-      key: x.key,
-      label: x.label,
-      color: x.color,
-    }));
-    const merged = presetMergeWithCounts(preset, taxonomyCounts.heavyEquipmentTypes);
-    return merged.slice(0, 60);
-  }, [taxonomyCounts.heavyEquipmentTypes]);
-
-  const solarTypeOptions = useMemo(() => {
-    const preset = (Array.isArray(SOLAR_TYPES) ? SOLAR_TYPES : []).map((x) => ({
-      key: x.key,
-      label: x.label,
-      color: x.color,
-    }));
-    const merged = presetMergeWithCounts(preset, taxonomyCounts.solarTypes);
-    return merged.slice(0, 60);
-  }, [taxonomyCounts.solarTypes]);
-
-  const networkTypeOptions = useMemo(() => {
-    const preset = (Array.isArray(NETWORK_TYPES) ? NETWORK_TYPES : []).map((x) => ({
-      key: x.key,
-      label: x.label,
-      color: x.color,
-    }));
-    const merged = presetMergeWithCounts(preset, taxonomyCounts.networkTypes);
-    return merged.slice(0, 60);
-  }, [taxonomyCounts.networkTypes]);
-
-  const maintenanceTypeOptions = useMemo(() => {
-    const preset = (Array.isArray(MAINTENANCE_TYPES) ? MAINTENANCE_TYPES : []).map((x) => ({
-      key: x.key,
-      label: x.label,
-      color: x.color,
-    }));
-    const merged = presetMergeWithCounts(preset, taxonomyCounts.maintenanceTypes);
-    return merged.slice(0, 60);
-  }, [taxonomyCounts.maintenanceTypes]);
-
-  const furnitureTypeOptions = useMemo(() => {
-    const preset = (Array.isArray(FURNITURE_TYPES) ? FURNITURE_TYPES : []).map((x) => ({
-      key: x.key,
-      label: x.label,
-      color: x.color,
-    }));
-    const merged = presetMergeWithCounts(preset, taxonomyCounts.furnitureTypes);
-    return merged.slice(0, 60);
-  }, [taxonomyCounts.furnitureTypes]);
-
-  const homeToolsTypeOptions = useMemo(() => {
-    const preset = (Array.isArray(HOME_TOOLS_TYPES) ? HOME_TOOLS_TYPES : []).map((x) => ({
-      key: x.key,
-      label: x.label,
-      color: x.color,
-    }));
-    const merged = presetMergeWithCounts(preset, taxonomyCounts.homeToolsTypes);
-    return merged.slice(0, 60);
-  }, [taxonomyCounts.homeToolsTypes]);
-
-  const clothesTypeOptions = useMemo(() => {
-    const preset = (Array.isArray(CLOTHES_TYPES) ? CLOTHES_TYPES : []).map((x) => ({
-      key: x.key,
-      label: x.label,
-      color: x.color,
-    }));
-    const merged = presetMergeWithCounts(preset, taxonomyCounts.clothesTypes);
-    return merged.slice(0, 60);
-  }, [taxonomyCounts.clothesTypes]);
-
-  const animalTypeOptions = useMemo(() => {
-    const preset = (Array.isArray(ANIMAL_TYPES) ? ANIMAL_TYPES : []).map((x) => ({
-      key: x.key,
-      label: x.label,
-      color: x.color,
-    }));
-    const merged = presetMergeWithCounts(preset, taxonomyCounts.animalTypes);
-    return merged.slice(0, 60);
-  }, [taxonomyCounts.animalTypes]);
-
-  const jobTypeOptions = useMemo(() => {
-    const preset = (Array.isArray(JOB_TYPES) ? JOB_TYPES : []).map((x) => ({
-      key: x.key,
-      label: x.label,
-      color: x.color,
-    }));
-    const merged = presetMergeWithCounts(preset, taxonomyCounts.jobTypes);
-    return merged.slice(0, 60);
-  }, [taxonomyCounts.jobTypes]);
-
-  const serviceTypeOptions = useMemo(() => {
-    const preset = (Array.isArray(SERVICE_TYPES) ? SERVICE_TYPES : []).map((x) => ({
-      key: x.key,
-      label: x.label,
-      color: x.color,
-    }));
-    const merged = presetMergeWithCounts(preset, taxonomyCounts.serviceTypes);
-    return merged.slice(0, 60);
-  }, [taxonomyCounts.serviceTypes]);
-
   const dealTypeOptions = useMemo(() => {
-    return Array.from(taxonomyCounts.dealTypes.entries())
-      .map(([k, c]) => [safeStr(k), c])
-      .filter(([k]) => k === 'sale' || k === 'rent')
-      .sort((a, b) => (b[1] || 0) - (a[1] || 0));
+    // keep stable order of DEAL_TYPES
+    const merged = presetMergeWithCounts(DEAL_TYPES, taxonomyCounts.dealTypes);
+    // only sale/rent
+    return merged.filter(([k]) => k === 'sale' || k === 'rent');
   }, [taxonomyCounts.dealTypes]);
 
   const propertyTypeOptions = useMemo(() => {
-    const merged = presetMergeWithCounts(PROPERTY_TYPES_PRESET, taxonomyCounts.propertyTypes);
-    return merged.slice(0, 60);
+    return presetMergeWithCounts(PROPERTY_TYPES, taxonomyCounts.propertyTypes).slice(0, 60);
   }, [taxonomyCounts.propertyTypes]);
 
+  const electronicsTypeOptions = useMemo(() => {
+    return presetMergeWithCounts(ELECTRONICS_TYPES, taxonomyCounts.electronicsTypes).slice(0, 60);
+  }, [taxonomyCounts.electronicsTypes]);
 
-  // ====== UI Chips (ستايل احترافي مثل الخريطة) ======
-  const CAT_COLOR = useMemo(() => {
-    if (single === 'cars') return '#2563eb';
-    if (single === 'phones') return '#7c3aed';
-    if (single === 'realestate') return '#16a34a';
-    if (single === 'electronics') return '#0ea5e9';
-    if (single === 'motorcycles') return '#f97316';
-    if (single === 'heavy_equipment') return '#a16207';
-    if (single === 'solar') return '#f59e0b';
-    if (single === 'networks') return '#0ea5e9';
-    if (single === 'maintenance') return '#ef4444';
-    if (single === 'furniture') return '#8b5cf6';
-    if (single === 'home_tools') return '#14b8a6';
-    if (single === 'clothes') return '#db2777';
-    if (single === 'animals') return '#16a34a';
-    if (single === 'jobs') return '#64748b';
-    if (single === 'services') return '#334155';
-    return '#475569';
-  }, [single]);
+  const motorcycleBrandOptions = useMemo(() => {
+    return presetMergeWithCounts(MOTORCYCLE_BRANDS, taxonomyCounts.motorcycleBrands).slice(0, 60);
+  }, [taxonomyCounts.motorcycleBrands]);
 
+  const heavyEquipmentTypeOptions = useMemo(() => {
+    return presetMergeWithCounts(HEAVY_EQUIPMENT_TYPES, taxonomyCounts.heavyEquipmentTypes).slice(0, 60);
+  }, [taxonomyCounts.heavyEquipmentTypes]);
+
+  const solarTypeOptions = useMemo(() => {
+    return presetMergeWithCounts(SOLAR_TYPES, taxonomyCounts.solarTypes).slice(0, 60);
+  }, [taxonomyCounts.solarTypes]);
+
+  const networkTypeOptions = useMemo(() => {
+    return presetMergeWithCounts(NETWORK_TYPES, taxonomyCounts.networkTypes).slice(0, 60);
+  }, [taxonomyCounts.networkTypes]);
+
+  const maintenanceTypeOptions = useMemo(() => {
+    return presetMergeWithCounts(MAINTENANCE_TYPES, taxonomyCounts.maintenanceTypes).slice(0, 60);
+  }, [taxonomyCounts.maintenanceTypes]);
+
+  const furnitureTypeOptions = useMemo(() => {
+    return presetMergeWithCounts(FURNITURE_TYPES, taxonomyCounts.furnitureTypes).slice(0, 60);
+  }, [taxonomyCounts.furnitureTypes]);
+
+  const homeToolsTypeOptions = useMemo(() => {
+    return presetMergeWithCounts(HOME_TOOLS_TYPES, taxonomyCounts.homeToolsTypes).slice(0, 60);
+  }, [taxonomyCounts.homeToolsTypes]);
+
+  const clothesTypeOptions = useMemo(() => {
+    return presetMergeWithCounts(CLOTHES_TYPES, taxonomyCounts.clothesTypes).slice(0, 60);
+  }, [taxonomyCounts.clothesTypes]);
+
+  const animalTypeOptions = useMemo(() => {
+    return presetMergeWithCounts(ANIMAL_TYPES, taxonomyCounts.animalTypes).slice(0, 60);
+  }, [taxonomyCounts.animalTypes]);
+
+  const jobTypeOptions = useMemo(() => {
+    return presetMergeWithCounts(JOB_TYPES, taxonomyCounts.jobTypes).slice(0, 60);
+  }, [taxonomyCounts.jobTypes]);
+
+  const serviceTypeOptions = useMemo(() => {
+    return presetMergeWithCounts(SERVICE_TYPES, taxonomyCounts.serviceTypes).slice(0, 60);
+  }, [taxonomyCounts.serviceTypes]);
+
+  // ====== UI Chips ======
   const Chip = ({ active, disabled, onClick, icon, text, count, dotColor, title }) => (
     <button
       type="button"
@@ -922,31 +942,61 @@ export default function CategoryListings({ category, initialListings = [] }) {
       title={title || text}
     >
       <span className="sooq-chipDot" style={{ background: dotColor || CAT_COLOR }} />
-      {icon ? (
-        <span className="sooq-chipIcon" aria-hidden="true">
-          {icon}
-        </span>
-      ) : null}
+      {icon ? <span className="sooq-chipIcon" aria-hidden="true">{icon}</span> : null}
       <span className="sooq-chipText">{text}</span>
       {typeof count === 'number' ? <span className="sooq-chipCount">{count}</span> : null}
     </button>
   );
 
+  const renderSingleFacet = ({
+    title,
+    icon,
+    selected,
+    setSelected,
+    options,
+    labelOf,
+    prefix,
+  }) => (
+    <div className="sooq-taxSection" aria-label={title}>
+      <div className="sooq-taxTitle">{title}</div>
+      <div className="sooq-chips" role="tablist" aria-label={title}>
+        <Chip
+          active={!selected}
+          onClick={() => setSelected('')}
+          text="الكل"
+          count={itemsWithTax.length}
+          dotColor={CAT_COLOR}
+        />
+        {options.map(([k, c]) => {
+          const label = labelOf(k) || k;
+          return (
+            <Chip
+              key={k}
+              active={selected === k}
+              onClick={() => setSelected(k)}
+              text={label}
+              count={c}
+              icon={icon}
+              dotColor={colorForKey(`${prefix}:${k}`)}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
 
   const TaxonomyInner = () => {
-    if (!single) return null;
+    if (!single || itemsWithTax.length === 0) return null;
 
-    // سيارات
-    if (showCarsTax) {
+    // cars (make -> model)
+    if (single === 'cars') {
       const mk = safeStr(carMake);
       const md = safeStr(carModel);
       const mkLabel = mk ? carMakeLabel(mk) : '';
-      const modelsTotal = Array.from(taxonomyCounts.carModels.values()).reduce((a, b) => a + Number(b || 0), 0);
 
-      // 1) اختيار الماركة
       if (!mk) {
         return (
-          <div className="sooq-taxSection" aria-label="فلترة ماركة السيارة">
+          <div className="sooq-taxSection" aria-label="فلترة سيارات">
             <div className="sooq-taxTitle">🚗 اختر ماركة السيارة</div>
             <div className="sooq-chips" role="tablist">
               <Chip
@@ -967,10 +1017,9 @@ export default function CategoryListings({ category, initialListings = [] }) {
                     setCarMake(k);
                     setCarModel('');
                   }}
-                  text={carMakeLabel(k)}
+                  text={carMakeLabel(k) || k}
                   count={c}
-                  dotColor={colorForKey(k)}
-                  title={`سيارات ${carMakeLabel(k)}`}
+                  dotColor={colorForKey(`make:${k}`)}
                 />
               ))}
             </div>
@@ -978,9 +1027,10 @@ export default function CategoryListings({ category, initialListings = [] }) {
         );
       }
 
-      // 2) اختيار الموديل داخل الماركة
+      const modelsTotal = Array.from(taxonomyCounts.carModels.values()).reduce((a, b) => a + Number(b || 0), 0);
+
       return (
-        <div className="sooq-taxSection" aria-label="فلترة موديل السيارة">
+        <div className="sooq-taxSection" aria-label="فلترة موديلات السيارات">
           <div className="sooq-taxTitle">🚗 {mkLabel} — اختر الموديل</div>
           <div className="sooq-chips" role="tablist">
             <Chip
@@ -991,9 +1041,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
               }}
               text="رجوع"
               icon="⬅️"
-              count={undefined}
               dotColor={CAT_COLOR}
-              title="رجوع لقائمة الماركات"
             />
 
             <Chip
@@ -1001,401 +1049,43 @@ export default function CategoryListings({ category, initialListings = [] }) {
               onClick={() => setCarModel('')}
               text={`كل موديلات ${mkLabel}`}
               count={modelsTotal || undefined}
-              dotColor={colorForKey(mk)}
-              title={`عرض كل موديلات ${mkLabel}`}
+              dotColor={colorForKey(`make:${mk}`)}
             />
 
-            {carModelOptions
-              .filter(([k]) => safeStr(k) && safeStr(k) !== 'other')
-              .map(([k, c]) => (
-                <Chip
-                  key={k}
-                  active={md === k}
-                  onClick={() => setCarModel(k)}
-                  text={carModelLabelLocal(mk, k)}
-                  count={c}
-                  dotColor={colorForKey(`${mk}:${k}`)}
-                  title={`${mkLabel} ${carModelLabelLocal(mk, k)}`}
-                />
-              ))}
-
-            {/* أخرى */}
-            {carModelOptions.some(([k]) => safeStr(k) === 'other') ? (
+            {carModelOptions.map(([k, c]) => (
               <Chip
-                active={md === 'other'}
-                onClick={() => setCarModel('other')}
-                text="أخرى"
-                count={taxonomyCounts.carModels?.get('other') || 0}
-                dotColor={colorForKey(`${mk}:other`)}
-                title="موديلات أخرى"
+                key={k}
+                active={md === k}
+                onClick={() => setCarModel(k)}
+                text={k === 'other' ? 'أخرى' : (carModelLabel(mk, k) || k)}
+                count={c}
+                dotColor={colorForKey(`model:${mk}:${k}`)}
               />
-            ) : null}
+            ))}
           </div>
         </div>
       );
     }
 
-    // جوالات
-    if (showPhonesTax) {
-      return (
-        <div className="sooq-taxSection" aria-label="فلترة ماركة الجوال">
-          <div className="sooq-taxTitle">📱 اختر الماركة</div>
-          <div className="sooq-chips" role="tablist" aria-label="ماركات الجوالات">
-            <Chip active={!phoneBrand} onClick={() => setPhoneBrand('')} text="الكل" count={itemsWithTax.length} />
-            {phoneBrandOptions.map(([k, c]) => {
-              const label = k === 'other' ? 'أخرى' : (phoneBrandLabel(k) || k);
-              return (
-                <Chip
-                  key={k}
-                  active={phoneBrand === k}
-                  onClick={() => setPhoneBrand(k)}
-                  text={label}
-                  count={c}
-                  icon="📱"
-                  dotColor={colorForKey(k)}
-                />
-              );
-            })}
-          </div>
-        </div>
-      );
+    // phones
+    if (single === 'phones') {
+      return renderSingleFacet({
+        title: '📱 اختر ماركة الجوال',
+        icon: '📱',
+        selected: phoneBrand,
+        setSelected: setPhoneBrand,
+        options: phoneBrandOptions,
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (phoneBrandLabel(k) || k)),
+        prefix: 'phone',
+      });
     }
 
-
-    // إلكترونيات
-    if (showElectronicsTax) {
-      return (
-        <div className="sooq-taxSection" aria-label="فلترة الإلكترونيات">
-          <div className="sooq-taxTitle">💻 اختر فئة الإلكترونيات</div>
-          <div className="sooq-chips" role="tablist" aria-label="فئات الإلكترونيات">
-            <Chip
-              active={!electronicsType}
-              onClick={() => setElectronicsType('')}
-              text="الكل"
-              count={itemsWithTax.length}
-              dotColor={CAT_COLOR}
-            />
-            {electronicsTypeOptions.map(([k, c]) => {
-              const label = k === 'other' ? 'أخرى' : (electronicsTypeLabel(k) || k);
-              return (
-                <Chip
-                  key={k}
-                  active={electronicsType === k}
-                  onClick={() => setElectronicsType(k)}
-                  text={label}
-                  count={c}
-                  icon="💻"
-                  dotColor={colorForKey(`electronics:${k}`)}
-                />
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-
-    
-    // دراجات نارية
-    if (showMotorcyclesTax) {
-      return (
-        <div className="sooq-taxSection" aria-label="فلترة الدراجات النارية">
-          <div className="sooq-taxTitle">🏍️ اختر ماركة الدراجة</div>
-          <div className="sooq-chips" role="tablist" aria-label="ماركات الدراجات">
-            <Chip active={!motorcycleBrand} onClick={() => setMotorcycleBrand('')} text="الكل" count={itemsWithTax.length} dotColor={CAT_COLOR} />
-            {motorcycleBrandOptions.map(([k, c]) => {
-              const label = k === 'other' ? 'أخرى' : (motorcycleBrandLabel(k) || k);
-              return (
-                <Chip
-                  key={k}
-                  active={motorcycleBrand === k}
-                  onClick={() => setMotorcycleBrand(k)}
-                  text={label}
-                  count={c}
-                  icon="🏍️"
-                  dotColor={colorForKey(`moto:${k}`)}
-                />
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-
-    // معدات ثقيلة
-    if (showHeavyTax) {
-      return (
-        <div className="sooq-taxSection" aria-label="فلترة المعدات الثقيلة">
-          <div className="sooq-taxTitle">🏗️ اختر نوع المعدة</div>
-          <div className="sooq-chips" role="tablist" aria-label="أنواع المعدات الثقيلة">
-            <Chip active={!heavyEquipmentType} onClick={() => setHeavyEquipmentType('')} text="الكل" count={itemsWithTax.length} dotColor={CAT_COLOR} />
-            {heavyEquipmentTypeOptions.map(([k, c]) => {
-              const label = k === 'other' ? 'أخرى' : (heavyEquipmentTypeLabel(k) || k);
-              return (
-                <Chip
-                  key={k}
-                  active={heavyEquipmentType === k}
-                  onClick={() => setHeavyEquipmentType(k)}
-                  text={label}
-                  count={c}
-                  icon="🏗️"
-                  dotColor={colorForKey(`heavy:${k}`)}
-                />
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-
-    // طاقة شمسية
-    if (showSolarTax) {
-      return (
-        <div className="sooq-taxSection" aria-label="فلترة الطاقة الشمسية">
-          <div className="sooq-taxTitle">☀️ اختر فئة الطاقة الشمسية</div>
-          <div className="sooq-chips" role="tablist" aria-label="فئات الطاقة الشمسية">
-            <Chip active={!solarType} onClick={() => setSolarType('')} text="الكل" count={itemsWithTax.length} dotColor={CAT_COLOR} />
-            {solarTypeOptions.map(([k, c]) => {
-              const label = k === 'other' ? 'أخرى' : (solarTypeLabel(k) || k);
-              return (
-                <Chip
-                  key={k}
-                  active={solarType === k}
-                  onClick={() => setSolarType(k)}
-                  text={label}
-                  count={c}
-                  icon="☀️"
-                  dotColor={colorForKey(`solar:${k}`)}
-                />
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-
-    // نت وشبكات
-    if (showNetworksTax) {
-      return (
-        <div className="sooq-taxSection" aria-label="فلترة الشبكات">
-          <div className="sooq-taxTitle">📡 اختر فئة الشبكات</div>
-          <div className="sooq-chips" role="tablist" aria-label="فئات الشبكات">
-            <Chip active={!networkType} onClick={() => setNetworkType('')} text="الكل" count={itemsWithTax.length} dotColor={CAT_COLOR} />
-            {networkTypeOptions.map(([k, c]) => {
-              const label = k === 'other' ? 'أخرى' : (networkTypeLabel(k) || k);
-              return (
-                <Chip
-                  key={k}
-                  active={networkType === k}
-                  onClick={() => setNetworkType(k)}
-                  text={label}
-                  count={c}
-                  icon="📡"
-                  dotColor={colorForKey(`net:${k}`)}
-                />
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-
-    // صيانة
-    if (showMaintenanceTax) {
-      return (
-        <div className="sooq-taxSection" aria-label="فلترة الصيانة">
-          <div className="sooq-taxTitle">🛠️ اختر نوع الصيانة</div>
-          <div className="sooq-chips" role="tablist" aria-label="أنواع الصيانة">
-            <Chip active={!maintenanceType} onClick={() => setMaintenanceType('')} text="الكل" count={itemsWithTax.length} dotColor={CAT_COLOR} />
-            {maintenanceTypeOptions.map(([k, c]) => {
-              const label = k === 'other' ? 'أخرى' : (maintenanceTypeLabel(k) || k);
-              return (
-                <Chip
-                  key={k}
-                  active={maintenanceType === k}
-                  onClick={() => setMaintenanceType(k)}
-                  text={label}
-                  count={c}
-                  icon="🛠️"
-                  dotColor={colorForKey(`maint:${k}`)}
-                />
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-
-    // أثاث
-    if (showFurnitureTax) {
-      return (
-        <div className="sooq-taxSection" aria-label="فلترة الأثاث">
-          <div className="sooq-taxTitle">🛋️ اختر نوع الأثاث</div>
-          <div className="sooq-chips" role="tablist" aria-label="أنواع الأثاث">
-            <Chip active={!furnitureType} onClick={() => setFurnitureType('')} text="الكل" count={itemsWithTax.length} dotColor={CAT_COLOR} />
-            {furnitureTypeOptions.map(([k, c]) => {
-              const label = k === 'other' ? 'أخرى' : (furnitureTypeLabel(k) || k);
-              return (
-                <Chip
-                  key={k}
-                  active={furnitureType === k}
-                  onClick={() => setFurnitureType(k)}
-                  text={label}
-                  count={c}
-                  icon="🛋️"
-                  dotColor={colorForKey(`furn:${k}`)}
-                />
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-
-    // أدوات منزلية
-    if (showHomeToolsTax) {
-      return (
-        <div className="sooq-taxSection" aria-label="فلترة الأدوات المنزلية">
-          <div className="sooq-taxTitle">🏠 اختر نوع الأدوات المنزلية</div>
-          <div className="sooq-chips" role="tablist" aria-label="أنواع الأدوات المنزلية">
-            <Chip active={!homeToolsType} onClick={() => setHomeToolsType('')} text="الكل" count={itemsWithTax.length} dotColor={CAT_COLOR} />
-            {homeToolsTypeOptions.map(([k, c]) => {
-              const label = k === 'other' ? 'أخرى' : (homeToolsTypeLabel(k) || k);
-              return (
-                <Chip
-                  key={k}
-                  active={homeToolsType === k}
-                  onClick={() => setHomeToolsType(k)}
-                  text={label}
-                  count={c}
-                  icon="🏠"
-                  dotColor={colorForKey(`home:${k}`)}
-                />
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-
-    // ملابس
-    if (showClothesTax) {
-      return (
-        <div className="sooq-taxSection" aria-label="فلترة الملابس">
-          <div className="sooq-taxTitle">👕 اختر نوع الملابس</div>
-          <div className="sooq-chips" role="tablist" aria-label="أنواع الملابس">
-            <Chip active={!clothesType} onClick={() => setClothesType('')} text="الكل" count={itemsWithTax.length} dotColor={CAT_COLOR} />
-            {clothesTypeOptions.map(([k, c]) => {
-              const label = k === 'other' ? 'أخرى' : (clothesTypeLabel(k) || k);
-              return (
-                <Chip
-                  key={k}
-                  active={clothesType === k}
-                  onClick={() => setClothesType(k)}
-                  text={label}
-                  count={c}
-                  icon="👕"
-                  dotColor={colorForKey(`clothes:${k}`)}
-                />
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-
-    // حيوانات وطيور
-    if (showAnimalsTax) {
-      return (
-        <div className="sooq-taxSection" aria-label="فلترة الحيوانات">
-          <div className="sooq-taxTitle">🐑 اختر نوع الحيوانات</div>
-          <div className="sooq-chips" role="tablist" aria-label="أنواع الحيوانات">
-            <Chip active={!animalType} onClick={() => setAnimalType('')} text="الكل" count={itemsWithTax.length} dotColor={CAT_COLOR} />
-            {animalTypeOptions.map(([k, c]) => {
-              const label = k === 'other' ? 'أخرى' : (animalTypeLabel(k) || k);
-              return (
-                <Chip
-                  key={k}
-                  active={animalType === k}
-                  onClick={() => setAnimalType(k)}
-                  text={label}
-                  count={c}
-                  icon="🐑"
-                  dotColor={colorForKey(`animal:${k}`)}
-                />
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-
-    // وظائف
-    if (showJobsTax) {
-      return (
-        <div className="sooq-taxSection" aria-label="فلترة الوظائف">
-          <div className="sooq-taxTitle">💼 اختر نوع الوظيفة</div>
-          <div className="sooq-chips" role="tablist" aria-label="أنواع الوظائف">
-            <Chip active={!jobType} onClick={() => setJobType('')} text="الكل" count={itemsWithTax.length} dotColor={CAT_COLOR} />
-            {jobTypeOptions.map(([k, c]) => {
-              const label = k === 'other' ? 'أخرى' : (jobTypeLabel(k) || k);
-              return (
-                <Chip
-                  key={k}
-                  active={jobType === k}
-                  onClick={() => setJobType(k)}
-                  text={label}
-                  count={c}
-                  icon="💼"
-                  dotColor={colorForKey(`job:${k}`)}
-                />
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-
-    // خدمات
-    if (showServicesTax) {
-      return (
-        <div className="sooq-taxSection" aria-label="فلترة الخدمات">
-          <div className="sooq-taxTitle">🧰 اختر نوع الخدمة</div>
-          <div className="sooq-chips" role="tablist" aria-label="أنواع الخدمات">
-            <Chip active={!serviceType} onClick={() => setServiceType('')} text="الكل" count={itemsWithTax.length} dotColor={CAT_COLOR} />
-            {serviceTypeOptions.map(([k, c]) => {
-              const label = k === 'other' ? 'أخرى' : (serviceTypeLabel(k) || k);
-              return (
-                <Chip
-                  key={k}
-                  active={serviceType === k}
-                  onClick={() => setServiceType(k)}
-                  text={label}
-                  count={c}
-                  icon="🧰"
-                  dotColor={colorForKey(`service:${k}`)}
-                />
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-
-
-// عقارات
-    if (showRealTax) {
+    // realestate (deal -> property)
+    if (single === 'realestate') {
       const hasDeal = !!safeStr(dealType);
-
-      // ✅ إذا اخترت (بيع) نخفي (إيجار) والعكس
       const visibleDealOptions = hasDeal ? dealTypeOptions.filter(([k]) => k === dealType) : dealTypeOptions;
 
       const dealDot = (k) => (k === 'sale' ? '#0ea5e9' : k === 'rent' ? '#f59e0b' : CAT_COLOR);
-
-      const propertyTypeDot = (k) => {
-        const kk = String(k || '').trim();
-        const found = PROPERTY_TYPES_PRESET.find((x) => String(x?.key || '').trim() === kk);
-        return found?.color || colorForKey(`property:${kk}`) || CAT_COLOR;
-      };
 
       return (
         <div className="sooq-taxSection" aria-label="فلترة العقارات">
@@ -1411,46 +1101,48 @@ export default function CategoryListings({ category, initialListings = [] }) {
               }}
               text="الكل"
               count={itemsWithTax.length}
+              dotColor={CAT_COLOR}
             />
 
-            {visibleDealOptions.map(([k, c]) => {
-              const label = dealTypeLabel(k) || (k === 'sale' ? 'بيع' : k === 'rent' ? 'إيجار' : k);
-              return (
-                <Chip
-                  key={k}
-                  active={dealType === k}
-                  onClick={() => {
-                    setDealType(k);
-                    setPropertyType('');
-                  }}
-                  text={label}
-                  count={c}
-                  icon="🏷️"
-                  dotColor={dealDot(k)}
-                />
-              );
-            })}
+            {visibleDealOptions.map(([k, c]) => (
+              <Chip
+                key={k}
+                active={dealType === k}
+                onClick={() => {
+                  setDealType(k);
+                  setPropertyType('');
+                }}
+                text={dealTypeLabel(k) || k}
+                count={c}
+                icon="🏷️"
+                dotColor={dealDot(k)}
+              />
+            ))}
           </div>
 
-          {hasDeal && propertyTypeOptions.length > 0 ? (
+          {hasDeal ? (
             <>
-              <div className="sooq-taxSub" style={{ marginTop: 10 }}>نوع العقار</div>
+              <div className="sooq-taxSub" style={{ marginTop: 10 }}>
+                نوع العقار
+              </div>
               <div className="sooq-chips" role="tablist" aria-label="نوع العقار">
-                <Chip active={!propertyType} onClick={() => setPropertyType('')} text="كل الأنواع" />
-                {propertyTypeOptions.map(([k, c]) => {
-                  const label = k === 'other' ? 'أخرى' : (propertyTypeLabel(k) || k);
-                  return (
-                    <Chip
-                      key={k}
-                      active={propertyType === k}
-                      onClick={() => setPropertyType(k)}
-                      text={label}
-                      count={c}
-                      icon="🏡"
-                      dotColor={propertyTypeDot(k)}
-                    />
-                  );
-                })}
+                <Chip
+                  active={!propertyType}
+                  onClick={() => setPropertyType('')}
+                  text="كل الأنواع"
+                  dotColor={CAT_COLOR}
+                />
+                {propertyTypeOptions.map(([k, c]) => (
+                  <Chip
+                    key={k}
+                    active={propertyType === k}
+                    onClick={() => setPropertyType(k)}
+                    text={k === 'other' ? 'أخرى' : (propertyTypeLabel(k) || k)}
+                    count={c}
+                    icon="🏡"
+                    dotColor={colorForKey(`property:${k}`)}
+                  />
+                ))}
               </div>
             </>
           ) : null}
@@ -1458,9 +1150,164 @@ export default function CategoryListings({ category, initialListings = [] }) {
       );
     }
 
+    // electronics
+    if (single === 'electronics') {
+      return renderSingleFacet({
+        title: '💻 اختر فئة الإلكترونيات',
+        icon: '💻',
+        selected: electronicsType,
+        setSelected: setElectronicsType,
+        options: electronicsTypeOptions,
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (electronicsTypeLabel(k) || k)),
+        prefix: 'electronics',
+      });
+    }
+
+    // motorcycles
+    if (single === 'motorcycles') {
+      return renderSingleFacet({
+        title: '🏍️ اختر ماركة الدراجة',
+        icon: '🏍️',
+        selected: motorcycleBrand,
+        setSelected: setMotorcycleBrand,
+        options: motorcycleBrandOptions,
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (motorcycleBrandLabel(k) || k)),
+        prefix: 'moto',
+      });
+    }
+
+    // heavy equipment
+    if (single === 'heavy_equipment') {
+      return renderSingleFacet({
+        title: '🏗️ اختر نوع المعدة',
+        icon: '🏗️',
+        selected: heavyEquipmentType,
+        setSelected: setHeavyEquipmentType,
+        options: heavyEquipmentTypeOptions,
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (heavyEquipmentTypeLabel(k) || k)),
+        prefix: 'heavy',
+      });
+    }
+
+    // solar
+    if (single === 'solar') {
+      return renderSingleFacet({
+        title: '☀️ اختر فئة الطاقة الشمسية',
+        icon: '☀️',
+        selected: solarType,
+        setSelected: setSolarType,
+        options: solarTypeOptions,
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (solarTypeLabel(k) || k)),
+        prefix: 'solar',
+      });
+    }
+
+    // networks
+    if (single === 'networks') {
+      return renderSingleFacet({
+        title: '📡 اختر فئة الشبكات',
+        icon: '📡',
+        selected: networkType,
+        setSelected: setNetworkType,
+        options: networkTypeOptions,
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (networkTypeLabel(k) || k)),
+        prefix: 'net',
+      });
+    }
+
+    // maintenance
+    if (single === 'maintenance') {
+      return renderSingleFacet({
+        title: '🛠️ اختر نوع الصيانة',
+        icon: '🛠️',
+        selected: maintenanceType,
+        setSelected: setMaintenanceType,
+        options: maintenanceTypeOptions,
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (maintenanceTypeLabel(k) || k)),
+        prefix: 'maint',
+      });
+    }
+
+    // furniture
+    if (single === 'furniture') {
+      return renderSingleFacet({
+        title: '🛋️ اختر نوع الأثاث',
+        icon: '🛋️',
+        selected: furnitureType,
+        setSelected: setFurnitureType,
+        options: furnitureTypeOptions,
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (furnitureTypeLabel(k) || k)),
+        prefix: 'furn',
+      });
+    }
+
+    // home tools
+    if (single === 'home_tools') {
+      return renderSingleFacet({
+        title: '🏠 اختر نوع الأدوات المنزلية',
+        icon: '🏠',
+        selected: homeToolsType,
+        setSelected: setHomeToolsType,
+        options: homeToolsTypeOptions,
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (homeToolsTypeLabel(k) || k)),
+        prefix: 'home',
+      });
+    }
+
+    // clothes
+    if (single === 'clothes') {
+      return renderSingleFacet({
+        title: '👕 اختر نوع الملابس',
+        icon: '👕',
+        selected: clothesType,
+        setSelected: setClothesType,
+        options: clothesTypeOptions,
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (clothesTypeLabel(k) || k)),
+        prefix: 'clothes',
+      });
+    }
+
+    // animals
+    if (single === 'animals') {
+      return renderSingleFacet({
+        title: '🐑 اختر نوع الحيوانات',
+        icon: '🐑',
+        selected: animalType,
+        setSelected: setAnimalType,
+        options: animalTypeOptions,
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (animalTypeLabel(k) || k)),
+        prefix: 'animal',
+      });
+    }
+
+    // jobs
+    if (single === 'jobs') {
+      return renderSingleFacet({
+        title: '💼 اختر نوع الوظيفة',
+        icon: '💼',
+        selected: jobType,
+        setSelected: setJobType,
+        options: jobTypeOptions,
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (jobTypeLabel(k) || k)),
+        prefix: 'job',
+      });
+    }
+
+    // services
+    if (single === 'services') {
+      return renderSingleFacet({
+        title: '🧰 اختر نوع الخدمة',
+        icon: '🧰',
+        selected: serviceType,
+        setSelected: setServiceType,
+        options: serviceTypeOptions,
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (serviceTypeLabel(k) || k)),
+        prefix: 'service',
+      });
+    }
+
     return null;
   };
-
 
   if (loading) {
     return (
@@ -1508,7 +1355,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
         </div>
       </div>
 
-
       {filtered.length === 0 ? (
         <div className="card" style={{ padding: 16, textAlign: 'center' }}>
           <div style={{ fontWeight: 900 }}>لا توجد إعلانات مطابقة</div>
@@ -1529,7 +1375,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
             }}
           >
             {filtered.map((l) => (
-              <ListingCard key={l.id} listing={l} />
+              <ListingCard key={l.id} listing={l} variant={view === 'list' ? 'list' : 'grid'} />
             ))}
           </div>
 
@@ -1555,55 +1401,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
       )}
 
       <style jsx>{`
-        .tax-wrap {
-          margin-bottom: 12px;
-          padding: 10px 12px;
-          border-radius: 14px;
-          border: 1px solid #e2e8f0;
-          background: rgba(255, 255, 255, 0.92);
-        }
-        .tax-title {
-          font-weight: 900;
-          margin-bottom: 8px;
-        }
-        .tax-row {
-          display: flex;
-          gap: 8px;
-          overflow-x: auto;
-          padding-bottom: 4px;
-        }
-        .tax-chip {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 10px;
-          border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.1);
-          background: #fff;
-          font-weight: 900;
-          font-size: 13px;
-          cursor: pointer;
-          white-space: nowrap;
-          user-select: none;
-        }
-        .tax-chip.isActive {
-          border-color: rgba(0, 0, 0, 0.22);
-          box-shadow: 0 8px 14px rgba(0, 0, 0, 0.1);
-        }
-        .tax-count {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          min-width: 22px;
-          height: 18px;
-          padding: 0 6px;
-          border-radius: 999px;
-          background: rgba(0, 0, 0, 0.06);
-          font-size: 12px;
-          font-weight: 900;
-        }
-
-
         /* ====== Filter shell (نفس شكل الخريطة للشبكة/القائمة) ====== */
         .sooq-filterShell {
           margin-bottom: 12px;
@@ -1625,16 +1422,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
           min-width: 180px;
         }
 
-        /* ====== Taxonomy bar (مثل الخريطة) ====== */
-        .sooq-taxWrap {
-          margin-bottom: 12px;
-          padding: 10px 10px;
-          border-radius: 14px;
-          background: rgba(255, 255, 255, 0.86);
-          backdrop-filter: blur(8px);
-          border: 1px solid #e2e8f0;
-          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.08);
-        }
         .sooq-taxTitle {
           font-weight: 900;
           margin-bottom: 8px;
@@ -1717,11 +1504,9 @@ export default function CategoryListings({ category, initialListings = [] }) {
         }
 
         @media (max-width: 520px) {
-          .sooq-taxWrap { padding: 10px 8px; }
           .sooq-chips { padding: 6px; }
           .sooq-chip { padding: 8px 9px; font-size: 12px; }
         }
-
       `}</style>
     </div>
   );
