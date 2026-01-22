@@ -224,6 +224,26 @@ const CAT_STYLE = {
   other: { color: '#475569', icon: '📦', label: 'أخرى' },
 };
 
+// ✅ جميع الأقسام المتاحة (بغض النظر عن وجود إعلانات أم لا)
+const ALL_CATEGORIES = [
+  'cars',
+  'realestate',
+  'phones',
+  'electronics',
+  'motorcycles',
+  'heavy_equipment',
+  'solar',
+  'networks',
+  'maintenance',
+  'furniture',
+  'home_tools',
+  'clothes',
+  'animals',
+  'jobs',
+  'services',
+  'other'
+];
+
 function getCatStyle(categoryValue) {
   const key = normalizeCategoryKey(categoryValue);
   return CAT_STYLE[key] || CAT_STYLE.other;
@@ -258,7 +278,7 @@ function pickImage(listing) {
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
-    const check = () => setIsMobile(window.matchMedia('(max-width: 520px)').matches);
+    const check = () => setIsMobile(window.matchMedia('(max-width: 768px)').matches);
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
@@ -435,6 +455,11 @@ export default function HomeMapView({ listings = [] }) {
   // counts للأقسام
   const catCounts = useMemo(() => {
     const m = new Map();
+    // تهيئة جميع الأقسام بقيمة 0
+    ALL_CATEGORIES.forEach(cat => {
+      m.set(cat, 0);
+    });
+    // حساب الإعلانات الحقيقية
     for (const p of points) {
       const k = p._catKey || 'other';
       m.set(k, (m.get(k) || 0) + 1);
@@ -442,10 +467,10 @@ export default function HomeMapView({ listings = [] }) {
     return m;
   }, [points]);
 
+  // ✅ الآن نعرض جميع الأقسام حتى لو كانت عدداها صفر
   const availableCats = useMemo(() => {
-    const keys = Object.keys(CAT_STYLE);
-    return keys.filter((k) => (catCounts.get(k) || 0) > 0);
-  }, [catCounts]);
+    return ALL_CATEGORIES;
+  }, []);
 
   const boundsObj = useMemo(() => {
     if (!nearbyBounds) return null;
@@ -577,9 +602,9 @@ export default function HomeMapView({ listings = [] }) {
     );
   };
 
-  const ChipsOverlay = (
-    <div className="sooq-mapOverlay">
-      {/* الشريط الأساسي (مثل القديم) */}
+  const ChipsOverlay = ({ isFullscreenMode = false }) => (
+    <div className={`sooq-mapOverlay ${isFullscreenMode ? 'sooq-mapOverlay--fullscreen' : ''}`}>
+      {/* الشريط الأساسي */}
       <div className="sooq-chips" role="tablist" aria-label="فلترة الأقسام">
         <button
           type="button"
@@ -592,13 +617,16 @@ export default function HomeMapView({ listings = [] }) {
         {availableCats.map((k) => {
           const s = CAT_STYLE[k] || CAT_STYLE.other;
           const c = catCounts.get(k) || 0;
+          const hasListings = c > 0;
+          
           return (
             <button
               key={k}
               type="button"
-              className={`sooq-chip ${activeCat === k ? 'isActive' : ''}`}
-              onClick={() => setActiveCat(k)}
-              title={s.label}
+              className={`sooq-chip ${activeCat === k ? 'isActive' : ''} ${!hasListings ? 'sooq-chip--disabled' : ''}`}
+              onClick={() => hasListings && setActiveCat(k)}
+              title={hasListings ? s.label : `${s.label} (لا توجد إعلانات)`}
+              disabled={!hasListings}
             >
               <span className="sooq-chipDot" style={{ background: s.color }} />
               <span className="sooq-chipText">{s.label}</span>
@@ -707,8 +735,6 @@ export default function HomeMapView({ listings = [] }) {
 
   const MapBody = ({ mode }) => (
     <>
-      {availableCats.length > 0 ? ChipsOverlay : null}
-
       <MapContainer
         whenCreated={mode === 'fs' ? setFsMap : setPageMap}
         center={DEFAULT_CENTER}
@@ -777,6 +803,7 @@ export default function HomeMapView({ listings = [] }) {
         <div className="sooq-open-fs-hint">
           انقر لفتح الخريطة كاملة الشاشة
         </div>
+        {availableCats.length > 0 ? <ChipsOverlay /> : null}
         <MapBody mode="page" />
       </div>
 
@@ -790,6 +817,9 @@ export default function HomeMapView({ listings = [] }) {
       {portalReady && isFullscreen
         ? createPortal(
             <div className="sooq-fsOverlay" role="dialog" aria-label="الخريطة">
+              {/* شريط الفلترة في الأعلى */}
+              <ChipsOverlay isFullscreenMode={true} />
+
               <button 
                 type="button" 
                 className="sooq-fsCloseOnly" 
@@ -840,7 +870,7 @@ export default function HomeMapView({ listings = [] }) {
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
 
-        @media (max-width: 520px) {
+        @media (max-width: 768px) {
           .sooq-open-fs-hint {
             display: none;
           }
@@ -853,6 +883,28 @@ export default function HomeMapView({ listings = [] }) {
           right: 10px;
           z-index: 1004;
           pointer-events: none;
+          transition: all 0.3s ease;
+        }
+
+        .sooq-mapOverlay--fullscreen {
+          position: fixed !important;
+          top: 0 !important;
+          left: 0 !important;
+          right: 0 !important;
+          padding: 12px;
+          background: rgba(255, 255, 255, 0.98);
+          backdrop-filter: blur(10px);
+          border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          z-index: 999999;
+          pointer-events: auto;
+        }
+
+        @media (max-width: 768px) {
+          .sooq-mapOverlay--fullscreen {
+            padding: 8px;
+            top: env(safe-area-inset-top, 0px) !important;
+          }
         }
 
         .sooq-chips {
@@ -866,6 +918,12 @@ export default function HomeMapView({ listings = [] }) {
           backdrop-filter: blur(8px);
           box-shadow: 0 10px 18px rgba(0, 0, 0, 0.12);
           align-items: center;
+        }
+
+        .sooq-mapOverlay--fullscreen .sooq-chips {
+          background: rgba(255, 255, 255, 0.95);
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+          padding: 10px;
         }
 
         .sooq-chips--sub {
@@ -885,11 +943,29 @@ export default function HomeMapView({ listings = [] }) {
           cursor: pointer;
           white-space: nowrap;
           user-select: none;
+          transition: all 0.2s ease;
+        }
+
+        .sooq-chip:not(:disabled):hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
         }
 
         .sooq-chip.isActive {
           border-color: rgba(0, 0, 0, 0.18);
           box-shadow: 0 8px 14px rgba(0, 0, 0, 0.12);
+          font-weight: 900;
+        }
+
+        .sooq-chip--disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          background: #f8fafc;
+        }
+
+        .sooq-chip--disabled:hover {
+          transform: none;
+          box-shadow: none;
         }
 
         .sooq-chipDot {
@@ -913,6 +989,11 @@ export default function HomeMapView({ listings = [] }) {
           background: rgba(0, 0, 0, 0.06);
           font-size: 12px;
           font-weight: 800;
+        }
+
+        .sooq-chip--disabled .sooq-chipCount {
+          background: rgba(0, 0, 0, 0.04);
+          color: #94a3b8;
         }
 
         .sooq-popupMini {
@@ -950,9 +1031,15 @@ export default function HomeMapView({ listings = [] }) {
           text-decoration: none;
           font-weight: 900;
           font-size: 12px;
+          transition: all 0.2s ease;
         }
 
-        @media (max-width: 520px) {
+        .sooq-popupMiniBtn:hover {
+          opacity: 0.9;
+          transform: translateY(-1px);
+        }
+
+        @media (max-width: 768px) {
           .sooq-popupMini {
             width: 120px;
           }
@@ -969,20 +1056,30 @@ export default function HomeMapView({ listings = [] }) {
           inset: 0;
           z-index: 999999;
           background: #fff;
+          display: flex;
+          flex-direction: column;
         }
 
         .sooq-fsMap {
-          position: absolute;
-          inset: 0;
-          height: 100dvh;
-          width: 100vw;
+          position: relative;
+          flex: 1;
+          width: 100%;
+          height: calc(100vh - 80px);
+          margin-top: 80px;
+        }
+
+        @media (max-width: 768px) {
+          .sooq-fsMap {
+            height: calc(100vh - 120px);
+            margin-top: 120px;
+          }
         }
 
         .sooq-fsCloseOnly {
           position: fixed;
-          top: calc(env(safe-area-inset-top, 0px) + 16px);
-          right: 16px;
-          z-index: 999999;
+          top: calc(env(safe-area-inset-top, 0px) + 20px);
+          right: 20px;
+          z-index: 1000000;
           width: 48px;
           height: 48px;
           border-radius: 999px;
@@ -1003,13 +1100,9 @@ export default function HomeMapView({ listings = [] }) {
           transform: scale(1.05);
         }
 
-        .sooq-fsOverlay .sooq-mapOverlay {
-          top: calc(env(safe-area-inset-top, 0px) + 76px);
-        }
-
         .sooq-locateBtn {
           position: fixed;
-          right: 16px;
+          right: 20px;
           bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
           z-index: 999999;
           width: 56px;
@@ -1094,6 +1187,25 @@ export default function HomeMapView({ listings = [] }) {
         .sooq-marker--seen .sooq-pin {
           opacity: 0.72;
           filter: grayscale(0.25);
+        }
+
+        /* Scrollbar styling */
+        .sooq-chips::-webkit-scrollbar {
+          height: 6px;
+        }
+
+        .sooq-chips::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.05);
+          border-radius: 3px;
+        }
+
+        .sooq-chips::-webkit-scrollbar-thumb {
+          background: rgba(0, 0, 0, 0.2);
+          border-radius: 3px;
+        }
+
+        .sooq-chips::-webkit-scrollbar-thumb:hover {
+          background: rgba(0, 0, 0, 0.3);
         }
       `}</style>
     </div>
