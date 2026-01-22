@@ -696,7 +696,6 @@ export default function HomeMapView({ listings = [], forcedRootKey = '' }) {
 
   // ✅ فتح ملء الشاشة: للجوال فقط عبر النقر على الخريطة (تجنب فتحها بالخطأ على الكمبيوتر)
   const openFullscreenFromMap = (e) => {
-    if (!isMobile) return;
     if (isFullscreen) return;
 
     const t = e?.target;
@@ -1174,7 +1173,7 @@ export default function HomeMapView({ listings = [], forcedRootKey = '' }) {
       {/* ملء الشاشة */}
       {portalReady && isFullscreen
           ? createPortal(
-              <div className="sooq-fsOverlay" role="dialog" aria-label="الخريطة" aria-modal="true">
+              <div className="sooq-fsOverlay" role="dialog" aria-label="الخريطة" aria-modal="true" onMouseDown={(e) => { if (e.target === e.currentTarget) closeFullscreen(e); }} onTouchStart={(e) => { if (e.target === e.currentTarget) closeFullscreen(e); }}>
                 <div className="sooq-fsCard">
                   <button
                     type="button"
@@ -1401,38 +1400,27 @@ export default function HomeMapView({ listings = [], forcedRootKey = '' }) {
 
 /* === Fullscreen Overlay === */
 .sooq-fsOverlay {
-  position: fixed;
-  inset: 14px;
-  z-index: 9999;
-  background: #fff;
-}
-
-@media (min-width: 1024px){
-  .sooq-fsOverlay{ inset: 24px; }
+position: fixed;
+inset: 0;
+z-index: 999999;
+background: rgba(0,0,0,0.55);
+display: flex;
+align-items: center;
+justify-content: center;
+padding: 2.5vh 2.5vw;
 }
 
 .sooq-fsCard {
-  position: absolute;
-  inset: 0;
-  background: #fff;
+position: relative;
+inset: auto;
+width: min(1600px, 95vw);
+height: 95vh;
+background: #fff;
+border-radius: 18px;
+overflow: hidden;
+box-shadow: 0 24px 60px rgba(0,0,0,0.35);
 }
 
-@media (min-width: 900px) {
-  .sooq-fsOverlay {
-    background: rgba(0, 0, 0, 0.35);
-  }
-  .sooq-fsCard {
-    inset: auto;
-    width: min(94vw, 1400px);
-    height: 90vh;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    border-radius: 18px;
-    box-shadow: 0 10px 35px rgba(0, 0, 0, 0.18);
-    overflow: hidden;
-  }
-}
 .sooq-fsMap {
   position: absolute;
   inset: 0;
@@ -1487,17 +1475,24 @@ export default function HomeMapView({ listings = [], forcedRootKey = '' }) {
 /* In fullscreen, push overlays below the close button */
 .sooq-fsCard .sooq-mapOverlay { top: 64px; }
 .sooq-fsCard .sooq-chips { top: 116px; }
-
-/* Desktop/Laptop: show modal card ~90% of screen */
-@media (hover: hover) and (pointer: fine) {
-  .sooq-fsOverlay {
-    background: rgba(0,0,0,0.55);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 18px;
+/* Mobile: true full-screen (no margins) */
+@media (max-width: 640px){
+  .sooq-fsOverlay{
+    background: #fff;
+    padding: 0;
   }
-  .sooq-fsCard {
+  .sooq-fsCard{
+    width: 100vw;
+    height: 100dvh;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .sooq-fsCard .sooq-mapOverlay{ top: calc(env(safe-area-inset-top, 0px) + 64px); }
+  .sooq-fsCard .sooq-chips{ top: calc(env(safe-area-inset-top, 0px) + 116px); }
+}
+
+
+.sooq-fsCard {
     position: relative;
     inset: auto;
     width: min(1600px, 96vw);
