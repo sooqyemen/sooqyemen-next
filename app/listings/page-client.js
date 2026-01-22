@@ -71,7 +71,7 @@ function ListingRow({ listing }) {
       className="card"
       style={{
         display: 'flex',
-        gap: 12,
+        gap: 10,
         padding: 12,
         alignItems: 'stretch',
       }}
@@ -421,7 +421,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
           <HomeMapView listings={filtered} />
         ) : view === 'list' ? (
           <>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {filtered.map((l) => (
                 <ListingRow key={l.id} listing={l} />
               ))}
@@ -457,8 +457,8 @@ export default function ListingsPageClient({ initialListings = [] }) {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-                gap: 12,
+                gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
+                gap: 10,
               }}
             >
               {filtered.map((l) => (
