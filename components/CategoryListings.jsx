@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '@/lib/firebaseClient';
-import { normalizeCategoryKey } from '@/lib/categories';
+import { normalizeCategoryKey, getCategoryLabel } from '@/lib/categories';
 import ListingCard from '@/components/ListingCard';
 
 // ✅ Taxonomy (الفروع الهرمية)
@@ -1248,6 +1248,103 @@ export default function CategoryListings({ category, initialListings = [] }) {
     );
   }
 
+  // ====== Popular + Hashtags (مثل حراج) ======
+  const categoryLabel = useMemo(() => (single ? getCategoryLabel(single) : ''), [single]);
+
+  const hashtagOptions = useMemo(() => {
+    const max = 18;
+
+    let opts = [];
+    if (single === 'cars') opts = carMakeOptions;
+    else if (single === 'realestate') opts = propertyTypeOptions;
+    else if (single === 'phones') opts = phoneBrandOptions;
+    else if (single === 'electronics') opts = electronicsTypeOptions;
+    else if (single === 'motorcycles') opts = motorcycleBrandOptions;
+    else if (single === 'heavy_equipment') opts = heavyEquipmentTypeOptions;
+    else if (single === 'solar') opts = solarTypeOptions;
+    else if (single === 'networks') opts = networkTypeOptions;
+    else if (single === 'maintenance') opts = maintenanceTypeOptions;
+    else if (single === 'furniture') opts = furnitureTypeOptions;
+    else if (single === 'home_tools') opts = homeToolsTypeOptions;
+    else if (single === 'clothes') opts = clothesTypeOptions;
+    else if (single === 'animals') opts = animalTypeOptions;
+    else if (single === 'jobs') opts = jobTypeOptions;
+    else if (single === 'services') opts = serviceTypeOptions;
+
+    const cleaned = (opts || [])
+      .filter((o) => o && o.key && o.key !== 'other')
+      .map((o) => ({ ...o, count: Number(o.count || 0) }));
+
+    const hasCounts = cleaned.some((o) => o.count > 0);
+    const sorted = hasCounts
+      ? [...cleaned].sort((a, b) => (b.count - a.count) || String(a.label).localeCompare(String(b.label), 'ar'))
+      : cleaned;
+
+    return sorted.slice(0, max);
+  }, [
+    single,
+    carMakeOptions,
+    propertyTypeOptions,
+    phoneBrandOptions,
+    electronicsTypeOptions,
+    motorcycleBrandOptions,
+    heavyEquipmentTypeOptions,
+    solarTypeOptions,
+    networkTypeOptions,
+    maintenanceTypeOptions,
+    furnitureTypeOptions,
+    homeToolsTypeOptions,
+    clothesTypeOptions,
+    animalTypeOptions,
+    jobTypeOptions,
+    serviceTypeOptions,
+  ]);
+
+  const popularListings = useMemo(() => {
+    const list = Array.isArray(items) ? items : [];
+    // ضمن الإعلانات المحمّلة (تقدير سريع بدون استعلام إضافي)
+    return [...list]
+      .filter(Boolean)
+      .sort((a, b) => (Number(b.views || 0) - Number(a.views || 0)) || (Number(b.likes || 0) - Number(a.likes || 0)))
+      .slice(0, 8);
+  }, [items]);
+
+  const applyHashtag = (key) => {
+    const k = safeStr(key);
+    if (!single || !k) return;
+
+    // reset search text for clarity
+    setQ('');
+
+    if (single === 'cars') {
+      setCarMake(k === 'all' ? '' : k);
+      setCarModel('');
+      return;
+    }
+    if (single === 'realestate') {
+      // فلترة على نوع العقار مباشرة
+      setPropertyType(k === 'all' ? '' : k);
+      return;
+    }
+    if (single === 'phones') {
+      setPhoneBrand(k === 'all' ? '' : k);
+      return;
+    }
+    if (single === 'electronics') return setElectronicsType(k === 'all' ? '' : k);
+    if (single === 'motorcycles') return setMotorcycleBrand(k === 'all' ? '' : k);
+    if (single === 'heavy_equipment') return setHeavyEquipmentType(k === 'all' ? '' : k);
+    if (single === 'solar') return setSolarType(k === 'all' ? '' : k);
+    if (single === 'networks') return setNetworkType(k === 'all' ? '' : k);
+    if (single === 'maintenance') return setMaintenanceType(k === 'all' ? '' : k);
+    if (single === 'furniture') return setFurnitureType(k === 'all' ? '' : k);
+    if (single === 'home_tools') return setHomeToolsType(k === 'all' ? '' : k);
+    if (single === 'clothes') return setClothesType(k === 'all' ? '' : k);
+    if (single === 'animals') return setAnimalType(k === 'all' ? '' : k);
+    if (single === 'jobs') return setJobType(k === 'all' ? '' : k);
+    if (single === 'services') return setServiceType(k === 'all' ? '' : k);
+  };
+
+
   return (
     <div>
       <div className="sooq-filterShell">
@@ -1292,8 +1389,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: view === 'grid' ? 'repeat(auto-fill, minmax(240px, 1fr))' : '1fr',
-              gap: 12,
+              gridTemplateColumns: view === 'grid' ? 'repeat(auto-fill, minmax(210px, 1fr))' : '1fr',
+              gap: 10,
             }}
           >
             {filtered.map((l) => (
@@ -1312,6 +1409,44 @@ export default function CategoryListings({ category, initialListings = [] }) {
               <div className="muted" style={{ padding: 10 }}>لا يوجد المزيد</div>
             )}
           </div>
+
+          {/* ✅ الأكثر رواجًا + وسوم (مثل حراج) */}
+          {view !== 'map' && popularListings.length >= 4 ? (
+            <div className="card" style={{ padding: 14, marginTop: 14 }}>
+              <div style={{ fontWeight: 900, marginBottom: 10 }}>🔥 الإعلانات الأكثر رواجًا</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
+                {popularListings.map((p) => (
+                  <ListingCard key={p.id} listing={p} variant="grid" />
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {view !== 'map' && single && hashtagOptions.length ? (
+            <div className="card sooq-hashtagsBox" style={{ padding: 14, marginTop: 12 }}>
+              <div style={{ fontWeight: 900, marginBottom: 8 }}># وسوم شائعة في {categoryLabel || 'القسم'}</div>
+
+              <div className="sooq-hashtags">
+                {hashtagOptions.map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    className="sooq-tag"
+                    onClick={() => applyHashtag(t.key)}
+                    title={`فلترة: ${t.label}`}
+                  >
+                    <span className="sooq-tagText">#{t.label}</span>
+                    <span className="sooq-tagCount">{Number(t.count || 0).toLocaleString('en-US')}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="muted" style={{ marginTop: 10, lineHeight: 1.7 }}>
+                تصفح إعلانات {categoryLabel || 'القسم'} في اليمن، واستخدم الوسوم أعلاه للوصول بسرعة إلى الفئات المطلوبة.
+              </div>
+            </div>
+          ) : null}
+
 
           {err && items.length > 0 ? (
             <div className="card" style={{ padding: 12, marginTop: 12, border: '1px solid #fecaca' }}>
@@ -1429,7 +1564,41 @@ export default function CategoryListings({ category, initialListings = [] }) {
           .sooq-chips { padding: 6px; }
           .sooq-chip { padding: 8px 9px; font-size: 12px; }
         }
-      `}</style>
+      
+        .sooq-hashtags{
+          display:flex;
+          flex-wrap:wrap;
+          gap:8px;
+        }
+        .sooq-tag{
+          display:inline-flex;
+          align-items:center;
+          gap:8px;
+          border:1px solid var(--border);
+          background: #fff;
+          border-radius: 999px;
+          padding: 8px 10px;
+          cursor:pointer;
+          transition: transform .12s ease, box-shadow .12s ease;
+          font-weight: 800;
+          font-size: 13px;
+        }
+        .sooq-tag:hover{
+          transform: translateY(-1px);
+          box-shadow: 0 6px 14px rgba(0,0,0,0.06);
+        }
+        .sooq-tagCount{
+          color:#64748b;
+          font-weight: 900;
+          font-size: 12px;
+          border-left: 1px solid #e2e8f0;
+          padding-left: 8px;
+        }
+        .sooq-tagText{
+          white-space: nowrap;
+        }
+
+`}</style>
     </div>
   );
 }
