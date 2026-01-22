@@ -11,6 +11,7 @@ import SkeletonLoader from '@/components/SkeletonLoader';
 import EmptyState from '@/components/EmptyState';
 import './home.css';
 import { loadFirebaseClient, scheduleIdleCallback } from '@/lib/firebaseLoader';
+import { normalizeCategoryKey } from '@/lib/categories';
 
 // تحميل ديناميكي للخريطة (تجنب SSR لمشاكل Leaflet)
 const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
@@ -66,59 +67,7 @@ function safeText(v) {
 }
 
 // ✅ توحيد اسم القسم
-function normalizeCategoryKey(v) {
-  const raw = String(v || '').trim();
-  if (!raw) return '';
-  const lowered = raw.toLowerCase();
-  const norm = lowered.replace(/\s+/g, '_').replace(/-/g, '_').replace(/__+/g, '_');
 
-  const map = {
-    real_estate: 'realestate',
-    realestate: 'realestate',
-    mobiles: 'phones',
-    mobile: 'phones',
-    phones: 'phones',
-    phone: 'phones',
-    animals_birds: 'animals',
-    animalsbirds: 'animals',
-    animals: 'animals',
-    heavy_equipment: 'heavy_equipment',
-    heavyequipment: 'heavy_equipment',
-    'heavy equipment': 'heavy_equipment',
-    network: 'networks',
-    networks: 'networks',
-    maintenance: 'maintenance',
-    home_tools: 'home_tools',
-    hometools: 'home_tools',
-    'home tools': 'home_tools',
-    سيارات: 'cars',
-    عقارات: 'realestate',
-    جوالات: 'phones',
-    إلكترونيات: 'electronics',
-    الكترونيات: 'electronics',
-    دراجات_نارية: 'motorcycles',
-    دراجات: 'motorcycles',
-    معدات_ثقيلة: 'heavy_equipment',
-    طاقة_شمسية: 'solar',
-    نت_وشبكات: 'networks',
-    نت_و_شبكات: 'networks',
-    صيانة: 'maintenance',
-    أثاث: 'furniture',
-    اثاث: 'furniture',
-    ملابس: 'clothes',
-    حيوانات_وطيور: 'animals',
-    حيوانات: 'animals',
-    وظائف: 'jobs',
-    خدمات: 'services',
-    اخرى: 'other',
-    أخرى: 'other',
-    أدوات_منزلية: 'home_tools',
-    ادوات_منزلية: 'home_tools',
-    'أدوات منزلية': 'home_tools',
-    'ادوات منزلية': 'home_tools',
-  };
-  return map[norm] || map[raw] || norm;
-}
 
 function formatRelative(ts) {
   try {
