@@ -185,6 +185,19 @@ function pickFacetForCategory(categoryKey, listing, taxonomy) {
 export default function ListingDetailsClient({ params, initialListing = null }) {
   const { id } = params;
   const router = useRouter();
+
+  // ✅ عند الضغط على الوسم: انتقل إلى صفحة القسم مع البحث (q)
+  const onHashtagClick = useCallback(
+    (tag) => {
+      const raw = String(tag || '').trim();
+      const clean = raw.replace(/^#/, '').replace(/_/g, ' ').trim();
+      if (!clean) return;
+      const href = `${getCategoryHref(categoryKey)}?q=${encodeURIComponent(clean)}`;
+      router.push(href);
+    },
+    [router, categoryKey]
+  );
+
   const { user } = useAuth();
 
   // تحميل الخريطة فقط عند الطلب (لتقليل حجم الباندل ورفع سرعة التحميل)
@@ -616,42 +629,6 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                 </div>
 
 
-                {/* ✅ وسوم (هاشتاقات) */}
-                {hashtags && hashtags.length > 0 && (
-                  <div className="hashtags-section">
-                    <h2 className="section-title">وسوم</h2>
-                    <div className="hashtag-row" aria-label="وسوم الإعلان">
-                      {hashtags.map((t) => (
-                        <span key={t} className="hashtag-chip" dir="ltr">
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                    <p className="hashtags-note">
-                      هذه الوسوم تساعد في الوصول للإعلان بسهولة داخل الموقع ومحركات البحث.
-                    </p>
-                  </div>
-                )}
-
-                {/* ✅ إعلانات مشابهة */}
-                <div className="related-section">
-                  <h2 className="section-title">إعلانات مشابهة</h2>
-
-                  {relatedLoading ? (
-                    <div className="loading-box">جاري تحميل الإعلانات المشابهة...</div>
-                  ) : relatedListings && relatedListings.length > 0 ? (
-                    <div className="related-grid">
-                      {relatedListings.map((x) => (
-                        <ListingCard key={x.id} listing={x} variant="grid" />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="muted" style={{ padding: '8px 0' }}>
-                      لا توجد إعلانات مشابهة حالياً.
-                    </div>
-                  )}
-                </div>
-
                 <div className="contact-section">
                   <h2 className="section-title">التواصل</h2>
                   {chatErr && <div className="error-msg">{chatErr}</div>}
@@ -685,6 +662,25 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
 						)}
                   </div>
                 </div>
+
+                
+
+                {/* ✅ وسوم (هاشتاقات) */}
+                {hashtags && hashtags.length > 0 && (
+                  <div className="hashtags-section">
+                    <h2 className="section-title">وسوم</h2>
+                    <div className="hashtag-row" aria-label="وسوم الإعلان">
+                      {hashtags.map((t) => (
+                        <button type="button" key={t} className="hashtag-chip" dir="ltr" onClick={() => onHashtagClick(t)}>
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="hashtags-note">
+                      هذه الوسوم تساعد في الوصول للإعلان بسهولة داخل الموقع ومحركات البحث.
+                    </p>
+                  </div>
+                )}
 
                 <div className="comments-section" ref={commentsRef}>
                   {!showComments ? (
@@ -806,6 +802,27 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
         </div>
       </div>
 
+
+      {/* ✅ إعلانات مشابهة (بعد الخريطة) */}
+      <div className="related-section page-related">
+        <h2 className="section-title">إعلانات مشابهة</h2>
+
+        {relatedLoading ? (
+          <div className="loading-box">جاري تحميل الإعلانات المشابهة...</div>
+        ) : relatedListings && relatedListings.length > 0 ? (
+          <div className="related-grid">
+            {relatedListings.map((x) => (
+              <ListingCard key={x.id} listing={x} variant="grid" />
+            ))}
+          </div>
+        ) : (
+          <div className="muted" style={{ padding: '8px 0' }}>
+            لا توجد إعلانات مشابهة حالياً.
+          </div>
+        )}
+      </div>
+
+
       <style jsx>{`
         .lazy-load-box {
           padding: 20px;
@@ -871,6 +888,8 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
           font-weight:900;
           font-size:13px;
           line-height:1;
+          border: none;
+          cursor: pointer;
           user-select:none;
         }
         .hashtags-note{
@@ -881,6 +900,11 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
         }
 
         /* ====== Related listings ====== */
+        .page-related{
+          margin-top: 22px;
+          padding-top: 14px;
+        }
+
         .related-section{
           margin-top: 18px;
           padding-top: 12px;
