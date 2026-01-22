@@ -183,10 +183,6 @@ export default function ContactPage() {
               </div>
             </div>
           </div>
-
-          <div className="muted" style={{ marginTop: 14, fontSize: 12 }}>
-            ملاحظة: رسائل نموذج (اتصل بنا) تُحفظ في لوحة الإدارة: /admin/support
-          </div>
         </div>
       </div>
     </div>
