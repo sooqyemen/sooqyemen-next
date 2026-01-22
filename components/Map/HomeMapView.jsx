@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -682,26 +682,6 @@ export default function HomeMapView({ listings = [], forcedRootKey = '' }) {
     );
   };
 
-  // ✅ فتح ملء الشاشة: على الجوال + الكمبيوتر (مع تجاهل النقر على الأزرار/الكنترولز)
-  const openFullscreenFromMap = (e) => {
-    if (isFullscreen) return;
-
-    const t = e?.target;
-    if (t && t.closest) {
-      if (
-        t.closest('.sooq-chipWrap') ||
-        t.closest('.leaflet-control') ||
-        t.closest('.leaflet-popup') ||
-        t.closest('.leaflet-marker-icon') ||
-        t.closest('.leaflet-marker-shadow') ||
-        t.closest('a') ||
-        t.closest('button')
-      ) return;
-    }
-
-    setIsFullscreen(true);
-  };
-
   const closeFullscreen = (ev) => {
     if (ev?.preventDefault) ev.preventDefault();
     setIsFullscreen(false);
@@ -1039,6 +1019,34 @@ export default function HomeMapView({ listings = [], forcedRootKey = '' }) {
     </div>
   );
 
+  // ✅ مكون لالتقاط أحداث الخريطة (لفتح ملء الشاشة فقط عند النقر على الخريطة، وليس العلامات/النوافذ)
+  const MapClickHandler = ({ mode }) => {
+    useMapEvents({
+      click: (e) => {
+        // فتح ملء الشاشة فقط لو في وضع الصفحة (وليس ملء الشاشة)
+        if (mode === 'page' && !isFullscreen) {
+          // التأكد من أن النقرة على الخريطة نفسها، وليس على علامة أو نافذة منبثقة
+          const originalEvent = e.originalEvent;
+          if (originalEvent && originalEvent.target) {
+            const target = originalEvent.target;
+            // تجاهل النقرات على العلامات والنوافذ والروابط والأزرار
+            if (
+              target.closest('.leaflet-marker-icon') ||
+              target.closest('.leaflet-popup') ||
+              target.closest('.sooq-chipWrap') ||
+              target.closest('a') ||
+              target.closest('button')
+            ) {
+              return;
+            }
+          }
+          setIsFullscreen(true);
+        }
+      },
+    });
+    return null;
+  };
+
   const MapBody = ({ mode }) => (
     <>
       {ChipsOverlay}
@@ -1055,6 +1063,7 @@ export default function HomeMapView({ listings = [], forcedRootKey = '' }) {
         maxBoundsViscosity={1.0}
         scrollWheelZoom
       >
+        <MapClickHandler mode={mode} />
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution="&copy; OpenStreetMap contributors"
@@ -1099,7 +1108,6 @@ export default function HomeMapView({ listings = [], forcedRootKey = '' }) {
       {/* خريطة داخل الصفحة */}
       <div
         className="sooq-mapWrap"
-        onClick={openFullscreenFromMap} // ✅ الآن دائماً يفتح ملء الشاشة على الجوال عند النقر
         style={{
           width: '100%',
           height: 'min(520px, 70vh)',
