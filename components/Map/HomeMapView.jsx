@@ -373,7 +373,16 @@ export default function HomeMapView({ listings = [] }) {
         const catKey = normalizeCategoryKey(categoryValue);
 
         // ✅ استنتاج الفروع (سيارات/عقارات/جوالات)
-        const _tax = inferListingTaxonomy(l, catKey);
+        const _taxRaw = inferListingTaxonomy(l, catKey);
+        const _tax = { ..._taxRaw };
+
+        // ✅ FIX: تحويل carMake إلى الإنجليزية للمقارنة الصحيحة
+        if (catKey === 'cars' && _tax.carMake) {
+          const foundMake = CAR_MAKES.find(m => m.label === _tax.carMake);
+          if (foundMake) {
+            _tax.carMake = foundMake.key; // تحويل إلى الإنجليزية
+          }
+        }
 
         return {
           ...l,
@@ -720,14 +729,14 @@ export default function HomeMapView({ listings = [] }) {
                 </button>
 
                 {CAR_MAKES.map((x) => {
-                  const c = carsMakeCounts.get(x.key) || 0;
+                  const c = carsMakeCounts.get(x.key) || 0; // ✅ FIX: استخدام x.key (الإنجليزية) للبحث في carsMakeCounts
                   return (
                     <button
                       key={x.key}
                       type="button"
                       className={`sooq-chip ${activeCarMake === x.key ? 'isActive' : ''} ${c === 0 ? 'isDisabled' : ''}`}
                       onClick={() => {
-                        setActiveCarMake(x.key);
+                        setActiveCarMake(x.key); // ✅ تخزين المفتاح الإنجليزي
                         setActiveCarModel('');
                       }}
                       title={x.label}
@@ -1048,46 +1057,73 @@ export default function HomeMapView({ listings = [] }) {
           background: #fff;
         }
 
+        /* ✅ FIX: جعل الشريط في الأعلى مباشرة دون فراغ */
         .sooq-mapOverlay {
           position: absolute;
-          top: 10px;
-          left: 10px;
-          right: 10px;
+          top: 0;
+          left: 0;
+          right: 0;
           z-index: 1004;
           pointer-events: none;
+          padding: 8px;
         }
 
         .sooq-chips {
           pointer-events: auto;
           display: flex;
-          gap: 8px;
+          gap: 6px;
           overflow-x: auto;
           padding: 8px;
-          border-radius: 14px;
-          background: rgba(255, 255, 255, 0.86);
-          backdrop-filter: blur(8px);
-          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.12);
+          border-radius: 12px;
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(12px);
+          box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
           align-items: center;
+          border: 1px solid rgba(0, 0, 0, 0.08);
+          max-width: 100%;
+          min-height: 46px;
+        }
+
+        /* ✅ FIX: تعديل التنسيق في وضع ملء الشاشة */
+        .sooq-fsOverlay .sooq-mapOverlay {
+          top: 0;
+          left: 0;
+          right: 0;
+          padding: 8px;
+          background: rgba(255, 255, 255, 0.85);
+        }
+
+        .sooq-fsOverlay .sooq-chips {
+          background: rgba(255, 255, 255, 0.98);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+          border-radius: 14px;
         }
 
         .sooq-chip {
           display: inline-flex;
           align-items: center;
-          gap: 8px;
-          padding: 8px 10px;
-          border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.08);
+          gap: 6px;
+          padding: 6px 12px;
+          border-radius: 20px;
+          border: 1px solid rgba(0, 0, 0, 0.1);
           background: #fff;
           font-size: 13px;
           line-height: 1;
           cursor: pointer;
           white-space: nowrap;
           user-select: none;
+          transition: all 0.2s;
+        }
+
+        .sooq-chip:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
 
         .sooq-chip.isActive {
-          border-color: rgba(0, 0, 0, 0.18);
-          box-shadow: 0 8px 14px rgba(0, 0, 0, 0.12);
+          border-color: rgba(0, 0, 0, 0.2);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          font-weight: 900;
         }
 
         .sooq-chip.isDisabled {
@@ -1096,25 +1132,26 @@ export default function HomeMapView({ listings = [] }) {
         }
 
         .sooq-chipDot {
-          width: 10px;
-          height: 10px;
+          width: 8px;
+          height: 8px;
           border-radius: 50%;
         }
 
         .sooq-chipText {
-          font-weight: 800;
+          font-weight: 700;
+          font-size: 12px;
         }
 
         .sooq-chipCount {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          min-width: 22px;
+          min-width: 20px;
           height: 18px;
-          padding: 0 6px;
-          border-radius: 999px;
-          background: rgba(0, 0, 0, 0.06);
-          font-size: 12px;
+          padding: 0 4px;
+          border-radius: 10px;
+          background: rgba(0, 0, 0, 0.07);
+          font-size: 11px;
           font-weight: 800;
         }
 
@@ -1166,6 +1203,22 @@ export default function HomeMapView({ listings = [] }) {
           .leaflet-popup-content {
             margin: 8px 10px !important;
           }
+          
+          /* ✅ FIX: تحسين الشريط على الجوال */
+          .sooq-mapOverlay {
+            padding: 6px;
+          }
+          
+          .sooq-chips {
+            padding: 6px;
+            gap: 4px;
+            min-height: 42px;
+          }
+          
+          .sooq-chip {
+            padding: 5px 10px;
+            font-size: 12px;
+          }
         }
 
         /* ====== Fullscreen overlay ====== */
@@ -1193,18 +1246,14 @@ export default function HomeMapView({ listings = [] }) {
           height: 44px;
           border-radius: 999px;
           border: 1px solid rgba(0, 0, 0, 0.14);
-          background: rgba(255, 255, 255, 0.9);
+          background: rgba(255, 255, 255, 0.95);
           backdrop-filter: blur(10px);
           font-weight: 900;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-        }
-
-        /* ✅ نقل الشيبس تحت زر الإغلاق */
-        .sooq-fsOverlay .sooq-mapOverlay {
-          top: calc(env(safe-area-inset-top, 0px) + 66px);
+          box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
         }
 
         /* ✅ زر تحديد موقعي (Floating) */
@@ -1217,7 +1266,7 @@ export default function HomeMapView({ listings = [] }) {
           height: 52px;
           border-radius: 999px;
           border: 1px solid rgba(0, 0, 0, 0.14);
-          background: rgba(255, 255, 255, 0.92);
+          background: rgba(255, 255, 255, 0.95);
           backdrop-filter: blur(10px);
           font-size: 20px;
           cursor: pointer;
