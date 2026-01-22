@@ -16,6 +16,8 @@ import {
   PHONE_BRANDS,
   DEAL_TYPES,
   PROPERTY_TYPES,
+
+  // أنواع/فئات لبقية الأقسام
   ELECTRONICS_TYPES,
   HEAVY_EQUIPMENT_TYPES,
   SOLAR_TYPES,
@@ -282,19 +284,19 @@ export default function HomeMapView({ listings = [] }) {
   const [fsMap, setFsMap] = useState(null);
 
   // ✅ فلتر هرمي
-  const [activeRoot, setActiveRoot] = useState('all');
-  const [activeCarMake, setActiveCarMake] = useState('');
-  const [activeCarModel, setActiveCarModel] = useState('');
-  const [activePhoneBrand, setActivePhoneBrand] = useState('');
-  const [activeDealType, setActiveDealType] = useState('');
-  const [activePropertyType, setActivePropertyType] = useState('');
+  const [activeRoot, setActiveRoot] = useState('all'); // all | cars | realestate | phones | ...
+  const [activeCarMake, setActiveCarMake] = useState(''); // toyota...
+  const [activeCarModel, setActiveCarModel] = useState(''); // camry...
+  const [activePhoneBrand, setActivePhoneBrand] = useState(''); // apple...
+  const [activeDealType, setActiveDealType] = useState(''); // sale/rent
+  const [activePropertyType, setActivePropertyType] = useState(''); // land/house...
 
   // ✅ فلتر عام لبقية الأقسام (نوع/فئة/ماركة حسب القسم)
   const [activeTypeKey, setActiveTypeKey] = useState('');
 
   // فلترة القريب
   const [nearbyOn, setNearbyOn] = useState(false);
-  const [nearbyBounds, setNearbyBounds] = useState(null);
+  const [nearbyBounds, setNearbyBounds] = useState(null); // [[south, west],[north,east]]
 
   // ملء الشاشة عبر Portal
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -615,8 +617,8 @@ export default function HomeMapView({ listings = [] }) {
     );
   };
 
-  // ✅ فتح ملء الشاشة (لجميع الأجهزة)
-  const openFullscreen = () => {
+  // ✅ فتح ملء الشاشة للجوال دائماً عند النقر على الخريطة (بدون مانع / بدون openedOnce)
+  const openFullscreenFromMap = () => {
     if (isFullscreen) return;
     setIsFullscreen(true);
   };
@@ -653,23 +655,11 @@ export default function HomeMapView({ listings = [] }) {
     setActivePropertyType('');
   };
 
-  // ✅ زر ملء الشاشة للكمبيوتر
-  const FullscreenToggleButton = ({ inFullscreenMode = false }) => (
-    <button
-      type="button"
-      className={`sooq-fsToggle ${inFullscreenMode ? 'inFullscreen' : ''}`}
-      onClick={inFullscreenMode ? () => setIsFullscreen(false) : openFullscreen}
-      aria-label={inFullscreenMode ? 'إغلاق ملء الشاشة' : 'فتح ملء الشاشة'}
-      title={inFullscreenMode ? 'إغلاق' : 'ملء الشاشة'}
-    >
-      {inFullscreenMode ? '✕' : '⛶'}
-    </button>
-  );
-
   // ✅ Overlay chips (هرمي)
   const ChipsOverlay = (
     <div
       className="sooq-mapOverlay"
+      // مهم: منع فتح ملء الشاشة عند لمس الشيبس (كان يسبب "ترمش" وما يختار)
       onPointerDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
@@ -948,15 +938,13 @@ export default function HomeMapView({ listings = [] }) {
     <>
       {ChipsOverlay}
 
-      {mode === 'page' && <FullscreenToggleButton />}
-
       <MapContainer
         whenCreated={mode === 'fs' ? setFsMap : setPageMap}
         center={DEFAULT_CENTER}
         zoom={7}
         minZoom={6}
         maxZoom={18}
-        zoomControl={!isTouch}
+        zoomControl={!isTouch} // ✅ +/− فقط لغير اللمس
         style={{ height: '100%', width: '100%' }}
         maxBounds={YEMEN_BOUNDS}
         maxBoundsViscosity={1.0}
@@ -1006,6 +994,7 @@ export default function HomeMapView({ listings = [] }) {
       {/* خريطة داخل الصفحة */}
       <div
         className="sooq-mapWrap"
+        onClick={openFullscreenFromMap} // ✅ الآن يفتح ملء الشاشة على جميع الأجهزة عند النقر
         style={{
           width: '100%',
           height: 'min(520px, 70vh)',
@@ -1013,7 +1002,7 @@ export default function HomeMapView({ listings = [] }) {
           borderRadius: 14,
           overflow: 'hidden',
           border: '1px solid #e2e8f0',
-          position: 'relative',
+          cursor: 'pointer',
         }}
       >
         <MapBody mode="page" />
@@ -1029,7 +1018,9 @@ export default function HomeMapView({ listings = [] }) {
       {portalReady && isFullscreen
         ? createPortal(
             <div className="sooq-fsOverlay" role="dialog" aria-label="الخريطة">
-              <FullscreenToggleButton inFullscreenMode={true} />
+              <button type="button" className="sooq-fsCloseOnly" onClick={() => setIsFullscreen(false)}>
+                ✕
+              </button>
 
               <div className="sooq-fsMap">
                 <MapBody mode="fs" />
@@ -1127,44 +1118,6 @@ export default function HomeMapView({ listings = [] }) {
           font-weight: 800;
         }
 
-        /* ====== زر ملء الشاشة ====== */
-        .sooq-fsToggle {
-          position: absolute;
-          bottom: 16px;
-          left: 16px;
-          z-index: 1005;
-          width: 44px;
-          height: 44px;
-          border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.14);
-          background: rgba(255, 255, 255, 0.92);
-          backdrop-filter: blur(10px);
-          font-size: 18px;
-          font-weight: 900;
-          cursor: pointer;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
-        }
-
-        .sooq-fsToggle:hover {
-          background: rgba(255, 255, 255, 0.98);
-          transform: translateY(-1px);
-          box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
-        }
-
-        /* في وضع ملء الشاشة */
-        .sooq-fsToggle.inFullscreen {
-          position: fixed;
-          top: calc(env(safe-area-inset-top, 0px) + 12px);
-          right: 12px;
-          left: auto;
-          bottom: auto;
-          width: 44px;
-          height: 44px;
-        }
-
         /* ====== Popup Mini (صغير جدا) ====== */
         .sooq-popupMini {
           width: 140px;
@@ -1228,6 +1181,25 @@ export default function HomeMapView({ listings = [] }) {
           inset: 0;
           height: 100dvh;
           width: 100vw;
+        }
+
+        /* ✅ زر إغلاق فقط */
+        .sooq-fsCloseOnly {
+          position: fixed;
+          top: calc(env(safe-area-inset-top, 0px) + 12px);
+          right: 12px;
+          z-index: 999999;
+          width: 44px;
+          height: 44px;
+          border-radius: 999px;
+          border: 1px solid rgba(0, 0, 0, 0.14);
+          background: rgba(255, 255, 255, 0.9);
+          backdrop-filter: blur(10px);
+          font-weight: 900;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
         }
 
         /* ✅ نقل الشيبس تحت زر الإغلاق */
