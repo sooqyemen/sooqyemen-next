@@ -893,7 +893,7 @@ export default function HomeMapView({ listings = [] }) {
     </div>
   );
 
-  const MapBody = ({ mode }) => (
+  const MapBody = ({ mode, hideZoomControls = false }) => (
     <>
       <MapContainer
         whenCreated={mode === 'fs' ? setFsMap : setPageMap}
@@ -901,7 +901,7 @@ export default function HomeMapView({ listings = [] }) {
         zoom={7}
         minZoom={6}
         maxZoom={18}
-        zoomControl={!isTouch}
+        zoomControl={!hideZoomControls && !isTouch}
         style={{ height: '100%', width: '100%' }}
         maxBounds={YEMEN_EXPANDED_BOUNDS}
         maxBoundsViscosity={1.0}
@@ -1016,37 +1016,34 @@ export default function HomeMapView({ listings = [] }) {
             <div className="sooq-fsOverlay" role="dialog" aria-label="الخريطة">
               <ChipsOverlay isFullscreenMode={true} />
 
-              {/* زر الإغلاق في أعلى اليسار - تم إصلاح موقعه */}
+              {/* زر الإغلاق صغير جداً ومخفي في الزاوية */}
               <button 
                 type="button" 
                 className="sooq-fsCloseBtn" 
                 onClick={() => setIsFullscreen(false)}
                 aria-label="إغلاق الخريطة"
               >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </button>
 
               <div className="sooq-fsMap">
-                <MapBody mode="fs" />
+                <MapBody mode="fs" hideZoomControls={true} />
               </div>
 
-              {/* مجموعة التحكم في أعلى اليمين - تم إصلاح تصميمها */}
-              <div className="sooq-map-controls">
-                {/* زر تحديد الموقع - أيقونة جديدة */}
-                <button
-                  type="button"
-                  className={`sooq-locateBtn ${nearbyOn ? 'isActive' : ''}`}
-                  onClick={locateMe}
-                  aria-label={nearbyOn ? 'إلغاء القريب من موقعي' : 'تحديد موقعي'}
-                  title={nearbyOn ? 'عرض الكل' : 'تحديد موقعي'}
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2ZM12 11.5C10.62 11.5 9.5 10.38 9.5 9C9.5 7.62 10.62 6.5 12 6.5C13.38 6.5 14.5 7.62 14.5 9C14.5 10.38 13.38 11.5 12 11.5Z" fill="currentColor"/>
-                  </svg>
-                </button>
-              </div>
+              {/* زر تحديد الموقع في أسفل اليسار */}
+              <button
+                type="button"
+                className={`sooq-locateBtn ${nearbyOn ? 'isActive' : ''}`}
+                onClick={locateMe}
+                aria-label={nearbyOn ? 'إلغاء القريب من موقعي' : 'تحديد موقعي'}
+                title={nearbyOn ? 'عرض الكل' : 'تحديد موقعي'}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2ZM12 11.5C10.62 11.5 9.5 10.38 9.5 9C9.5 7.62 10.62 6.5 12 6.5C13.38 6.5 14.5 7.62 14.5 9C14.5 10.38 13.38 11.5 12 11.5Z" fill="currentColor"/>
+                </svg>
+              </button>
             </div>,
             document.body
           )
@@ -1285,92 +1282,74 @@ export default function HomeMapView({ listings = [] }) {
           }
         }
 
-        /* زر الإغلاق - أعلى اليسار - تم إصلاح موقعه */
+        /* زر الإغلاق صغير جداً ومخفي في الزاوية */
         .sooq-fsCloseBtn {
           position: fixed;
-          top: 20px;
-          left: 20px;
+          top: 10px;
+          left: 10px;
           z-index: 1000001;
-          width: 44px;
-          height: 44px;
-          border-radius: 12px;
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
           border: none;
-          background: rgba(255, 255, 255, 0.95);
-          color: #333;
+          background: rgba(0, 0, 0, 0.3);
+          color: white;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-          backdrop-filter: blur(8px);
           transition: all 0.2s ease;
+          opacity: 0.7;
         }
 
         .sooq-fsCloseBtn:hover {
-          background: rgba(255, 255, 255, 1);
-          transform: scale(1.05);
-          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+          background: rgba(0, 0, 0, 0.5);
+          opacity: 1;
+          transform: scale(1.1);
         }
 
         .sooq-fsCloseBtn svg {
-          width: 20px;
-          height: 20px;
+          width: 16px;
+          height: 16px;
         }
 
         @media (max-width: 768px) {
           .sooq-fsCloseBtn {
-            top: calc(env(safe-area-inset-top, 0px) + 10px);
-            left: 10px;
-            width: 40px;
-            height: 40px;
+            top: calc(env(safe-area-inset-top, 0px) + 5px);
+            left: 5px;
+            width: 28px;
+            height: 28px;
           }
           .sooq-fsCloseBtn svg {
-            width: 18px;
-            height: 18px;
+            width: 14px;
+            height: 14px;
           }
         }
 
-        /* مجموعة التحكم في أعلى اليمين - تم إصلاح تصميمها */
-        .sooq-map-controls {
-          position: fixed;
-          top: 20px;
-          right: 20px;
-          z-index: 1000000;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 12px;
-        }
-
-        @media (max-width: 768px) {
-          .sooq-map-controls {
-            top: calc(env(safe-area-inset-top, 0px) + 10px);
-            right: 10px;
-            gap: 8px;
-          }
-        }
-
-        /* زر تحديد الموقع - أيقونة جديدة */
+        /* زر تحديد الموقع في أسفل اليسار */
         .sooq-locateBtn {
-          width: 44px;
-          height: 44px;
-          border-radius: 12px;
+          position: fixed;
+          left: 20px;
+          bottom: calc(env(safe-area-inset-bottom, 0px) + 80px);
+          z-index: 1000000;
+          width: 50px;
+          height: 50px;
+          border-radius: 50%;
           border: none;
-          background: rgba(255, 255, 255, 0.95);
+          background: white;
           color: #333;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-          backdrop-filter: blur(8px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
           transition: all 0.2s ease;
         }
 
         .sooq-locateBtn:hover {
-          background: rgba(255, 255, 255, 1);
+          background: #f8f9fa;
           transform: scale(1.05);
-          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
         }
 
         .sooq-locateBtn.isActive {
@@ -1379,78 +1358,32 @@ export default function HomeMapView({ listings = [] }) {
         }
 
         .sooq-locateBtn svg {
-          width: 20px;
-          height: 20px;
+          width: 24px;
+          height: 24px;
         }
 
         @media (max-width: 768px) {
           .sooq-locateBtn {
-            width: 40px;
-            height: 40px;
+            left: 15px;
+            bottom: calc(env(safe-area-inset-bottom, 0px) + 60px);
+            width: 44px;
+            height: 44px;
           }
           
           .sooq-locateBtn svg {
-            width: 18px;
-            height: 18px;
+            width: 20px;
+            height: 20px;
           }
         }
 
-        /* تحسين عرض عناصر التحكم الخاصة بـ Leaflet */
-        .leaflet-top.leaflet-right {
-          top: 80px !important;
-          right: 20px !important;
-        }
-
+        /* إخفاء أزرار التحكم في التكبير/التصغير */
         .leaflet-control-zoom {
-          border: none !important;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
-          border-radius: 12px !important;
-          overflow: hidden;
-          backdrop-filter: blur(8px);
-          background: rgba(255, 255, 255, 0.95) !important;
-        }
-
-        .leaflet-control-zoom a {
-          width: 44px !important;
-          height: 44px !important;
-          line-height: 44px !important;
-          background: transparent !important;
-          color: #333 !important;
-          border: none !important;
-          border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
-        }
-
-        .leaflet-control-zoom a:hover {
-          background: rgba(0, 0, 0, 0.05) !important;
-        }
-
-        .leaflet-control-zoom a:first-child {
-          border-top-left-radius: 12px !important;
-          border-top-right-radius: 12px !important;
-        }
-
-        .leaflet-control-zoom a:last-child {
-          border-bottom: none !important;
-          border-bottom-left-radius: 12px !important;
-          border-bottom-right-radius: 12px !important;
-        }
-
-        @media (max-width: 768px) {
-          .leaflet-top.leaflet-right {
-            top: 140px !important;
-            right: 10px !important;
-          }
-          
-          .leaflet-control-zoom a {
-            width: 40px !important;
-            height: 40px !important;
-            line-height: 40px !important;
-          }
+          display: none !important;
         }
 
         @media (hover: none) and (pointer: coarse) {
           .leaflet-control-zoom {
-            display: flex !important;
+            display: none !important;
           }
         }
 
