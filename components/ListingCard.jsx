@@ -118,18 +118,18 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           }
           .lc-title{
             font-weight: 900;
-            font-size: 15px;
+            font-size: 14px;
             line-height: 1.4;
-            min-height: 42px;
+            min-height: 38px;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
             overflow: hidden;
           }
           .lc-desc{
-            font-size: 13px;
+            font-size: 12.5px;
             line-height: 1.5;
-            min-height: 40px;
+            min-height: 36px;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
@@ -193,6 +193,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
 
       <style jsx>{`
         .lc-grid{
+          overflow: hidden;
           display: flex;
           flex-direction: column;
           height: 100%;
@@ -203,12 +204,14 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           flex-direction: column;
         }
 
+        .lc-body{ padding: 10px; }
+
         .lc-imgWrap{
           overflow: hidden;
           border-radius: 12px;
           border: 1px solid #e2e8f0;
           background: #ffffff;
-          height: 200px;
+          height: 170px;
           width: 100%;
           position: relative;
         }
@@ -219,7 +222,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           display: block;
         }
         .lc-imgEmpty{
-          height: 200px;
+          height: 170px;
           border-radius: 12px;
           border: 1px solid #e2e8f0;
           background: #f8fafc;
@@ -235,17 +238,17 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           font-weight: 900;
           margin-bottom: 4px;
           line-height: 1.4;
-          min-height: 42px;
-          font-size: 15px;
+          min-height: 38px;
+          font-size: 14px;
           display: -webkit-box;
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
           overflow: hidden;
         }
         .lc-desc{
-          font-size: 13px;
+          font-size: 12.5px;
           line-height: 1.5;
-          min-height: 40px;
+          min-height: 36px;
           display: -webkit-box;
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
@@ -253,10 +256,10 @@ export default function ListingCard({ listing, variant = 'grid' }) {
         }
 
         @media (max-width: 768px) {
-          .lc-imgWrap, .lc-imgEmpty { height: 170px; }
+          .lc-imgWrap, .lc-imgEmpty { height: 150px; }
         }
         @media (max-width: 480px) {
-          .lc-imgWrap, .lc-imgEmpty { height: 155px; }
+          .lc-imgWrap, .lc-imgEmpty { height: 140px; }
           .lc-title { font-size: 14px; min-height: 39px; }
         }
       `}</style>
