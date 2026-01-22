@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '@/lib/firebaseClient';
+import { normalizeCategoryKey } from '@/lib/categories';
 import ListingCard from '@/components/ListingCard';
 
 // ✅ Taxonomy (الفروع الهرمية)
@@ -92,86 +93,8 @@ import {
 
 const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), { ssr: false });
 
-// ✅ خرائط توافق (عربي/إنجليزي/اختلافات شائعة)
-const ALIASES = {
-  real_estate: 'realestate',
-  'heavy-equipment': 'heavy_equipment',
-  heavyEquipment: 'heavy_equipment',
-  net: 'networks',
-  network: 'networks',
 
-  // عربي -> سلاج
-  عقارات: 'realestate',
-  العقارات: 'realestate',
-  سيارات: 'cars',
-  السيارات: 'cars',
-  جوالات: 'phones',
-  الجوالات: 'phones',
-  الكترونيات: 'electronics',
-  إلكترونيات: 'electronics',
-  الإلكترونيات: 'electronics',
-  شبكات: 'networks',
-  صيانة: 'maintenance',
-  خدمات: 'services',
-  وظائف: 'jobs',
-  'طاقة شمسية': 'solar',
-};
-
-function normalizeSlug(v) {
-  const raw = String(v || '').trim();
-  if (!raw) return '';
-  const mapped = ALIASES[raw] || raw;
-
-  return String(mapped)
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '_')
-    .replace(/-+/g, '_');
-}
-
-// ✅ وضع صارم: يطابق category قيمة القسم الرسمية فقط (بدون توسعة لقيَم قديمة)
-const STRICT_CATEGORY_MATCH = true;
-
-// ✅ لتفادي ظهور أقسام "فاضية" بسبب اختلافات حفظ قيمة category في الإعلانات القديمة
-// نجلب نفس القسم بعدة قيم محتملة (حتى 10 قيم - حد Firestore لــ in)
-function categoryVariants(single) {
-  const s = normalizeSlug(single);
-  if (!s) return [];
-  if (STRICT_CATEGORY_MATCH) return [s];
-
-  const variantsMap = {
-    realestate: ['realestate', 'real_estate', 'real-estate', 'real estate', 'عقارات', 'العقارات'],
-    cars: ['cars', 'car', 'سيارات', 'السيارات'],
-    phones: ['phones', 'phone', 'mobiles', 'mobile', 'جوالات', 'الجوالات', 'موبايلات'],
-    electronics: ['electronics', 'electronic', 'إلكترونيات', 'الكترونيات', 'الإلكترونيات'],
-    motorcycles: ['motorcycles', 'motorcycle', 'دراجات', 'دراجات نارية', 'دراجات_نارية'],
-    heavy_equipment: ['heavy_equipment', 'heavy-equipment', 'heavy equipment', 'heavyequipment', 'معدات ثقيلة', 'معدات_ثقيلة'],
-    solar: ['solar', 'طاقة شمسية', 'طاقة_شمسية'],
-    networks: ['networks', 'network', 'net', 'شبكات', 'نت وشبكات', 'نت_وشبكات', 'نت_و_شبكات'],
-    maintenance: ['maintenance', 'صيانة'],
-    furniture: ['furniture', 'أداث', 'اثاث', 'أثاث'],
-    home_tools: ['home_tools', 'home tools', 'hometools', 'أدوات منزلية', 'ادوات منزلية', 'أدوات_منزلية', 'ادوات_منزلية'],
-    clothes: ['clothes', 'ملابس'],
-    animals: ['animals', 'animals_birds', 'animals-birds', 'حيوانات', 'حيوانات وطيور', 'حيوانات_وطيور'],
-    jobs: ['jobs', 'وظائف'],
-    services: ['services', 'خدمات'],
-    other: ['other', 'أخرى', 'اخرى'],
-  };
-
-  const list = variantsMap[s] || [s];
-  const uniq = [];
-  const seen = new Set();
-  for (const v of list) {
-    const nv = normalizeSlug(v);
-    if (!nv) continue;
-    if (seen.has(nv)) continue;
-    seen.add(nv);
-    uniq.push(nv);
-    if (uniq.length >= 10) break;
-  }
-  return uniq.length ? uniq : [s];
-}
-
+// ✅ تطبيع أن keys الأقسام يتم حصراً عبر lib/categories.js
 function safeStr(v) {
   return String(v || '').trim();
 }
@@ -440,9 +363,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
   }, []);
 
   const catsRaw = Array.isArray(category) ? category : [category];
-  const cats = catsRaw.map(normalizeSlug).filter(Boolean);
+  const cats = catsRaw.map(normalizeCategoryKey).filter(Boolean);
   const single = cats.length === 1 ? cats[0] : '';
-  const variants = useMemo(() => categoryVariants(single), [single]);
 
   // ✅ States للفروع الهرمية
   const [carMake, setCarMake] = useState('');
@@ -517,7 +439,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
     try {
       const ref = db
         .collection('listings')
-        .where('category', variants.length > 1 ? 'in' : '==', variants.length > 1 ? variants : single)
+        .where('category', '==', single)
         .orderBy('createdAt', 'desc')
         .limit(PAGE_SIZE);
 
@@ -551,7 +473,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
     try {
       const ref = db
         .collection('listings')
-        .where('category', variants.length > 1 ? 'in' : '==', variants.length > 1 ? variants : single)
+        .where('category', '==', single)
         .orderBy('createdAt', 'desc')
         .limit(PAGE_SIZE);
 
@@ -592,7 +514,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
 
       const ref = db
         .collection('listings')
-        .where('category', variants.length > 1 ? 'in' : '==', variants.length > 1 ? variants : single)
+        .where('category', '==', single)
         .orderBy('createdAt', 'desc')
         .startAfter(lastDoc)
         .limit(PAGE_SIZE);
@@ -986,7 +908,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
   );
 
   const TaxonomyInner = () => {
-    if (!single || itemsWithTax.length === 0) return null;
+    if (!single) return null;
 
     // cars (make -> model)
     if (single === 'cars') {
