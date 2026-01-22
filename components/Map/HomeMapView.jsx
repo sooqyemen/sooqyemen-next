@@ -216,7 +216,7 @@ const CAT_STYLE = {
   networks: { color: '#14b8a6', icon: '📡', label: 'نت وشبكات' },
   maintenance: { color: '#64748b', icon: '🛠️', label: 'صيانة' },
   furniture: { color: '#c2410c', icon: '🛋️', label: 'أثاث' },
-  home_tools: { color: '#22c55e', icon: '🧹', label: 'أدوات' },
+  home_tools: { color: '#22c55e', icon: '🧹', label: 'أدوات منزلية' },
   clothes: { color: '#db2777', icon: '👕', label: 'ملابس' },
   animals: { color: '#84cc16', icon: '🐑', label: 'حيوانات' },
   jobs: { color: '#334155', icon: '💼', label: 'وظائف' },
