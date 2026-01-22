@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { normalizeCategoryKey } from '@/lib/categories';
 
 // ✅ Taxonomy (تصنيف هرمي للفروع)
 import {
@@ -74,35 +75,7 @@ function toYERLocal(amount, cur) {
 }
 
 
-function normalizeCatKey(v) {
-  const raw = String(v || '').trim();
-  if (!raw) return '';
-  const lowered = raw.toLowerCase();
-  const norm = lowered.replace(/\s+/g, '_').replace(/-+/g, '_').replace(/__+/g, '_');
 
-  const map = {
-    real_estate: 'realestate',
-    'real estate': 'realestate',
-    realestate: 'realestate',
-    cars: 'cars',
-    car: 'cars',
-    phones: 'phones',
-    phone: 'phones',
-    mobiles: 'phones',
-    mobile: 'phones',
-
-    // عربي
-    عقارات: 'realestate',
-    العقارات: 'realestate',
-    سيارات: 'cars',
-    السيارات: 'cars',
-    جوالات: 'phones',
-    الجوالات: 'phones',
-    موبايلات: 'phones',
-  };
-
-  return map[norm] || map[raw] || norm;
-}
 
 const slugKey = (v) =>
   String(v || '')
@@ -225,7 +198,7 @@ export default function EditListingPage() {
           const arr = snap.docs
             .map((doc) => {
               const d = doc.data() || {};
-              const slug = normalizeCatKey(d.slug || d.key || d.id || doc.id);
+              const slug = normalizeCategoryKey(d.slug || d.key || d.id || doc.id);
               const name = String(d.name || d.label || slug || '').trim();
               const active = d.active !== false;
               if (!slug || !name || !active) return null;
@@ -275,7 +248,7 @@ export default function EditListingPage() {
   useEffect(() => {
     if (catsLoading) return;
 
-    const norm = normalizeCatKey(category);
+    const norm = normalizeCategoryKey(category);
     if (!norm) return;
 
     const exists = cats.some((x) => x.slug === norm);
@@ -287,7 +260,7 @@ export default function EditListingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catsLoading, cats, category]);
 
-  const catKey = useMemo(() => normalizeCatKey(category), [category]);
+  const catKey = useMemo(() => normalizeCategoryKey(category), [category]);
 
   const carModelsForMake = useMemo(() => {
     const mk = String(carMake || '').trim();
@@ -321,7 +294,7 @@ export default function EditListingPage() {
         setTitle(String(d.title || ''));
         setDesc(String(d.description || ''));
         setCity(String(d.city || ''));
-        setCategory(normalizeCatKey(d.category || 'solar') || 'other');
+        setCategory(normalizeCategoryKey(d.category || 'solar') || 'other');
 
         // ✅ فروع الأقسام (Taxonomy)
         setCarMake(String(d.carMake || ''));
@@ -496,7 +469,7 @@ export default function EditListingPage() {
 
     if (!city.trim()) e.city = 'الرجاء إدخال المدينة';
 
-    const cKey = normalizeCatKey(category);
+    const cKey = normalizeCategoryKey(category);
     if (!cKey) e.category = 'الرجاء اختيار القسم';
 
     if (!price || isNaN(price) || Number(price) <= 0) e.price = 'الرجاء إدخال سعر صحيح';
@@ -648,7 +621,7 @@ export default function EditListingPage() {
 
     setSaving(true);
     try {
-      const cKey = normalizeCatKey(category);
+      const cKey = normalizeCategoryKey(category);
       const priceYER = toYERLocal(price, currency);
       const phoneDigits = String(phone || '').replace(/\D/g, '');
 
