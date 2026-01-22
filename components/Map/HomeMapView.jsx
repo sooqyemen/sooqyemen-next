@@ -50,158 +50,294 @@ function writeSeen(set) {
   } catch {}
 }
 
-// ✅ توحيد ID
+// ✅ توحيد ID - محسّن للتعامل مع أنواع مختلفة
 function getListingId(listing) {
-  return (
-    listing?.id ??
-    listing?._id ??
-    listing?.docId ??
-    listing?.uid ??
-    listing?.slug ??
-    listing?.listingId ??
-    null
-  );
+  if (!listing) return null;
+  
+  // جرب جميع الحقول الممكنة
+  const possibleIdFields = [
+    'id', '_id', 'docId', 'uid', 'slug', 
+    'listingId', 'adId', 'postId', 'itemId'
+  ];
+  
+  for (const field of possibleIdFields) {
+    if (listing[field] != null && listing[field] !== '') {
+      return String(listing[field]);
+    }
+  }
+  
+  // إذا لم يوجد ID، نولد واحدًا مؤقتًا بناءً على المحتوى
+  return `temp_${JSON.stringify(listing).hashCode()}`;
 }
 
-// ✅ توحيد القسم
+// ✅ دالة مساعدة لإنشاء hash من النص
+String.prototype.hashCode = function() {
+  let hash = 0;
+  for (let i = 0; i < this.length; i++) {
+    const char = this.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash);
+};
+
+// ✅ توحيد القسم - محسّن لالتقاط جميع الأنماط
 function getListingCategoryValue(listing) {
-  return (
-    listing?.rootCategory ??
-    listing?.category ??
-    listing?.section ??
-    listing?.cat ??
-    listing?.categoryKey ??
-    listing?.category_id ??
-    listing?.categoryId ??
-    listing?.type ??
-    'other'
-  );
+  if (!listing) return 'other';
+  
+  // جرب جميع الحقول الممكنة للقسم
+  const possibleCategoryFields = [
+    'rootCategory', 'category', 'section', 'cat',
+    'categoryKey', 'category_id', 'categoryId',
+    'type', 'mainCategory', 'subCategory', 'group'
+  ];
+  
+  for (const field of possibleCategoryFields) {
+    if (listing[field] != null && listing[field] !== '') {
+      const value = listing[field];
+      if (typeof value === 'string' || typeof value === 'number') {
+        return String(value).trim();
+      }
+    }
+  }
+  
+  return 'other';
 }
 
-// ✅ توحيد الإحداثيات
+// ✅ توحيد الإحداثيات - محسّن للتعامل مع تنسيقات متنوعة
 function normalizeCoords(listing) {
+  if (!listing) return null;
+  
   const toNum = (v) => {
-    const n = typeof v === 'string' ? parseFloat(v) : v;
+    if (v == null) return null;
+    const n = typeof v === 'string' ? parseFloat(v.replace(',', '.')) : v;
     return Number.isFinite(n) ? n : null;
   };
 
-  // 1) coords: [lat,lng]
-  if (Array.isArray(listing?.coords) && listing.coords.length === 2) {
-    const lat = toNum(listing.coords[0]);
-    const lng = toNum(listing.coords[1]);
+  // أولاً: تحقق من الحقول المباشرة
+  const lat = toNum(listing.lat ?? listing.latitude ?? listing.latitud);
+  const lng = toNum(listing.lng ?? listing.lon ?? listing.long ?? listing.longitude);
+  
+  if (lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+    return [lat, lng];
+  }
+
+  // ثانياً: تحقق من كائن coords
+  if (listing.coords) {
+    if (Array.isArray(listing.coords) && listing.coords.length >= 2) {
+      const lat = toNum(listing.coords[0]);
+      const lng = toNum(listing.coords[1]);
+      if (lat != null && lng != null) return [lat, lng];
+    }
+    if (listing.coords.lat != null && listing.coords.lng != null) {
+      const lat = toNum(listing.coords.lat);
+      const lng = toNum(listing.coords.lng);
+      if (lat != null && lng != null) return [lat, lng];
+    }
+  }
+
+  // ثالثاً: تحقق من كائن location
+  if (listing.location) {
+    const lat = toNum(listing.location.lat ?? listing.location.latitude);
+    const lng = toNum(listing.location.lng ?? listing.location.lon ?? listing.location.longitude);
     if (lat != null && lng != null) return [lat, lng];
   }
 
-  // 2) coords: {lat,lng}
-  if (listing?.coords?.lat != null && listing?.coords?.lng != null) {
-    const lat = toNum(listing.coords.lat);
-    const lng = toNum(listing.coords.lng);
+  // رابعاً: تحقق من كائن geo
+  if (listing.geo) {
+    const lat = toNum(listing.geo.lat ?? listing.geo.latitude);
+    const lng = toNum(listing.geo.lng ?? listing.geo.lon ?? listing.geo.longitude);
     if (lat != null && lng != null) return [lat, lng];
   }
 
-  // 3) lat/lng مباشرة
-  if (listing?.lat != null && (listing?.lng != null || listing?.lon != null)) {
-    const lat = toNum(listing.lat);
-    const lng = toNum(listing.lng ?? listing.lon);
-    if (lat != null && lng != null) return [lat, lng];
-  }
-
-  // 4) latitude/longitude
-  if (listing?.latitude != null && listing?.longitude != null) {
-    const lat = toNum(listing.latitude);
-    const lng = toNum(listing.longitude);
-    if (lat != null && lng != null) return [lat, lng];
-  }
-
-  // 5) location / geo
-  if (listing?.location?.lat != null && listing?.location?.lng != null) {
-    const lat = toNum(listing.location.lat);
-    const lng = toNum(listing.location.lng);
-    if (lat != null && lng != null) return [lat, lng];
-  }
-  if (listing?.geo?.lat != null && (listing?.geo?.lng != null || listing?.geo?.lon != null)) {
-    const lat = toNum(listing.geo.lat);
-    const lng = toNum(listing.geo.lng ?? listing.geo.lon);
-    if (lat != null && lng != null) return [lat, lng];
+  // خامساً: تحقق من حقل address إذا كان يحتوي على إحداثيات
+  if (listing.address && typeof listing.address === 'string') {
+    const coordMatch = listing.address.match(/(-?\d+\.?\d*),\s*(-?\d+\.?\d*)/);
+    if (coordMatch) {
+      const lat = toNum(coordMatch[1]);
+      const lng = toNum(coordMatch[2]);
+      if (lat != null && lng != null) return [lat, lng];
+    }
   }
 
   return null;
 }
 
+// ✅ توسيع حدود اليمن لتشمل جميع المناطق
+const YEMEN_EXPANDED_BOUNDS = [
+  [11.0, 40.0], // جنوب غرب موسع
+  [20.0, 55.0], // شمال شرق موسع
+];
+
 function inYemen([lat, lng]) {
   return (
-    lat >= YEMEN_BOUNDS[0][0] &&
-    lat <= YEMEN_BOUNDS[1][0] &&
-    lng >= YEMEN_BOUNDS[0][1] &&
-    lng <= YEMEN_BOUNDS[1][1]
+    lat >= YEMEN_EXPANDED_BOUNDS[0][0] &&
+    lat <= YEMEN_EXPANDED_BOUNDS[1][0] &&
+    lng >= YEMEN_EXPANDED_BOUNDS[0][1] &&
+    lng <= YEMEN_EXPANDED_BOUNDS[1][1]
   );
 }
 
-// ✅ توحيد اسم القسم
+// ✅ توحيد اسم القسم - محسّن مع المزيد من المرادفات
 function normalizeCategoryKey(v) {
-  const raw = String(v || '').trim();
+  if (v == null) return 'other';
+  
+  const raw = String(v).trim().toLowerCase();
   if (!raw) return 'other';
-  const lowered = raw.toLowerCase();
-  const norm = lowered.replace(/\s+/g, '_').replace(/-/g, '_').replace(/__+/g, '_');
+  
+  // تنظيف النص
+  const cleaned = raw
+    .replace(/\s+/g, '_')
+    .replace(/-/g, '_')
+    .replace(/__+/g, '_')
+    .replace(/[^\w\u0600-\u06FF_]/g, '') // إزالة الرموز الخاصة مع الحفاظ على العربية
+    .trim();
 
-  const map = {
-    real_estate: 'realestate',
-    realestate: 'realestate',
-    mobiles: 'phones',
-    mobile: 'phones',
-    phones: 'phones',
-    phone: 'phones',
-    animals_birds: 'animals',
-    animalsbirds: 'animals',
-    animals: 'animals',
-    heavy_equipment: 'heavy_equipment',
-    heavyequipment: 'heavy_equipment',
-    'heavy equipment': 'heavy_equipment',
-    network: 'networks',
-    networks: 'networks',
-    maintenance: 'maintenance',
-    home_tools: 'home_tools',
-    hometools: 'home_tools',
-    'home tools': 'home_tools',
-    cars: 'cars',
-    electronics: 'electronics',
-    motorcycles: 'motorcycles',
-    solar: 'solar',
-    furniture: 'furniture',
-    clothes: 'clothes',
-    jobs: 'jobs',
-    services: 'services',
-    other: 'other',
-
-    // عربي
-    سيارات: 'cars',
-    عقارات: 'realestate',
-    جوالات: 'phones',
-    إلكترونيات: 'electronics',
-    الكترونيات: 'electronics',
-    دراجات_نارية: 'motorcycles',
-    دراجات: 'motorcycles',
-    معدات_ثقيلة: 'heavy_equipment',
-    طاقة_شمسية: 'solar',
-    نت_وشبكات: 'networks',
-    نت_و_شبكات: 'networks',
-    صيانة: 'maintenance',
-    أثاث: 'furniture',
-    اثاث: 'furniture',
-    ملابس: 'clothes',
-    حيوانات_وطيور: 'animals',
-    حيوانات: 'animals',
-    وظائف: 'jobs',
-    خدمات: 'services',
-    اخرى: 'other',
-    أخرى: 'other',
-    أدوات_منزلية: 'home_tools',
-    ادوات_منزلية: 'home_tools',
-    'أدوات منزلية': 'home_tools',
-    'ادوات منزلية': 'home_tools',
+  // قاموس موسع للمرادفات
+  const synonymMap = {
+    // سيارات
+    'سيارات': 'cars',
+    'سيارة': 'cars',
+    'سياره': 'cars',
+    'car': 'cars',
+    'automotive': 'cars',
+    'مركبات': 'cars',
+    
+    // عقارات
+    'عقارات': 'realestate',
+    'عقار': 'realestate',
+    'عقارية': 'realestate',
+    'real_estate': 'realestate',
+    'realestate': 'realestate',
+    'property': 'realestate',
+    'properties': 'realestate',
+    
+    // جوالات
+    'جوالات': 'phones',
+    'جوال': 'phones',
+    'موبايل': 'phones',
+    'موبيل': 'phones',
+    'mobiles': 'phones',
+    'mobile': 'phones',
+    'هواتف': 'phones',
+    'هاتف': 'phones',
+    
+    // إلكترونيات
+    'إلكترونيات': 'electronics',
+    'الكترونيات': 'electronics',
+    'الكتروني': 'electronics',
+    'electronic': 'electronics',
+    'electronics': 'electronics',
+    'اجهزة': 'electronics',
+    'أجهزة': 'electronics',
+    
+    // دراجات
+    'دراجات_نارية': 'motorcycles',
+    'دراجات': 'motorcycles',
+    'دراجة': 'motorcycles',
+    'motorbikes': 'motorcycles',
+    'motorcycles': 'motorcycles',
+    'bikes': 'motorcycles',
+    
+    // معدات ثقيلة
+    'معدات_ثقيلة': 'heavy_equipment',
+    'معداتثقيلة': 'heavy_equipment',
+    'معدات': 'heavy_equipment',
+    'equipment': 'heavy_equipment',
+    'heavy_equipment': 'heavy_equipment',
+    'heavyequipment': 'heavy_equipment',
+    'مكائن': 'heavy_equipment',
+    
+    // طاقة شمسية
+    'طاقة_شمسية': 'solar',
+    'طاقةشمسية': 'solar',
+    'شمسية': 'solar',
+    'solar': 'solar',
+    'solar_energy': 'solar',
+    
+    // نت وشبكات
+    'نت_وشبكات': 'networks',
+    'نت_و_شبكات': 'networks',
+    'نتوشبكات': 'networks',
+    'شبكات': 'networks',
+    'network': 'networks',
+    'networks': 'networks',
+    'انترنت': 'networks',
+    
+    // صيانة
+    'صيانة': 'maintenance',
+    'maintenance': 'maintenance',
+    'تصليح': 'maintenance',
+    'اصلاح': 'maintenance',
+    'repair': 'maintenance',
+    
+    // أثاث
+    'أثاث': 'furniture',
+    'اثاث': 'furniture',
+    'furniture': 'furniture',
+    'أثاث_منزلي': 'furniture',
+    'اثاث_منزلي': 'furniture',
+    
+    // أدوات منزلية
+    'أدوات_منزلية': 'home_tools',
+    'ادوات_منزلية': 'home_tools',
+    'أدواتمنزلية': 'home_tools',
+    'ادواتمنزلية': 'home_tools',
+    'أدوات': 'home_tools',
+    'ادوات': 'home_tools',
+    'tools': 'home_tools',
+    
+    // ملابس
+    'ملابس': 'clothes',
+    'clothes': 'clothes',
+    'clothing': 'clothes',
+    'أزياء': 'clothes',
+    'ازياء': 'clothes',
+    'fashion': 'clothes',
+    
+    // حيوانات
+    'حيوانات_وطيور': 'animals',
+    'حيوانات': 'animals',
+    'animals': 'animals',
+    'pets': 'animals',
+    'طيور': 'animals',
+    'birds': 'animals',
+    
+    // وظائف
+    'وظائف': 'jobs',
+    'وظيفة': 'jobs',
+    'jobs': 'jobs',
+    'employment': 'jobs',
+    'عمل': 'jobs',
+    'وظيفه': 'jobs',
+    
+    // خدمات
+    'خدمات': 'services',
+    'service': 'services',
+    'services': 'services',
+    
+    // أخرى
+    'اخرى': 'other',
+    'أخرى': 'other',
+    'other': 'other',
+    'متنوع': 'other',
+    'مختلف': 'other',
+    'general': 'other',
   };
 
-  return map[norm] || map[raw] || norm || 'other';
+  // أولاً: ابحث عن تطابق مباشر
+  if (synonymMap[cleaned]) {
+    return synonymMap[cleaned];
+  }
+
+  // ثانياً: ابحث عن تطابق جزئي
+  for (const [key, value] of Object.entries(synonymMap)) {
+    if (cleaned.includes(key) || key.includes(cleaned)) {
+      return value;
+    }
+  }
+
+  return 'other';
 }
 
 // ✅ ألوان + أيقونات لكل قسم
@@ -216,7 +352,7 @@ const CAT_STYLE = {
   networks: { color: '#14b8a6', icon: '📡', label: 'نت وشبكات' },
   maintenance: { color: '#64748b', icon: '🛠️', label: 'صيانة' },
   furniture: { color: '#c2410c', icon: '🛋️', label: 'أثاث' },
-  home_tools: { color: '#22c55e', icon: '🧹', label: 'أدوات منزلية' },
+  home_tools: { color: '#22c55e', icon: '🧹', label: 'أدوات' },
   clothes: { color: '#db2777', icon: '👕', label: 'ملابس' },
   animals: { color: '#84cc16', icon: '🐑', label: 'حيوانات' },
   jobs: { color: '#334155', icon: '💼', label: 'وظائف' },
@@ -224,25 +360,8 @@ const CAT_STYLE = {
   other: { color: '#475569', icon: '📦', label: 'أخرى' },
 };
 
-// ✅ جميع الأقسام المتاحة (بغض النظر عن وجود إعلانات أم لا)
-const ALL_CATEGORIES = [
-  'cars',
-  'realestate',
-  'phones',
-  'electronics',
-  'motorcycles',
-  'heavy_equipment',
-  'solar',
-  'networks',
-  'maintenance',
-  'furniture',
-  'home_tools',
-  'clothes',
-  'animals',
-  'jobs',
-  'services',
-  'other'
-];
+// ✅ جميع الأقسام المتاحة
+const ALL_CATEGORIES = Object.keys(CAT_STYLE);
 
 function getCatStyle(categoryValue) {
   const key = normalizeCategoryKey(categoryValue);
@@ -266,13 +385,41 @@ function buildDivIcon({ color, icon }, isSeen) {
 
 // ✅ صورة الإعلان
 function pickImage(listing) {
-  const imgs = listing?.images;
-  if (Array.isArray(imgs) && imgs.length > 0) {
-    const first = imgs[0];
-    if (typeof first === 'string') return first;
-    if (first && typeof first === 'object') return first.url || first.src || first.path || null;
+  if (!listing) return null;
+  
+  // جرب عدة حقول للصورة
+  const imageFields = [
+    'image', 'cover', 'thumbnail', 'mainImage', 'imageUrl',
+    'photo', 'picture', 'img', 'featuredImage'
+  ];
+  
+  for (const field of imageFields) {
+    if (listing[field]) {
+      if (typeof listing[field] === 'string') return listing[field];
+      if (typeof listing[field] === 'object' && listing[field].url) {
+        return listing[field].url;
+      }
+    }
   }
-  return listing?.image || listing?.cover || listing?.thumbnail || listing?.mainImage || listing?.imageUrl || null;
+  
+  // تحقق من مصفوفة الصور
+  if (Array.isArray(listing.images) && listing.images.length > 0) {
+    const firstImg = listing.images[0];
+    if (typeof firstImg === 'string') return firstImg;
+    if (firstImg && typeof firstImg === 'object') {
+      return firstImg.url || firstImg.src || firstImg.path || null;
+    }
+  }
+  
+  if (Array.isArray(listing.photos) && listing.photos.length > 0) {
+    const firstPhoto = listing.photos[0];
+    if (typeof firstPhoto === 'string') return firstPhoto;
+    if (firstPhoto && typeof firstPhoto === 'object') {
+      return firstPhoto.url || firstPhoto.src || firstPhoto.path || null;
+    }
+  }
+  
+  return null;
 }
 
 function useIsMobile() {
@@ -305,30 +452,24 @@ function useIsTouchDevice() {
 
 export default function HomeMapView({ listings = [] }) {
   const [seen, setSeen] = useState(() => new Set());
+  const [debugMode, setDebugMode] = useState(false);
+  const [filteredOutListings, setFilteredOutListings] = useState([]);
 
   const isMobile = useIsMobile();
   const isTouch = useIsTouchDevice();
 
-  // ✅ خريطتين منفصلتين: واحدة داخل الصفحة + واحدة ملء الشاشة
   const [pageMap, setPageMap] = useState(null);
   const [fsMap, setFsMap] = useState(null);
 
-  // فلتر الأقسام
   const [activeCat, setActiveCat] = useState('all');
+  const [sub1, setSub1] = useState('');
+  const [sub2, setSub2] = useState('');
 
-  // ✅ فلاتر هرمية
-  const [sub1, setSub1] = useState(''); // cars: carMake | phones: phoneBrand | realestate: dealType
-  const [sub2, setSub2] = useState(''); // realestate: propertyType
-
-  // فلترة القريب
   const [nearbyOn, setNearbyOn] = useState(false);
-  const [nearbyBounds, setNearbyBounds] = useState(null); // [[south, west],[north,east]]
+  const [nearbyBounds, setNearbyBounds] = useState(null);
 
-  // ملء الشاشة عبر Portal
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [portalReady, setPortalReady] = useState(false);
-
-  // فتح تلقائي للجوال عند أول تفاعل
   const [openedOnce, setOpenedOnce] = useState(false);
 
   useEffect(() => {
@@ -339,7 +480,6 @@ export default function HomeMapView({ listings = [] }) {
     setPortalReady(true);
   }, []);
 
-  // ✅ قفل تمرير الصفحة أثناء ملء الشاشة
   useEffect(() => {
     if (!isFullscreen) return;
     const prev = document.body.style.overflow;
@@ -349,7 +489,6 @@ export default function HomeMapView({ listings = [] }) {
     };
   }, [isFullscreen]);
 
-  // ✅ مزامنة العرض بين الخريطتين (عند فتح/إغلاق)
   useEffect(() => {
     if (!isFullscreen) return;
     if (!pageMap || !fsMap) return;
@@ -366,7 +505,6 @@ export default function HomeMapView({ listings = [] }) {
     } catch {}
   }, [isFullscreen, pageMap, fsMap]);
 
-  // ✅ invalidateSize للماب الحالي
   useEffect(() => {
     const m = isFullscreen ? fsMap : pageMap;
     if (!m) return;
@@ -388,7 +526,6 @@ export default function HomeMapView({ listings = [] }) {
     };
   }, [pageMap, fsMap, isFullscreen]);
 
-  // ✅ فتح ملء الشاشة عند النقر على الخريطة
   const handleMapClick = () => {
     if (isMobile && openedOnce) return;
     setIsFullscreen(true);
@@ -396,19 +533,46 @@ export default function HomeMapView({ listings = [] }) {
   };
 
   const points = useMemo(() => {
-    return (listings || [])
-      .map((l) => {
+    const filteredOut = [];
+    const processed = (listings || [])
+      .map((l, index) => {
         const id = getListingId(l);
-        if (!id) return null;
+        
+        if (!id) {
+          filteredOut.push({
+            listing: l,
+            reason: 'لا يوجد ID',
+            index
+          });
+          return null;
+        }
 
         const c = normalizeCoords(l);
-        if (!c) return null;
-        if (!inYemen(c)) return null;
+        
+        if (!c) {
+          filteredOut.push({
+            listing: l,
+            reason: 'لا توجد إحداثيات صالحة',
+            id,
+            index
+          });
+          return null;
+        }
+        
+        if (!inYemen(c)) {
+          filteredOut.push({
+            listing: l,
+            reason: 'خارج حدود اليمن',
+            coords: c,
+            id,
+            index
+          });
+          return null;
+        }
 
         const categoryValue = getListingCategoryValue(l);
         const catKey = normalizeCategoryKey(categoryValue);
-
-        // ✅ infer taxonomy للفروع (حتى لو بيانات قديمة)
+        
         let tax = null;
         try {
           tax = inferListingTaxonomy(l, catKey);
@@ -423,12 +587,21 @@ export default function HomeMapView({ listings = [] }) {
           _categoryValue: categoryValue,
           _catKey: catKey,
           _tax: tax,
+          _originalIndex: index,
         };
       })
       .filter(Boolean);
-  }, [listings]);
+    
+    if (debugMode) {
+      setFilteredOutListings(filteredOut);
+      console.log('✅ الإعلانات المعالجة:', processed.length);
+      console.log('❌ الإعلانات المستبعدة:', filteredOut);
+      console.log('📊 الإجمالي:', listings.length);
+    }
+    
+    return processed;
+  }, [listings, debugMode]);
 
-  // كاش للأيقونات
   const iconCache = useMemo(() => new Map(), []);
   const getMarkerIcon = (categoryValue, isSeenFlag) => {
     const key = normalizeCategoryKey(categoryValue);
@@ -452,14 +625,11 @@ export default function HomeMapView({ listings = [] }) {
     });
   };
 
-  // counts للأقسام
   const catCounts = useMemo(() => {
     const m = new Map();
-    // تهيئة جميع الأقسام بقيمة 0
     ALL_CATEGORIES.forEach(cat => {
       m.set(cat, 0);
     });
-    // حساب الإعلانات الحقيقية
     for (const p of points) {
       const k = p._catKey || 'other';
       m.set(k, (m.get(k) || 0) + 1);
@@ -467,7 +637,6 @@ export default function HomeMapView({ listings = [] }) {
     return m;
   }, [points]);
 
-  // ✅ الآن نعرض جميع الأقسام حتى لو كانت عدداها صفر
   const availableCats = useMemo(() => {
     return ALL_CATEGORIES;
   }, []);
@@ -484,7 +653,6 @@ export default function HomeMapView({ listings = [] }) {
     }
   }, [nearbyBounds]);
 
-  // ✅ أول فلترة: القسم + قريب
   const baseFilteredPoints = useMemo(() => {
     let arr = points;
     if (activeCat !== 'all') arr = arr.filter((p) => p._catKey === activeCat);
@@ -495,7 +663,6 @@ export default function HomeMapView({ listings = [] }) {
     return arr;
   }, [points, activeCat, nearbyOn, boundsObj]);
 
-  // ✅ استخراج المتاح للفروع (من البيانات الحالية فقط)
   const subCounts = useMemo(() => {
     const out = {
       carMake: new Map(),
@@ -523,7 +690,6 @@ export default function HomeMapView({ listings = [] }) {
     return out;
   }, [baseFilteredPoints]);
 
-  // ✅ فلترة نهائية: تطبيق الهرمي
   const filteredPoints = useMemo(() => {
     let arr = baseFilteredPoints;
 
@@ -541,13 +707,11 @@ export default function HomeMapView({ listings = [] }) {
     return arr;
   }, [baseFilteredPoints, activeCat, sub1, sub2]);
 
-  // ✅ تصفير الفروع عند تغيير القسم
   useEffect(() => {
     setSub1('');
     setSub2('');
   }, [activeCat]);
 
-  // ✅ تطبيق قريب حسب حدود الخريطة الحالية
   const applyNearbyFromMap = (m) => {
     if (!m) return;
     try {
@@ -567,12 +731,10 @@ export default function HomeMapView({ listings = [] }) {
     setNearbyBounds(null);
   };
 
-  // ✅ زر تحديد الموقع (في ملء الشاشة فقط)
   const locateMe = () => {
     const m = fsMap;
     if (!m) return;
 
-    // Toggle: لو القريب شغال اضغط مرة ثانية يلغي
     if (nearbyOn) {
       resetNearby();
       return;
@@ -604,7 +766,6 @@ export default function HomeMapView({ listings = [] }) {
 
   const ChipsOverlay = ({ isFullscreenMode = false }) => (
     <div className={`sooq-mapOverlay ${isFullscreenMode ? 'sooq-mapOverlay--fullscreen' : ''}`}>
-      {/* الشريط الأساسي */}
       <div className="sooq-chips" role="tablist" aria-label="فلترة الأقسام">
         <button
           type="button"
@@ -636,7 +797,6 @@ export default function HomeMapView({ listings = [] }) {
         })}
       </div>
 
-      {/* ✅ الفلاتر الهرمية (تظهر تحت الشريط الأساسي) */}
       {activeCat === 'cars' && subCounts.carMake.size > 0 ? (
         <div className="sooq-chips sooq-chips--sub" role="tablist" aria-label="فلترة ماركات السيارات">
           {sub1 ? (
@@ -743,7 +903,7 @@ export default function HomeMapView({ listings = [] }) {
         maxZoom={18}
         zoomControl={!isTouch}
         style={{ height: '100%', width: '100%' }}
-        maxBounds={YEMEN_BOUNDS}
+        maxBounds={YEMEN_EXPANDED_BOUNDS}
         maxBoundsViscosity={1.0}
         scrollWheelZoom
       >
@@ -781,9 +941,47 @@ export default function HomeMapView({ listings = [] }) {
 
   return (
     <div className="card" style={{ padding: 12 }}>
-      <div style={{ fontWeight: 900, marginBottom: 10 }}>🗺️ عرض الإعلانات على الخريطة</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ fontWeight: 900 }}>🗺️ عرض الإعلانات على الخريطة</div>
+        <button 
+          onClick={() => setDebugMode(!debugMode)}
+          style={{
+            padding: '4px 8px',
+            fontSize: 12,
+            background: debugMode ? '#dc2626' : '#3b82f6',
+            color: 'white',
+            border: 'none',
+            borderRadius: 4,
+            cursor: 'pointer'
+          }}
+        >
+          {debugMode ? 'إيقاف التصحيح' : 'تفعيل وضع التصحيح'}
+        </button>
+      </div>
 
-      {/* خريطة داخل الصفحة - الآن قابلة للنقر لفتح ملء الشاشة */}
+      {debugMode && filteredOutListings.length > 0 && (
+        <div style={{
+          background: '#fee2e2',
+          padding: 10,
+          borderRadius: 8,
+          marginBottom: 10,
+          fontSize: 12,
+          border: '1px solid #fecaca'
+        }}>
+          <div style={{ fontWeight: 'bold', color: '#dc2626', marginBottom: 5 }}>
+            ⚠️ {filteredOutListings.length} إعلان مستبعد من الخريطة:
+          </div>
+          <div style={{ maxHeight: 100, overflowY: 'auto' }}>
+            {filteredOutListings.map((item, idx) => (
+              <div key={idx} style={{ marginBottom: 3 }}>
+                <strong>#{item.index}:</strong> {item.reason}
+                {item.coords && ` (${item.coords[0]}, ${item.coords[1]})`}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div
         className="sooq-mapWrap"
         onClick={handleMapClick}
@@ -813,13 +1011,12 @@ export default function HomeMapView({ listings = [] }) {
           : 'لا توجد إعلانات مطابقة للفلتر/أو لا توجد إعلانات لها موقع داخل اليمن.'}
       </div>
 
-      {/* ملء الشاشة */}
       {portalReady && isFullscreen
         ? createPortal(
             <div className="sooq-fsOverlay" role="dialog" aria-label="الخريطة">
-              {/* شريط الفلترة في الأعلى */}
               <ChipsOverlay isFullscreenMode={true} />
 
+              {/* زر الإغلاق في أعلى اليسار */}
               <button 
                 type="button" 
                 className="sooq-fsCloseOnly" 
@@ -833,15 +1030,41 @@ export default function HomeMapView({ listings = [] }) {
                 <MapBody mode="fs" />
               </div>
 
-              <button
-                type="button"
-                className={`sooq-locateBtn ${nearbyOn ? 'isActive' : ''}`}
-                onClick={locateMe}
-                aria-label={nearbyOn ? 'إلغاء القريب من موقعي' : 'تحديد موقعي'}
-                title={nearbyOn ? 'عرض الكل' : 'تحديد موقعي'}
-              >
-                🎯
-              </button>
+              {/* مجموعة التحكم في أعلى اليمين */}
+              <div className="sooq-map-controls">
+                {/* أزرار التكبير والتصغير */}
+                <div className="sooq-zoom-controls">
+                  <button
+                    type="button"
+                    className="sooq-zoom-btn"
+                    onClick={() => fsMap?.zoomIn()}
+                    aria-label="تكبير"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    className="sooq-zoom-btn"
+                    onClick={() => fsMap?.zoomOut()}
+                    aria-label="تصغير"
+                  >
+                    −
+                  </button>
+                </div>
+                
+                {/* زر تحديد الموقع - أيقونة جديدة */}
+                <button
+                  type="button"
+                  className={`sooq-locateBtn ${nearbyOn ? 'isActive' : ''}`}
+                  onClick={locateMe}
+                  aria-label={nearbyOn ? 'إلغاء القريب من موقعي' : 'تحديد موقعي'}
+                  title={nearbyOn ? 'عرض الكل' : 'تحديد موقعي'}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2ZM12 11.5C10.62 11.5 9.5 10.38 9.5 9C9.5 7.62 10.62 6.5 12 6.5C13.38 6.5 14.5 7.62 14.5 9C14.5 10.38 13.38 11.5 12 11.5Z" fill="currentColor"/>
+                  </svg>
+                </button>
+              </div>
             </div>,
             document.body
           )
@@ -1075,10 +1298,12 @@ export default function HomeMapView({ listings = [] }) {
           }
         }
 
+        /* زر الإغلاق - أعلى اليسار */
         .sooq-fsCloseOnly {
           position: fixed;
           top: calc(env(safe-area-inset-top, 0px) + 20px);
-          right: 20px;
+          left: 20px;
+          right: auto;
           z-index: 1000000;
           width: 48px;
           height: 48px;
@@ -1100,35 +1325,98 @@ export default function HomeMapView({ listings = [] }) {
           transform: scale(1.05);
         }
 
-        .sooq-locateBtn {
+        /* مجموعة التحكم في أعلى اليمين */
+        .sooq-map-controls {
           position: fixed;
+          top: calc(env(safe-area-inset-top, 0px) + 20px);
           right: 20px;
-          bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
-          z-index: 999999;
-          width: 56px;
-          height: 56px;
-          border-radius: 999px;
+          z-index: 1000000;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 10px;
+        }
+
+        @media (max-width: 768px) {
+          .sooq-map-controls {
+            top: calc(env(safe-area-inset-top, 0px) + 10px);
+            right: 10px;
+          }
+        }
+
+        /* أزرار التكبير والتصغير */
+        .sooq-zoom-controls {
+          display: flex;
+          flex-direction: column;
+          background: white;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .sooq-zoom-btn {
+          width: 40px;
+          height: 40px;
           border: none;
-          background: #3b82f6;
-          color: white;
-          font-size: 22px;
+          background: white;
+          font-size: 20px;
+          font-weight: bold;
           cursor: pointer;
-          display: inline-flex;
+          display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+          color: #333;
+        }
+
+        .sooq-zoom-btn:hover {
+          background: #f0f0f0;
+        }
+
+        .sooq-zoom-btn:active {
+          background: #e0e0e0;
+        }
+
+        /* زر تحديد الموقع - أيقونة جديدة */
+        .sooq-locateBtn {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          border: none;
+          background: white;
+          color: #333;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
           transition: all 0.2s ease;
         }
 
         .sooq-locateBtn:hover {
-          background: #2563eb;
-          transform: scale(1.05);
+          background: #f0f0f0;
         }
 
         .sooq-locateBtn.isActive {
-          background: #1d4ed8;
-          box-shadow: 0 14px 28px rgba(0, 0, 0, 0.25);
-          transform: translateY(-1px) scale(1.05);
+          background: #3b82f6;
+          color: white;
+        }
+
+        .sooq-locateBtn svg {
+          width: 20px;
+          height: 20px;
+        }
+
+        @media (max-width: 768px) {
+          .sooq-locateBtn,
+          .sooq-zoom-btn {
+            width: 36px;
+            height: 36px;
+          }
+          
+          .sooq-locateBtn svg {
+            width: 18px;
+            height: 18px;
+          }
         }
 
         @media (hover: none) and (pointer: coarse) {
@@ -1189,7 +1477,6 @@ export default function HomeMapView({ listings = [] }) {
           filter: grayscale(0.25);
         }
 
-        /* Scrollbar styling */
         .sooq-chips::-webkit-scrollbar {
           height: 6px;
         }
