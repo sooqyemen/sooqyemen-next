@@ -368,6 +368,13 @@ export default function HomeMapView({ listings = [] }) {
     };
   }, [pageMap, fsMap, isFullscreen]);
 
+  // ✅ فتح ملء الشاشة عند النقر على الخريطة
+  const handleMapClick = () => {
+    if (isMobile && openedOnce) return;
+    setIsFullscreen(true);
+    if (isMobile) setOpenedOnce(true);
+  };
+
   const points = useMemo(() => {
     return (listings || [])
       .map((l) => {
@@ -570,14 +577,6 @@ export default function HomeMapView({ listings = [] }) {
     );
   };
 
-  // ✅ فتح تلقائي للجوال عند لمس الخريطة
-  const openFullscreenFromMap = () => {
-    if (!isMobile) return;
-    if (openedOnce) return;
-    setOpenedOnce(true);
-    setIsFullscreen(true);
-  };
-
   const ChipsOverlay = (
     <div className="sooq-mapOverlay">
       {/* الشريط الأساسي (مثل القديم) */}
@@ -758,11 +757,12 @@ export default function HomeMapView({ listings = [] }) {
     <div className="card" style={{ padding: 12 }}>
       <div style={{ fontWeight: 900, marginBottom: 10 }}>🗺️ عرض الإعلانات على الخريطة</div>
 
-      {/* خريطة داخل الصفحة */}
+      {/* خريطة داخل الصفحة - الآن قابلة للنقر لفتح ملء الشاشة */}
       <div
         className="sooq-mapWrap"
-        onPointerDown={openFullscreenFromMap}
-        onTouchStart={openFullscreenFromMap}
+        onClick={handleMapClick}
+        onPointerDown={handleMapClick}
+        onTouchStart={handleMapClick}
         style={{
           width: '100%',
           height: 'min(520px, 70vh)',
@@ -770,8 +770,13 @@ export default function HomeMapView({ listings = [] }) {
           borderRadius: 14,
           overflow: 'hidden',
           border: '1px solid #e2e8f0',
+          cursor: 'pointer',
+          position: 'relative',
         }}
       >
+        <div className="sooq-open-fs-hint">
+          انقر لفتح الخريطة كاملة الشاشة
+        </div>
         <MapBody mode="page" />
       </div>
 
@@ -785,7 +790,12 @@ export default function HomeMapView({ listings = [] }) {
       {portalReady && isFullscreen
         ? createPortal(
             <div className="sooq-fsOverlay" role="dialog" aria-label="الخريطة">
-              <button type="button" className="sooq-fsCloseOnly" onClick={() => setIsFullscreen(false)}>
+              <button 
+                type="button" 
+                className="sooq-fsCloseOnly" 
+                onClick={() => setIsFullscreen(false)}
+                aria-label="إغلاق الخريطة"
+              >
                 ✕
               </button>
 
@@ -811,6 +821,29 @@ export default function HomeMapView({ listings = [] }) {
         .sooq-mapWrap {
           position: relative;
           background: #fff;
+        }
+
+        .sooq-open-fs-hint {
+          position: absolute;
+          top: 10px;
+          right: 10px;
+          z-index: 1005;
+          background: rgba(255, 255, 255, 0.9);
+          backdrop-filter: blur(4px);
+          padding: 6px 12px;
+          border-radius: 20px;
+          font-size: 12px;
+          font-weight: 600;
+          color: #334155;
+          border: 1px solid rgba(0, 0, 0, 0.1);
+          pointer-events: none;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        @media (max-width: 520px) {
+          .sooq-open-fs-hint {
+            display: none;
+          }
         }
 
         .sooq-mapOverlay {
@@ -947,49 +980,62 @@ export default function HomeMapView({ listings = [] }) {
 
         .sooq-fsCloseOnly {
           position: fixed;
-          top: calc(env(safe-area-inset-top, 0px) + 12px);
-          right: 12px;
+          top: calc(env(safe-area-inset-top, 0px) + 16px);
+          right: 16px;
           z-index: 999999;
-          width: 44px;
-          height: 44px;
+          width: 48px;
+          height: 48px;
           border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.14);
-          background: rgba(255, 255, 255, 0.9);
-          backdrop-filter: blur(10px);
+          border: none;
+          background: #dc2626;
+          color: white;
           font-weight: 900;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+          transition: all 0.2s ease;
+        }
+
+        .sooq-fsCloseOnly:hover {
+          background: #b91c1c;
+          transform: scale(1.05);
         }
 
         .sooq-fsOverlay .sooq-mapOverlay {
-          top: calc(env(safe-area-inset-top, 0px) + 66px);
+          top: calc(env(safe-area-inset-top, 0px) + 76px);
         }
 
         .sooq-locateBtn {
           position: fixed;
-          right: 12px;
-          bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+          right: 16px;
+          bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
           z-index: 999999;
-          width: 52px;
-          height: 52px;
+          width: 56px;
+          height: 56px;
           border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.14);
-          background: rgba(255, 255, 255, 0.92);
-          backdrop-filter: blur(10px);
-          font-size: 20px;
+          border: none;
+          background: #3b82f6;
+          color: white;
+          font-size: 22px;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
+          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+          transition: all 0.2s ease;
+        }
+
+        .sooq-locateBtn:hover {
+          background: #2563eb;
+          transform: scale(1.05);
         }
 
         .sooq-locateBtn.isActive {
-          border-color: rgba(0, 0, 0, 0.22);
-          box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
-          transform: translateY(-1px);
+          background: #1d4ed8;
+          box-shadow: 0 14px 28px rgba(0, 0, 0, 0.25);
+          transform: translateY(-1px) scale(1.05);
         }
 
         @media (hover: none) and (pointer: coarse) {
