@@ -4,6 +4,7 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { db } from '@/lib/firebaseClient';
 import { normalizeCategoryKey, getCategoryLabel } from '@/lib/categories';
 import ListingCard from '@/components/ListingCard';
@@ -341,6 +342,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
 
   const [view, setView] = useState('grid'); // grid | list | map
   const [q, setQ] = useState('');
+  const searchParams = useSearchParams();
 
   const [items, setItems] = useState(() => (Array.isArray(initialListings) ? initialListings : []));
   const [loading, setLoading] = useState(() =>
@@ -361,6 +363,13 @@ export default function CategoryListings({ category, initialListings = [] }) {
       aliveRef.current = false;
     };
   }, []);
+
+  // ✅ sync search query from URL (?q=...) — used by clickable hashtags from details page
+  useEffect(() => {
+    const qp = safeStr(searchParams?.get('q'));
+    if (!qp) return;
+    setQ((prev) => (safeStr(prev) === qp ? prev : qp));
+  }, [searchParams]);
 
   const catsRaw = Array.isArray(category) ? category : [category];
   const cats = catsRaw.map(normalizeCategoryKey).filter(Boolean);
@@ -1231,23 +1240,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
     return null;
   };
 
-  if (loading) {
-    return (
-      <div className="card" style={{ padding: 16 }}>
-        <div className="muted">جاري تحميل إعلانات القسم...</div>
-      </div>
-    );
-  }
-
-  if (err && items.length === 0) {
-    return (
-      <div className="card" style={{ padding: 16, border: '1px solid #fecaca' }}>
-        <div style={{ fontWeight: 900, color: '#b91c1c' }}>⚠️ حدث خطأ</div>
-        <div className="muted" style={{ marginTop: 6 }}>{err}</div>
-      </div>
-    );
-  }
-
   // ====== Popular + Hashtags (مثل حراج) ======
   const categoryLabel = useMemo(() => (single ? getCategoryLabel(single) : ''), [single]);
 
@@ -1272,8 +1264,12 @@ export default function CategoryListings({ category, initialListings = [] }) {
     else if (single === 'services') opts = serviceTypeOptions;
 
     const cleaned = (opts || [])
-      .filter((o) => o && o.key && o.key !== 'other')
-      .map((o) => ({ ...o, count: Number(o.count || 0) }));
+      .filter((o) => Array.isArray(o) && o[0] && o[0] !== 'other')
+      .map(([key, count, label]) => ({
+        key: String(key),
+        label: String(label || key),
+        count: Number(count || 0),
+      }));
 
     const hasCounts = cleaned.some((o) => o.count > 0);
     const sorted = hasCounts
@@ -1343,6 +1339,25 @@ export default function CategoryListings({ category, initialListings = [] }) {
     if (single === 'jobs') return setJobType(k === 'all' ? '' : k);
     if (single === 'services') return setServiceType(k === 'all' ? '' : k);
   };
+
+  if (loading) {
+    return (
+      <div className="card" style={{ padding: 16 }}>
+        <div className="muted">جاري تحميل إعلانات القسم...</div>
+      </div>
+    );
+  }
+
+  if (err && items.length === 0) {
+    return (
+      <div className="card" style={{ padding: 16, border: '1px solid #fecaca' }}>
+        <div style={{ fontWeight: 900, color: '#b91c1c' }}>⚠️ حدث خطأ</div>
+        <div className="muted" style={{ marginTop: 6 }}>{err}</div>
+      </div>
+    );
+  }
+
+
 
 
   return (
