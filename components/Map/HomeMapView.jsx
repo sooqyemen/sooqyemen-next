@@ -2,6 +2,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -170,7 +171,7 @@ const CAT_STYLE = {
   networks: { color: '#14b8a6', icon: '📡', label: 'نت وشبكات' },
   maintenance: { color: '#64748b', icon: '🛠️', label: 'صيانة' },
   furniture: { color: '#c2410c', icon: '🛋️', label: 'أثاث' },
-  home_tools: { color: '#22c55e', icon: '🧹', label: ' أدوات منزلية' },
+  home_tools: { color: '#22c55e', icon: '🧹', label: 'أدوات' },
   clothes: { color: '#db2777', icon: '👕', label: 'ملابس' },
   animals: { color: '#84cc16', icon: '🐑', label: 'حيوانات' },
   jobs: { color: '#334155', icon: '💼', label: 'وظائف' },
@@ -245,16 +246,6 @@ function pickImage(listing) {
   return listing?.image || listing?.cover || listing?.thumbnail || listing?.mainImage || listing?.imageUrl || null;
 }
 
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const check = () => setIsMobile(window.matchMedia('(max-width: 520px)').matches);
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
-  return isMobile;
-}
 
 function useIsTouchDevice() {
   const [isTouch, setIsTouch] = useState(false);
@@ -273,10 +264,8 @@ function useIsTouchDevice() {
   return isTouch;
 }
 
-export default function HomeMapView({ listings = [] }) {
+export default function HomeMapView({ listings = [], forcedRootKey = '' }) {
   const [seen, setSeen] = useState(() => new Set());
-
-  const isMobile = useIsMobile();
   const isTouch = useIsTouchDevice();
 
   // ✅ خريطتين منفصلتين: واحدة داخل الصفحة + واحدة ملء الشاشة
@@ -284,15 +273,78 @@ export default function HomeMapView({ listings = [] }) {
   const [fsMap, setFsMap] = useState(null);
 
   // ✅ فلتر هرمي
-  const [activeRoot, setActiveRoot] = useState('all'); // all | cars | realestate | phones | ...
+  const pathname = usePathname();
+
+  // ✅ قفل القسم الجذري تلقائياً في صفحات الأقسام (مثل /cars) بدون تعديل باقي الصفحات
+  const lockedRootKey = useMemo(() => {
+    const forced = typeof forcedRootKey === 'string' ? forcedRootKey.trim() : '';
+    if (forced && ROOT_ORDER.includes(forced)) return forced;
+
+    if (!pathname) return '';
+    const seg = String(pathname)
+      .split('?')[0]
+      .split('#')[0]
+      .split('/')
+      .filter(Boolean)[0] || '';
+
+    if (!seg) return '';
+    const segLower = seg.toLowerCase();
+
+    // صفحات لا نعتبرها أقسام
+    const ignore = new Set([
+      'listings',
+      'listing',
+      'add',
+      'edit-listing',
+      'login',
+      'signup',
+      'profile',
+      'account',
+      'chat',
+      'api',
+    ]);
+    if (ignore.has(segLower)) return '';
+
+    if (ROOT_ORDER.includes(segLower)) return segLower;
+
+    const norm = normalizeCategoryKeyLib(segLower);
+    if (norm && ROOT_ORDER.includes(norm)) return norm;
+
+    return '';
+  }, [pathname, forcedRootKey]);
+
+  const [activeRoot, setActiveRoot] = useState(() => lockedRootKey || 'all');
+ // all | cars | realestate | phones | ...
   const [activeCarMake, setActiveCarMake] = useState(''); // toyota...
   const [activeCarModel, setActiveCarModel] = useState(''); // camry...
   const [activePhoneBrand, setActivePhoneBrand] = useState(''); // apple...
   const [activeDealType, setActiveDealType] = useState(''); // sale/rent
   const [activePropertyType, setActivePropertyType] = useState(''); // land/house...
 
-  // ✅ فلتر عام لبقية الأقسام (نوع/فئة/ماركة حسب القسم)
+  // ✅ إذا كنا داخل صفحة قسم (مثل /cars) نقفل القسم على هذا المسار ونخفي شريط الأقسام العامة
+  useEffect(() => {
+    // داخل صفحة قسم: قفل على القسم
+    if (lockedRootKey) {
+      setActiveRoot(lockedRootKey);
+
+      // تصفير الفلاتر الثانوية عند الانتقال لقسم مختلف (احتياطي)
+      setActiveTypeKey('');
+      setActiveCarMake('');
+      setActiveCarModel('');
+      setActivePhoneBrand('');
+      setActiveDealType('');
+      setActivePropertyType('');
+      return;
+    }
+
+    // خرجنا من صفحة قسم مقفلة (مثلاً رجعنا /listings): نرجّع الوضع الافتراضي
+    setActiveRoot('all');
+  }, [lockedRootKey]);
+// ✅ فلتر عام لبقية الأقسام (نوع/فئة/ماركة حسب القسم)
   const [activeTypeKey, setActiveTypeKey] = useState('');
+
+  // ✅ فلتر عام لفئات الأقسام الأخرى (إلكترونيات/دراجات/...)
+  
 
   // فلترة القريب
   const [nearbyOn, setNearbyOn] = useState(false);
@@ -618,12 +670,47 @@ export default function HomeMapView({ listings = [] }) {
     );
   };
 
-  // ✅ فتح ملء الشاشة للجوال دائماً عند النقر على الخريطة (بدون مانع / بدون openedOnce)
-  const openFullscreenFromMap = () => {
-    if (!isMobile) return;
+  // ✅ فتح ملء الشاشة: على الجوال + الكمبيوتر (مع تجاهل النقر على الأزرار/الكنترولز)
+  const openFullscreenFromMap = (e) => {
     if (isFullscreen) return;
+
+    const t = e?.target;
+    if (t && t.closest) {
+      if (
+        t.closest('.sooq-chipWrap') ||
+        t.closest('.leaflet-control') ||
+        t.closest('.leaflet-popup') ||
+        t.closest('.leaflet-marker-icon') ||
+        t.closest('.leaflet-marker-shadow') ||
+        t.closest('a') ||
+        t.closest('button')
+      ) return;
+    }
+
     setIsFullscreen(true);
   };
+
+  const closeFullscreen = (ev) => {
+    if (ev?.preventDefault) ev.preventDefault();
+    setIsFullscreen(false);
+  };
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setIsFullscreen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isFullscreen]);
 
   // ✅ اختيارات الفلاتر
   const chooseRoot = (k) => {
@@ -702,9 +789,11 @@ export default function HomeMapView({ listings = [] }) {
         {/* سيارات -> ماركات -> موديلات */}
         {activeRoot === 'cars' ? (
           <>
+            {!lockedRootKey && (
             <button type="button" className="sooq-chip" onClick={backToRoots} title="رجوع للأقسام">
               ⬅︎ الأقسام
             </button>
+          )}
 
             {/* عند عدم اختيار ماركة: أعرض الماركات */}
             {!activeCarMake ? (
@@ -781,9 +870,11 @@ export default function HomeMapView({ listings = [] }) {
         {/* المستوى الثاني: جوالات -> ماركات */}
         {activeRoot === 'phones' ? (
           <>
+            {!lockedRootKey && (
             <button type="button" className="sooq-chip" onClick={backToRoots} title="رجوع للأقسام">
               ⬅︎ الأقسام
             </button>
+          )}
 
             <button
               type="button"
@@ -817,9 +908,11 @@ export default function HomeMapView({ listings = [] }) {
         {activeRoot === 'realestate' ? (
           <>
             {/* رجوع للأقسام */}
+            {!lockedRootKey && (
             <button type="button" className="sooq-chip" onClick={backToRoots} title="رجوع للأقسام">
               ⬅︎ الأقسام
             </button>
+          )}
 
             {/* مستوى بيع/إيجار */}
             {!activeDealType ? (
@@ -896,9 +989,11 @@ export default function HomeMapView({ listings = [] }) {
         activeRoot !== 'realestate' &&
         ROOT_TYPE_CONFIG[activeRoot] ? (
           <>
+            {!lockedRootKey && (
             <button type="button" className="sooq-chip" onClick={backToRoots} title="رجوع للأقسام">
               ⬅︎ الأقسام
             </button>
+          )}
 
             <button
               type="button"
@@ -912,10 +1007,10 @@ export default function HomeMapView({ listings = [] }) {
 
             {(ROOT_TYPE_CONFIG[activeRoot].items || []).map((raw) => {
               const x = typeof raw === 'string' ? { key: raw, label: raw } : raw;
-              const key = (x && (x.key || x.value || x.slug || x.id || x.label)) || '';
-              const label = (x && (x.label || x.name)) || String(key || '');
-              const keyStr = String(key);
+              const keyStr = String(x.key);
+              const label = x.label || keyStr;
               const c = typeCounts.get(keyStr) || 0;
+
               return (
                 <button
                   key={keyStr}
@@ -1017,283 +1112,382 @@ export default function HomeMapView({ listings = [] }) {
 
       {/* ملء الشاشة */}
       {portalReady && isFullscreen
-        ? createPortal(
-            <div className="sooq-fsOverlay" role="dialog" aria-label="الخريطة">
-              <button type="button" className="sooq-fsCloseOnly" onClick={() => setIsFullscreen(false)}>
-                ✕
-              </button>
+          ? createPortal(
+              <div className="sooq-fsOverlay" role="dialog" aria-label="الخريطة" aria-modal="true">
+                <div className="sooq-fsCard">
+                  <button
+                    type="button"
+                    className="sooq-fsCloseOnly"
+                    onClick={closeFullscreen}
+                    aria-label="إغلاق"
+                    title="إغلاق"
+                  >
+                    ✕
+                  </button>
 
-              <div className="sooq-fsMap">
-                <MapBody mode="fs" />
-              </div>
+                  <button
+                    type="button"
+                    className={`sooq-locateBtn ${nearbyOn ? 'active' : ''}`}
+                    onClick={locateMe}
+                    title={nearbyOn ? 'إيقاف القريب مني' : 'القريب مني'}
+                    aria-label={nearbyOn ? 'إيقاف القريب مني' : 'القريب مني'}
+                  >
+                    🎯
+                    <span className="sooq-nearBadge">{nearbyOn ? 'تشغيل' : 'قريب'}</span>
+                  </button>
 
-              {/* ✅ زر تحديد موقعي (يظهر في ملء الشاشة فقط) */}
-              <button
-                type="button"
-                className={`sooq-locateBtn ${nearbyOn ? 'isActive' : ''}`}
-                onClick={locateMe}
-                aria-label={nearbyOn ? 'إلغاء القريب من موقعي' : 'تحديد موقعي'}
-                title={nearbyOn ? 'عرض الكل' : 'تحديد موقعي'}
-              >
-                🎯
-              </button>
-            </div>,
-            document.body
-          )
-        : null}
+                  <div className="sooq-fsMap">
+                    <MapBody mode="fs" />
+                  </div>
+                </div>
+              </div>,
+              document.body
+            )
+          : null}
 
-      <style jsx global>{`
-        /* ====== Chips overlay ====== */
-        .sooq-mapWrap {
-          position: relative;
-          background: #fff;
-        }
+      <style jsx global>{`/* === Map Layout === */
+.sooq-mapWrap {
+  position: relative;
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid rgba(0,0,0,0.06);
+}
+.sooq-mapWrap.isFullscreen {
+  border-radius: 0;
+  border: none;
+}
+.sooq-map {
+  width: 100%;
+  height: 100%;
+}
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+}
 
-        .sooq-mapOverlay {
-          position: absolute;
-          top: 10px;
-          left: 10px;
-          right: 10px;
-          z-index: 1004;
-          pointer-events: none;
-        }
+/* === Overlay / Chips === */
+.sooq-mapOverlay {
+  position: absolute;
+  z-index: 500;
+  left: 12px;
+  right: 12px;
+  top: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  pointer-events: none;
+}
+.sooq-overlayBtn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.08);
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.12);
+  cursor: pointer;
+  user-select: none;
+}
+.sooq-overlayBtnText {
+  font-size: 13px;
+  font-weight: 700;
+}
+.sooq-overlayBtnSmall {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.08);
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.12);
+  cursor: pointer;
+  user-select: none;
+}
+.sooq-chips {
+  position: absolute;
+  z-index: 500;
+  left: 12px;
+  right: 12px;
+  top: 64px;
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 6px 2px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.sooq-chips::-webkit-scrollbar { display: none; }
 
-        .sooq-chips {
-          pointer-events: auto;
-          display: flex;
-          gap: 8px;
-          overflow-x: auto;
-          padding: 8px;
-          border-radius: 14px;
-          background: rgba(255, 255, 255, 0.86);
-          backdrop-filter: blur(8px);
-          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.12);
-          align-items: center;
-        }
+.sooq-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,0.08);
+  background: rgba(255,255,255,0.84);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 8px 18px rgba(0,0,0,0.10);
+  cursor: pointer;
+  user-select: none;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.sooq-chip:hover { transform: translateY(-1px); }
+.sooq-chip.isDisabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.sooq-chip.isActive {
+  border-color: rgba(0,0,0,0.18);
+  box-shadow: 0 12px 26px rgba(0,0,0,0.16);
+}
+.sooq-chipDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #111;
+  opacity: 0.85;
+}
+.sooq-chipText {
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.sooq-chipCount {
+  font-size: 12px;
+  font-weight: 800;
+  opacity: 0.65;
+}
 
-        .sooq-chip {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 10px;
-          border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.08);
-          background: #fff;
-          font-size: 13px;
-          line-height: 1;
-          cursor: pointer;
-          white-space: nowrap;
-          user-select: none;
-        }
+/* === Custom Pin Icon === */
+/* ====== Marker ====== */
+.sooq-marker {
+  background: transparent !important;
+  border: 0 !important;
+}
 
-        .sooq-chip.isActive {
-          border-color: rgba(0, 0, 0, 0.18);
-          box-shadow: 0 8px 14px rgba(0, 0, 0, 0.12);
-        }
+.sooq-pin {
+  position: relative;
+  width: 34px;
+  height: 46px;
+}
 
-        .sooq-chip.isDisabled {
-          opacity: 0.45;
-          cursor: not-allowed;
-        }
+.sooq-pin::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  width: 28px;
+  height: 28px;
+  background: var(--pin);
+  border-radius: 50% 50% 50% 0;
+  transform: translateX(-50%) rotate(-45deg);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.92);
+}
 
-        .sooq-chipDot {
-          width: 10px;
-          height: 10px;
-          border-radius: 50%;
-        }
+.sooq-pin::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  width: 14px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  transform: translateX(-50%);
+}
 
-        .sooq-chipText {
-          font-weight: 800;
-        }
+.sooq-pin__icon {
+  position: absolute;
+  left: 50%;
+  top: 9px;
+  transform: translateX(-50%);
+  z-index: 2;
+  font-size: 14px;
+  line-height: 1;
+}
 
-        .sooq-chipCount {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          min-width: 22px;
-          height: 18px;
-          padding: 0 6px;
-          border-radius: 999px;
-          background: rgba(0, 0, 0, 0.06);
-          font-size: 12px;
-          font-weight: 800;
-        }
+.sooq-marker--seen .sooq-pin {
+  opacity: 0.72;
+  filter: grayscale(0.25);
+}
 
-        /* ====== Popup Mini (صغير جدا) ====== */
-        .sooq-popupMini {
-          width: 140px;
-          display: grid;
-          gap: 6px;
-        }
 
-        .sooq-popupMiniImg {
-          width: 100%;
-          height: 52px;
-          object-fit: cover;
-          border-radius: 10px;
-          display: block;
-        }
+/* === Popup mini card === */
+.sooq-popupMini {
+  width: 220px;
+  max-width: 240px;
+  display: grid;
+  gap: 8px;
+}
+.sooq-popupMiniImg {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid rgba(0,0,0,0.08);
+}
+.sooq-popupMiniTitle {
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.35;
+  max-height: 2.7em;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.sooq-popupMiniMeta {
+  font-size: 12px;
+  font-weight: 800;
+  opacity: 0.70;
+}
+.sooq-popupMiniBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 900;
+  border: 1px solid rgba(0,0,0,0.08);
+  background: rgba(0,0,0,0.04);
+  text-decoration: none;
+}
 
-        .sooq-popupMiniTitle {
-          font-weight: 900;
-          font-size: 12px;
-          line-height: 1.2;
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
+/* === Fullscreen Overlay === */
+.sooq-fsOverlay {
+  position: fixed;
+  inset: 14px;
+  z-index: 9999;
+  background: #fff;
+}
 
-        .sooq-popupMiniBtn {
-          display: inline-flex;
-          justify-content: center;
-          align-items: center;
-          padding: 6px 10px;
-          border-radius: 10px;
-          background: var(--btn);
-          color: #fff;
-          text-decoration: none;
-          font-weight: 900;
-          font-size: 12px;
-        }
+@media (min-width: 1024px){
+  .sooq-fsOverlay{ inset: 24px; }
+}
 
-        @media (max-width: 520px) {
-          .sooq-popupMini {
-            width: 120px;
-          }
-          .sooq-popupMiniImg {
-            height: 46px;
-          }
-          .leaflet-popup-content {
-            margin: 8px 10px !important;
-          }
-        }
+.sooq-fsCard {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+}
 
-        /* ====== Fullscreen overlay ====== */
-        .sooq-fsOverlay {
-          position: fixed;
-          inset: 0;
-          z-index: 999999;
-          background: #fff;
-        }
+@media (min-width: 900px) {
+  .sooq-fsOverlay {
+    background: rgba(0, 0, 0, 0.35);
+  }
+  .sooq-fsCard {
+    inset: auto;
+    width: min(94vw, 1400px);
+    height: 90vh;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 18px;
+    box-shadow: 0 10px 35px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+  }
+}
+.sooq-fsMap {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.sooq-fsCloseOnly {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  right: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.08);
+  background: rgba(255,255,255,0.90);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.18);
+  cursor: pointer;
+  z-index: 10010;
+}
+.sooq-locateBtn {
+  position: absolute;
+  right: 12px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,0.10);
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 14px 34px rgba(0,0,0,0.20);
+  cursor: pointer;
+  z-index: 10010;
+  user-select: none;
+}
+.sooq-locateBtn.active {
+  border-color: rgba(0,0,0,0.18);
+  box-shadow: 0 18px 40px rgba(0,0,0,0.26);
+}
+.sooq-nearBadge {
+  font-size: 12px;
+  font-weight: 900;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.06);
+}
 
-        .sooq-fsMap {
-          position: absolute;
-          inset: 0;
-          height: 100dvh;
-          width: 100vw;
-        }
+/* In fullscreen, push overlays below the close button */
+.sooq-fsCard .sooq-mapOverlay { top: 64px; }
+.sooq-fsCard .sooq-chips { top: 116px; }
 
-        /* ✅ زر إغلاق فقط */
-        .sooq-fsCloseOnly {
-          position: fixed;
-          top: calc(env(safe-area-inset-top, 0px) + 12px);
-          right: 12px;
-          z-index: 999999;
-          width: 44px;
-          height: 44px;
-          border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.14);
-          background: rgba(255, 255, 255, 0.9);
-          backdrop-filter: blur(10px);
-          font-weight: 900;
-          cursor: pointer;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        /* ✅ نقل الشيبس تحت زر الإغلاق */
-        .sooq-fsOverlay .sooq-mapOverlay {
-          top: calc(env(safe-area-inset-top, 0px) + 66px);
-        }
-
-        /* ✅ زر تحديد موقعي (Floating) */
-        .sooq-locateBtn {
-          position: fixed;
-          right: 12px;
-          bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
-          z-index: 999999;
-          width: 52px;
-          height: 52px;
-          border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.14);
-          background: rgba(255, 255, 255, 0.92);
-          backdrop-filter: blur(10px);
-          font-size: 20px;
-          cursor: pointer;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
-        }
-
-        .sooq-locateBtn.isActive {
-          border-color: rgba(0, 0, 0, 0.22);
-          box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
-          transform: translateY(-1px);
-        }
-
-        /* ✅ اخفاء +/− بالجوال/اللمس حتى لو ظهرت من Leaflet */
-        @media (hover: none) and (pointer: coarse) {
-          .leaflet-control-zoom {
-            display: none !important;
-          }
-        }
-
-        /* ====== Marker ====== */
-        .sooq-marker {
-          background: transparent !important;
-          border: 0 !important;
-        }
-
-        .sooq-pin {
-          position: relative;
-          width: 34px;
-          height: 46px;
-        }
-
-        .sooq-pin::before {
-          content: '';
-          position: absolute;
-          left: 50%;
-          top: 2px;
-          width: 28px;
-          height: 28px;
-          background: var(--pin);
-          border-radius: 50% 50% 50% 0;
-          transform: translateX(-50%) rotate(-45deg);
-          box-shadow: 0 10px 18px rgba(0, 0, 0, 0.2);
-          border: 2px solid rgba(255, 255, 255, 0.92);
-        }
-
-        .sooq-pin::after {
-          content: '';
-          position: absolute;
-          left: 50%;
-          top: 12px;
-          width: 14px;
-          height: 14px;
-          background: rgba(255, 255, 255, 0.95);
-          border-radius: 50%;
-          transform: translateX(-50%);
-        }
-
-        .sooq-pin__icon {
-          position: absolute;
-          left: 50%;
-          top: 9px;
-          transform: translateX(-50%);
-          z-index: 2;
-          font-size: 14px;
-          line-height: 1;
-        }
-
-        .sooq-marker--seen .sooq-pin {
-          opacity: 0.72;
-          filter: grayscale(0.25);
-        }
-      `}</style>
+/* Desktop/Laptop: show modal card ~90% of screen */
+@media (hover: hover) and (pointer: fine) {
+  .sooq-fsOverlay {
+    background: rgba(0,0,0,0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+  }
+  .sooq-fsCard {
+    position: relative;
+    inset: auto;
+    width: min(1600px, 96vw);
+    height: min(980px, 92vh);
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 22px 70px rgba(0,0,0,0.40);
+    border: 1px solid rgba(255,255,255,0.22);
+  }
+  .sooq-fsCloseOnly {
+    top: 12px;
+    right: 12px;
+  }
+  .sooq-locateBtn {
+    right: 12px;
+    bottom: 12px;
+  }
+  .sooq-fsCard .sooq-mapOverlay { top: 60px; }
+  .sooq-fsCard .sooq-chips { top: 110px; }
+}`}</style>
     </div>
   );
 }
