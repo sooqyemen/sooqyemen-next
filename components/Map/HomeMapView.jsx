@@ -1016,42 +1016,24 @@ export default function HomeMapView({ listings = [] }) {
             <div className="sooq-fsOverlay" role="dialog" aria-label="الخريطة">
               <ChipsOverlay isFullscreenMode={true} />
 
-              {/* زر الإغلاق في أعلى اليسار */}
+              {/* زر الإغلاق في أعلى اليسار - تم إصلاح موقعه */}
               <button 
                 type="button" 
-                className="sooq-fsCloseOnly" 
+                className="sooq-fsCloseBtn" 
                 onClick={() => setIsFullscreen(false)}
                 aria-label="إغلاق الخريطة"
               >
-                ✕
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
               </button>
 
               <div className="sooq-fsMap">
                 <MapBody mode="fs" />
               </div>
 
-              {/* مجموعة التحكم في أعلى اليمين */}
+              {/* مجموعة التحكم في أعلى اليمين - تم إصلاح تصميمها */}
               <div className="sooq-map-controls">
-                {/* أزرار التكبير والتصغير */}
-                <div className="sooq-zoom-controls">
-                  <button
-                    type="button"
-                    className="sooq-zoom-btn"
-                    onClick={() => fsMap?.zoomIn()}
-                    aria-label="تكبير"
-                  >
-                    +
-                  </button>
-                  <button
-                    type="button"
-                    className="sooq-zoom-btn"
-                    onClick={() => fsMap?.zoomOut()}
-                    aria-label="تصغير"
-                  >
-                    −
-                  </button>
-                </div>
-                
                 {/* زر تحديد الموقع - أيقونة جديدة */}
                 <button
                   type="button"
@@ -1121,12 +1103,15 @@ export default function HomeMapView({ listings = [] }) {
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
           z-index: 999999;
           pointer-events: auto;
+          max-height: 200px;
+          overflow-y: auto;
         }
 
         @media (max-width: 768px) {
           .sooq-mapOverlay--fullscreen {
             padding: 8px;
             top: env(safe-area-inset-top, 0px) !important;
+            max-height: 180px;
           }
         }
 
@@ -1141,12 +1126,14 @@ export default function HomeMapView({ listings = [] }) {
           backdrop-filter: blur(8px);
           box-shadow: 0 10px 18px rgba(0, 0, 0, 0.12);
           align-items: center;
+          min-height: 44px;
         }
 
         .sooq-mapOverlay--fullscreen .sooq-chips {
           background: rgba(255, 255, 255, 0.95);
           box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
           padding: 10px;
+          min-height: 50px;
         }
 
         .sooq-chips--sub {
@@ -1287,113 +1274,103 @@ export default function HomeMapView({ listings = [] }) {
           position: relative;
           flex: 1;
           width: 100%;
-          height: calc(100vh - 80px);
-          margin-top: 80px;
+          height: 100vh;
+          margin-top: 0;
         }
 
         @media (max-width: 768px) {
           .sooq-fsMap {
-            height: calc(100vh - 120px);
-            margin-top: 120px;
+            height: calc(100vh - 180px);
+            margin-top: 180px;
           }
         }
 
-        /* زر الإغلاق - أعلى اليسار */
-        .sooq-fsCloseOnly {
+        /* زر الإغلاق - أعلى اليسار - تم إصلاح موقعه */
+        .sooq-fsCloseBtn {
           position: fixed;
-          top: calc(env(safe-area-inset-top, 0px) + 20px);
+          top: 20px;
           left: 20px;
-          right: auto;
-          z-index: 1000000;
-          width: 48px;
-          height: 48px;
-          border-radius: 999px;
+          z-index: 1000001;
+          width: 44px;
+          height: 44px;
+          border-radius: 12px;
           border: none;
-          background: #dc2626;
-          color: white;
-          font-weight: 900;
+          background: rgba(255, 255, 255, 0.95);
+          color: #333;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          backdrop-filter: blur(8px);
           transition: all 0.2s ease;
         }
 
-        .sooq-fsCloseOnly:hover {
-          background: #b91c1c;
+        .sooq-fsCloseBtn:hover {
+          background: rgba(255, 255, 255, 1);
           transform: scale(1.05);
+          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
         }
 
-        /* مجموعة التحكم في أعلى اليمين */
+        .sooq-fsCloseBtn svg {
+          width: 20px;
+          height: 20px;
+        }
+
+        @media (max-width: 768px) {
+          .sooq-fsCloseBtn {
+            top: calc(env(safe-area-inset-top, 0px) + 10px);
+            left: 10px;
+            width: 40px;
+            height: 40px;
+          }
+          .sooq-fsCloseBtn svg {
+            width: 18px;
+            height: 18px;
+          }
+        }
+
+        /* مجموعة التحكم في أعلى اليمين - تم إصلاح تصميمها */
         .sooq-map-controls {
           position: fixed;
-          top: calc(env(safe-area-inset-top, 0px) + 20px);
+          top: 20px;
           right: 20px;
           z-index: 1000000;
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 10px;
+          gap: 12px;
         }
 
         @media (max-width: 768px) {
           .sooq-map-controls {
             top: calc(env(safe-area-inset-top, 0px) + 10px);
             right: 10px;
+            gap: 8px;
           }
-        }
-
-        /* أزرار التكبير والتصغير */
-        .sooq-zoom-controls {
-          display: flex;
-          flex-direction: column;
-          background: white;
-          border-radius: 8px;
-          overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-        }
-
-        .sooq-zoom-btn {
-          width: 40px;
-          height: 40px;
-          border: none;
-          background: white;
-          font-size: 20px;
-          font-weight: bold;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #333;
-        }
-
-        .sooq-zoom-btn:hover {
-          background: #f0f0f0;
-        }
-
-        .sooq-zoom-btn:active {
-          background: #e0e0e0;
         }
 
         /* زر تحديد الموقع - أيقونة جديدة */
         .sooq-locateBtn {
-          width: 40px;
-          height: 40px;
-          border-radius: 50%;
+          width: 44px;
+          height: 44px;
+          border-radius: 12px;
           border: none;
-          background: white;
+          background: rgba(255, 255, 255, 0.95);
           color: #333;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          backdrop-filter: blur(8px);
           transition: all 0.2s ease;
         }
 
         .sooq-locateBtn:hover {
-          background: #f0f0f0;
+          background: rgba(255, 255, 255, 1);
+          transform: scale(1.05);
+          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
         }
 
         .sooq-locateBtn.isActive {
@@ -1407,10 +1384,9 @@ export default function HomeMapView({ listings = [] }) {
         }
 
         @media (max-width: 768px) {
-          .sooq-locateBtn,
-          .sooq-zoom-btn {
-            width: 36px;
-            height: 36px;
+          .sooq-locateBtn {
+            width: 40px;
+            height: 40px;
           }
           
           .sooq-locateBtn svg {
@@ -1419,9 +1395,62 @@ export default function HomeMapView({ listings = [] }) {
           }
         }
 
+        /* تحسين عرض عناصر التحكم الخاصة بـ Leaflet */
+        .leaflet-top.leaflet-right {
+          top: 80px !important;
+          right: 20px !important;
+        }
+
+        .leaflet-control-zoom {
+          border: none !important;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+          border-radius: 12px !important;
+          overflow: hidden;
+          backdrop-filter: blur(8px);
+          background: rgba(255, 255, 255, 0.95) !important;
+        }
+
+        .leaflet-control-zoom a {
+          width: 44px !important;
+          height: 44px !important;
+          line-height: 44px !important;
+          background: transparent !important;
+          color: #333 !important;
+          border: none !important;
+          border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+        }
+
+        .leaflet-control-zoom a:hover {
+          background: rgba(0, 0, 0, 0.05) !important;
+        }
+
+        .leaflet-control-zoom a:first-child {
+          border-top-left-radius: 12px !important;
+          border-top-right-radius: 12px !important;
+        }
+
+        .leaflet-control-zoom a:last-child {
+          border-bottom: none !important;
+          border-bottom-left-radius: 12px !important;
+          border-bottom-right-radius: 12px !important;
+        }
+
+        @media (max-width: 768px) {
+          .leaflet-top.leaflet-right {
+            top: 140px !important;
+            right: 10px !important;
+          }
+          
+          .leaflet-control-zoom a {
+            width: 40px !important;
+            height: 40px !important;
+            line-height: 40px !important;
+          }
+        }
+
         @media (hover: none) and (pointer: coarse) {
           .leaflet-control-zoom {
-            display: none !important;
+            display: flex !important;
           }
         }
 
@@ -1492,6 +1521,24 @@ export default function HomeMapView({ listings = [] }) {
         }
 
         .sooq-chips::-webkit-scrollbar-thumb:hover {
+          background: rgba(0, 0, 0, 0.3);
+        }
+
+        .sooq-mapOverlay--fullscreen::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .sooq-mapOverlay--fullscreen::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.05);
+          border-radius: 3px;
+        }
+
+        .sooq-mapOverlay--fullscreen::-webkit-scrollbar-thumb {
+          background: rgba(0, 0, 0, 0.2);
+          border-radius: 3px;
+        }
+
+        .sooq-mapOverlay--fullscreen::-webkit-scrollbar-thumb:hover {
           background: rgba(0, 0, 0, 0.3);
         }
       `}</style>
