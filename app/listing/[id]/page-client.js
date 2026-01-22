@@ -19,24 +19,11 @@ import {
   phoneBrandLabel,
   dealTypeLabel,
   propertyTypeLabel,
-  SOLAR_TYPES,
-  MAINTENANCE_TYPES,
-  FURNITURE_TYPES,
-  HOME_TOOLS_TYPES,
-  CLOTHES_TYPES,
-  ANIMAL_TYPES,
-  JOB_TYPES,
-  SERVICE_TYPES,
-  ELECTRONICS_TYPES,
-  NETWORK_TYPES,
-  HEAVY_EQUIPMENT_TYPES,
-  MOTORCYCLE_BRANDS,
 } from '@/lib/taxonomy';
 
 // Components
 import Price from '@/components/Price';
 import ImageGallery from '@/components/ImageGallery';
-import ListingCard from '@/components/ListingCard';
 import WhatsAppIcon from '@/components/Icons/WhatsAppIcon';
 import ListingJsonLd from '@/components/StructuredData/ListingJsonLd';
 import BreadcrumbJsonLd from '@/components/StructuredData/BreadcrumbJsonLd';
@@ -151,53 +138,11 @@ function getInitials(email) {
   return email.split('@')[0].charAt(0).toUpperCase();
 }
 
-function optionLabel(options, key) {
-  const k = String(key || '').trim();
-  if (!k) return '';
-  const arr = Array.isArray(options) ? options : [];
-  const hit = arr.find((x) => String(x?.key || '').trim() === k);
-  return hit?.label ? String(hit.label) : k;
-}
-
-function pickFacetForCategory(categoryKey, listing, taxonomy) {
-  const cat = String(categoryKey || '').trim();
-
-  // cars / phones / realestate are already handled via taxonomyChips + label helpers
-  if (cat === 'electronics') return { field: 'electronicsType', key: listing?.electronicsType || taxonomy?.electronicsType, label: optionLabel(ELECTRONICS_TYPES, listing?.electronicsType || taxonomy?.electronicsType) };
-  if (cat === 'solar') return { field: 'solarType', key: listing?.solarType || taxonomy?.solarType, label: optionLabel(SOLAR_TYPES, listing?.solarType || taxonomy?.solarType) };
-  if (cat === 'maintenance') return { field: 'maintenanceType', key: listing?.maintenanceType || taxonomy?.maintenanceType, label: optionLabel(MAINTENANCE_TYPES, listing?.maintenanceType || taxonomy?.maintenanceType) };
-  if (cat === 'furniture') return { field: 'furnitureType', key: listing?.furnitureType || taxonomy?.furnitureType, label: optionLabel(FURNITURE_TYPES, listing?.furnitureType || taxonomy?.furnitureType) };
-  if (cat === 'home_tools') return { field: 'homeToolsType', key: listing?.homeToolsType || taxonomy?.homeToolsType, label: optionLabel(HOME_TOOLS_TYPES, listing?.homeToolsType || taxonomy?.homeToolsType) };
-  if (cat === 'clothes') return { field: 'clothesType', key: listing?.clothesType || taxonomy?.clothesType, label: optionLabel(CLOTHES_TYPES, listing?.clothesType || taxonomy?.clothesType) };
-  if (cat === 'animals') return { field: 'animalType', key: listing?.animalType || taxonomy?.animalType, label: optionLabel(ANIMAL_TYPES, listing?.animalType || taxonomy?.animalType) };
-  if (cat === 'jobs') return { field: 'jobType', key: listing?.jobType || taxonomy?.jobType, label: optionLabel(JOB_TYPES, listing?.jobType || taxonomy?.jobType) };
-  if (cat === 'services') return { field: 'serviceType', key: listing?.serviceType || taxonomy?.serviceType, label: optionLabel(SERVICE_TYPES, listing?.serviceType || taxonomy?.serviceType) };
-  if (cat === 'networks') return { field: 'networkType', key: listing?.networkType || taxonomy?.networkType, label: optionLabel(NETWORK_TYPES, listing?.networkType || taxonomy?.networkType) };
-  if (cat === 'heavy_equipment') return { field: 'heavyEquipmentType', key: listing?.heavyEquipmentType || taxonomy?.heavyEquipmentType, label: optionLabel(HEAVY_EQUIPMENT_TYPES, listing?.heavyEquipmentType || taxonomy?.heavyEquipmentType) };
-  if (cat === 'motorcycles') return { field: 'motorcycleBrand', key: listing?.motorcycleBrand || taxonomy?.motorcycleBrand, label: optionLabel(MOTORCYCLE_BRANDS, listing?.motorcycleBrand || taxonomy?.motorcycleBrand) };
-
-  return { field: '', key: '', label: '' };
-}
-
-
 // --- المكون الرئيسي ---
 
 export default function ListingDetailsClient({ params, initialListing = null }) {
   const { id } = params;
   const router = useRouter();
-
-  // ✅ عند الضغط على الوسم: انتقل إلى صفحة القسم مع البحث (q)
-  const onHashtagClick = useCallback(
-    (tag) => {
-      const raw = String(tag || '').trim();
-      const clean = raw.replace(/^#/, '').replace(/_/g, ' ').trim();
-      if (!clean) return;
-      const href = `${getCategoryHref(categoryKey)}?q=${encodeURIComponent(clean)}`;
-      router.push(href);
-    },
-    [router, categoryKey]
-  );
-
   const { user } = useAuth();
 
   // تحميل الخريطة فقط عند الطلب (لتقليل حجم الباندل ورفع سرعة التحميل)
@@ -214,10 +159,6 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
   const [listing, setListing] = useState(initialListing);
   const [loading, setLoading] = useState(!initialListing);
   const [error, setError] = useState(null);
-
-  // ✅ إعلانات مشابهة (نفس القسم + تفضيل نفس الفئة)
-  const [relatedListings, setRelatedListings] = useState([]);
-  const [relatedLoading, setRelatedLoading] = useState(false);
 
   const [startingChat, setStartingChat] = useState(false);
   const [chatErr, setChatErr] = useState('');
@@ -365,97 +306,6 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
 
     return chips;
   }, [listing, taxonomy, categoryKey]);
-
-  
-  // ✅ هاشتاقات داخل الصفحة (تحسين SEO + تجربة مثل حراج)
-  const hashtags = useMemo(() => {
-    const tags = new Set();
-
-    const add = (v) => {
-      const s = String(v || '').trim();
-      if (!s) return;
-      const t = s.replace(/\s+/g, '_');
-      if (t.length >= 2) tags.add('#' + t);
-    };
-
-    add('سوق_اليمن');
-    add(categoryLabel || categoryKey);
-
-    if (listing?.city) add(listing.city);
-
-    (taxonomyChips || []).forEach((c) => add(c.text));
-
-    const facet = pickFacetForCategory(categoryKey, listing, taxonomy);
-    if (facet?.label) add(facet.label);
-
-    const title = String(listing?.title || '').trim();
-    title.split(/[|،,\-–—]+/g).slice(0, 2).forEach(add);
-
-    return Array.from(tags).slice(0, 12);
-  }, [categoryKey, categoryLabel, listing?.city, listing?.title, taxonomyChips, taxonomy]);
-
-// ✅ تحميل "إعلانات مشابهة" (بدون الاعتماد على إعلانات قديمة)
-  useEffect(() => {
-    if (!listing?.id) return;
-    if (!categoryKey) return;
-
-    let cancelled = false;
-    setRelatedLoading(true);
-
-    (async () => {
-      try {
-        // نجيب عدد مناسب من نفس القسم، ثم نفلتر ونعطي أولوية لنفس الفئة (facet) على جهة العميل لتجنب مشاكل الفهارس.
-        const snap = await db.collection('listings').where('category', '==', categoryKey).limit(60).get();
-        const all = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
-          .filter((x) => x && x.id !== listing.id)
-          .filter((x) => x.isActive !== false && !x.hidden);
-
-        const facet = pickFacetForCategory(categoryKey, listing, taxonomy);
-        const facetKey = String(facet?.key || '').trim();
-
-        const sameFacet = facetKey
-          ? all.filter((x) => String(x?.[facet.field] || '').trim() === facetKey)
-          : [];
-
-        // ترتيب: الأحدث أولاً (ثم المشاهدات كعامل ثانوي)
-        const score = (x) => {
-          const created = x?.createdAt?.toMillis ? x.createdAt.toMillis() : Number(x?.createdAt || 0) || 0;
-          const views = Number(x?.views || 0) || 0;
-          return created * 10 + views;
-        };
-
-        const sortDesc = (a, b) => score(b) - score(a);
-
-        sameFacet.sort(sortDesc);
-        all.sort(sortDesc);
-
-        const out = [];
-        for (const x of sameFacet) {
-          if (out.length >= 8) break;
-          out.push(x);
-        }
-        if (out.length < 8) {
-          for (const x of all) {
-            if (out.length >= 8) break;
-            if (out.some((y) => y.id === x.id)) continue;
-            out.push(x);
-          }
-        }
-
-        if (!cancelled) setRelatedListings(out);
-      } catch (e) {
-        console.error('Failed to load related listings:', e);
-        if (!cancelled) setRelatedListings([]);
-      } finally {
-        if (!cancelled) setRelatedLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [listing?.id, categoryKey, taxonomy]);
 
 
   if (loading) {
@@ -628,7 +478,6 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                   <div className="listing-description">{listing.description}</div>
                 </div>
 
-
                 <div className="contact-section">
                   <h2 className="section-title">التواصل</h2>
                   {chatErr && <div className="error-msg">{chatErr}</div>}
@@ -662,25 +511,6 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
 						)}
                   </div>
                 </div>
-
-                
-
-                {/* ✅ وسوم (هاشتاقات) */}
-                {hashtags && hashtags.length > 0 && (
-                  <div className="hashtags-section">
-                    <h2 className="section-title">وسوم</h2>
-                    <div className="hashtag-row" aria-label="وسوم الإعلان">
-                      {hashtags.map((t) => (
-                        <button type="button" key={t} className="hashtag-chip" dir="ltr" onClick={() => onHashtagClick(t)}>
-                          {t}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="hashtags-note">
-                      هذه الوسوم تساعد في الوصول للإعلان بسهولة داخل الموقع ومحركات البحث.
-                    </p>
-                  </div>
-                )}
 
                 <div className="comments-section" ref={commentsRef}>
                   {!showComments ? (
@@ -802,27 +632,6 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
         </div>
       </div>
 
-
-      {/* ✅ إعلانات مشابهة (بعد الخريطة) */}
-      <div className="related-section page-related">
-        <h2 className="section-title">إعلانات مشابهة</h2>
-
-        {relatedLoading ? (
-          <div className="loading-box">جاري تحميل الإعلانات المشابهة...</div>
-        ) : relatedListings && relatedListings.length > 0 ? (
-          <div className="related-grid">
-            {relatedListings.map((x) => (
-              <ListingCard key={x.id} listing={x} variant="grid" />
-            ))}
-          </div>
-        ) : (
-          <div className="muted" style={{ padding: '8px 0' }}>
-            لا توجد إعلانات مشابهة حالياً.
-          </div>
-        )}
-      </div>
-
-
       <style jsx>{`
         .lazy-load-box {
           padding: 20px;
@@ -862,71 +671,6 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
           padding: 10px;
           border-radius: 8px;
           margin-bottom: 10px;
-        }
-
-
-        /* ====== Hashtags ====== */
-        .hashtags-section {
-          margin-top: 18px;
-          padding-top: 12px;
-          border-top: 1px solid rgba(0,0,0,0.06);
-        }
-        .hashtag-row{
-          display:flex;
-          flex-wrap:wrap;
-          gap:8px;
-          margin-top: 8px;
-        }
-        .hashtag-chip{
-          display:inline-flex;
-          align-items:center;
-          padding:6px 10px;
-          border-radius:999px;
-          background:#fff7ed;
-          border:1px solid rgba(251,146,60,0.25);
-          color:#9a3412;
-          font-weight:900;
-          font-size:13px;
-          line-height:1;
-          border: none;
-          cursor: pointer;
-          user-select:none;
-        }
-        .hashtags-note{
-          margin: 10px 0 0;
-          color:#64748b;
-          font-size:13px;
-          line-height:1.6;
-        }
-
-        /* ====== Related listings ====== */
-        .page-related{
-          margin-top: 22px;
-          padding-top: 14px;
-        }
-
-        .related-section{
-          margin-top: 18px;
-          padding-top: 12px;
-          border-top: 1px solid rgba(0,0,0,0.06);
-        }
-        .related-grid{
-          display:grid;
-          grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-          gap: 14px;
-          margin-top: 10px;
-        }
-
-        @media (max-width: 768px) {
-          .related-grid{
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
-          }
-        }
-        @media (max-width: 420px) {
-          .related-grid{
-            grid-template-columns: 1fr;
-          }
         }
 
         /* ====== Taxonomy chips ====== */
