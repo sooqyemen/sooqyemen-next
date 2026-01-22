@@ -688,11 +688,41 @@ export default function HomeMapView({ listings = [], forcedRootKey = '' }) {
 
     const t = e?.target;
     if (t && t.closest) {
-      if (t.closest('.sooq-chipWrap') || t.closest('.leaflet-control') || t.closest('.leaflet-popup')) return;
+      if (
+        t.closest('.sooq-chipWrap') ||
+        t.closest('.leaflet-control') ||
+        t.closest('.leaflet-popup') ||
+        t.closest('.leaflet-marker-icon') ||
+        t.closest('.leaflet-marker-shadow') ||
+        t.closest('a') ||
+        t.closest('button')
+      ) return;
     }
 
     setIsFullscreen(true);
   };
+
+  const closeFullscreen = (ev) => {
+    if (ev?.preventDefault) ev.preventDefault();
+    setIsFullscreen(false);
+  };
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setIsFullscreen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isFullscreen]);
 
   // ✅ اختيارات الفلاتر
   const chooseRoot = (k) => {
@@ -1324,10 +1354,15 @@ export default function HomeMapView({ listings = [], forcedRootKey = '' }) {
 /* === Fullscreen Overlay === */
 .sooq-fsOverlay {
   position: fixed;
-  inset: 0;
+  inset: 14px;
   z-index: 9999;
   background: #fff;
 }
+
+@media (min-width: 1024px){
+  .sooq-fsOverlay{ inset: 24px; }
+}
+
 .sooq-fsCard {
   position: absolute;
   inset: 0;
