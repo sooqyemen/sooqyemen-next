@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebaseAdmin';
+import { randomInt } from 'crypto';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,7 +39,7 @@ export async function POST(request) {
 
     // Try to generate a unique publicId
     while (!isUnique && attempts < maxAttempts) {
-      publicId = Math.floor(100000 + Math.random() * 900000).toString();
+      publicId = randomInt(100000, 1000000).toString();
       
       // Check if publicId already exists
       const existingUser = await adminDb.collection('users')
