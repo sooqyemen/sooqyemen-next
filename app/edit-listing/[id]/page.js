@@ -59,6 +59,33 @@ const DEFAULT_CATEGORIES = [
   { slug: 'other', name: 'أخرى' },
 ];
 
+const DEFAULT_GOVERNORATES = [
+  { key: 'amanat_al_asimah', nameAr: 'أمانة العاصمة', order: 1 },
+  { key: 'sanaa', nameAr: 'صنعاء', order: 2 },
+  { key: 'aden', nameAr: 'عدن', order: 3 },
+  { key: 'taiz', nameAr: 'تعز', order: 4 },
+  { key: 'ibb', nameAr: 'إب', order: 5 },
+  { key: 'al_hudaydah', nameAr: 'الحديدة', order: 6 },
+  { key: 'hadramaut', nameAr: 'حضرموت', order: 7 },
+  { key: 'dhamar', nameAr: 'ذمار', order: 8 },
+  { key: 'hajjah', nameAr: 'حجة', order: 9 },
+  { key: 'amran', nameAr: 'عمران', order: 10 },
+  { key: 'marib', nameAr: 'مأرب', order: 11 },
+  { key: 'shabwah', nameAr: 'شبوة', order: 12 },
+  { key: 'abyan', nameAr: 'أبين', order: 13 },
+  { key: 'lahij', nameAr: 'لحج', order: 14 },
+  { key: 'al_dhale', nameAr: 'الضالع', order: 15 },
+  { key: 'al_bayda', nameAr: 'البيضاء', order: 16 },
+  { key: 'al_jawf', nameAr: 'الجوف', order: 17 },
+  { key: 'saada', nameAr: 'صعدة', order: 18 },
+  { key: 'al_mahwit', nameAr: 'المحويت', order: 19 },
+  { key: 'raymah', nameAr: 'ريمة', order: 20 },
+  { key: 'al_mahrah', nameAr: 'المهرة', order: 21 },
+  { key: 'socotra', nameAr: 'أرخبيل سقطرى', order: 22 },
+];
+
+
+
 const DEFAULT_EXCHANGE = {
   // تقدر تغيّرها من .env.local (قيم تقريبية افتراضية)
   SAR_TO_YER: Number(process.env.NEXT_PUBLIC_SAR_TO_YER || process.env.NEXT_PUBLIC_RATE_SAR_TO_YER || 600),
@@ -107,6 +134,10 @@ export default function EditListingPage() {
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [city, setCity] = useState('');
+  const [govKey, setGovKey] = useState('');
+  const [govs, setGovs] = useState(DEFAULT_GOVERNORATES);
+  const [govsLoading, setGovsLoading] = useState(true);
+  const [govsSource, setGovsSource] = useState('loading');
   const [category, setCategory] = useState('solar');
 
   // ✅ أقسام (من Firestore إن وجدت) + Fallback
@@ -243,6 +274,77 @@ export default function EditListingPage() {
       } catch {}
     };
   }, []);
+
+// Load governorates from Firestore (taxonomy_governorates)
+useEffect(() => {
+  let unsub = null;
+  try {
+    setGovsLoading(true);
+    unsub = db.collection('taxonomy_governorates').onSnapshot(
+      (snap) => {
+        const arr = [];
+        snap.forEach((doc) => {
+          const d = doc.data() || {};
+          const key = String(doc.id || d.key || '').trim();
+          const nameAr = String(d.nameAr || d.name || d.label || '').trim();
+          const order = typeof d.order === 'number' ? d.order : Number(d.order || 9999);
+          const enabled = d.enabled !== false;
+
+          if (!enabled) return;
+          if (!key || !nameAr) return;
+
+          arr.push({ key, nameAr, order });
+        });
+
+        arr.sort((a, b) => (a.order - b.order) || a.nameAr.localeCompare(b.nameAr, 'ar'));
+
+        if (arr.length) {
+          setGovs(arr);
+          setGovsSource('firestore');
+        } else {
+          setGovs(DEFAULT_GOVERNORATES);
+          setGovsSource('fallback');
+        }
+        setGovsLoading(false);
+      },
+      (err) => {
+        console.warn('Governorates snapshot failed:', err);
+        setGovs(DEFAULT_GOVERNORATES);
+        setGovsSource('fallback');
+        setGovsLoading(false);
+      }
+    );
+  } catch (e) {
+    console.warn('Governorates load failed:', e);
+    setGovs(DEFAULT_GOVERNORATES);
+    setGovsSource('fallback');
+    setGovsLoading(false);
+  }
+
+  return () => {
+    try {
+      if (unsub) unsub();
+    } catch {}
+  };
+}, []);
+
+// Keep city in sync with selected governorate
+useEffect(() => {
+  if (!govKey) return;
+  const found = govs.find((g) => g.key === govKey);
+  if (found) setCity(found.nameAr);
+}, [govKey, govs]);
+
+// If the listing has city but no govKey, try to infer it once governorates are loaded (helps old listings)
+useEffect(() => {
+  if (govsLoading) return;
+  if (govKey) return;
+  const c = String(city || '').trim();
+  if (!c) return;
+  const found = govs.find((g) => g.nameAr === c);
+  if (found) setGovKey(found.key);
+}, [govsLoading, govs, govKey, city]);
+
 
   // ✅ تأكد أن قيمة القسم مطابقة للقائمة (تطبيع + Fallback)
   useEffect(() => {
@@ -467,7 +569,7 @@ export default function EditListingPage() {
     if (!desc.trim()) e.desc = 'الرجاء إدخال وصف للإعلان';
     else if (desc.trim().length < 10) e.desc = 'الوصف يجب أن يكون 10 أحرف على الأقل';
 
-    if (!city.trim()) e.city = 'الرجاء إدخال المدينة';
+    if (!govKey.trim()) e.govKey = 'الرجاء اختيار المحافظة';
 
     const cKey = normalizeCategoryKey(category);
     if (!cKey) e.category = 'الرجاء اختيار القسم';
@@ -627,11 +729,16 @@ export default function EditListingPage() {
 
       const uploaded = await uploadNewImages();
       const finalImages = [...existingImages, ...uploaded].slice(0, MAX_IMAGES);
+      const selectedGov = govs.find((g) => g.key === govKey);
+      const cityToSave = selectedGov ? selectedGov.nameAr : String(city || '').trim();
+
 
       const payload = {
         title: title.trim(),
         description: desc.trim(),
-        city: city.trim(),
+        city: cityToSave,
+        govKey: String(govKey || '').trim(),
+        governorateKey: String(govKey || '').trim(),
         category: cKey || 'other',
 
         // ✅ فروع الأقسام (Taxonomy)
@@ -900,19 +1007,31 @@ export default function EditListingPage() {
           </div>
 
           <div className="row2">
-            <div className="field">
-              <label className="label req">المدينة</label>
-              <input
-                className={`input ${errors.city ? 'err' : ''}`}
-                value={city}
-                onChange={(e) => {
-                  setCity(e.target.value);
-                  if (submitAttempted) setErrors((p) => ({ ...p, city: undefined }));
-                }}
-                placeholder="مثال: صنعاء"
-              />
-              {errors.city && <div className="errMsg">{errors.city}</div>}
-            </div>
+            <div className={`field ${errors.govKey ? 'hasError' : ''}`}>
+              <label className="label req">المحافظة</label>
+          <select
+            className="input"
+            value={govKey}
+            disabled={govsLoading}
+            onChange={(e) => {
+              setGovKey(e.target.value);
+              if (submitAttempted) setErrors((prev) => ({ ...prev, govKey: undefined }));
+            }}
+          >
+            <option value="">{govsLoading ? 'جاري تحميل المحافظات…' : 'اختر المحافظة'}</option>
+            {govs.map((g) => (
+              <option key={g.key} value={g.key}>
+                {g.nameAr}
+              </option>
+            ))}
+          </select>
+          {errors.govKey && <div className="errMsg">{errors.govKey}</div>}
+          <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+            {govsSource === 'firestore'
+              ? '✅ المحافظات تُقرأ من قاعدة البيانات'
+              : 'ℹ️ قائمة افتراضية (Fallback)'}
+          </div>
+        </div>
 
             <div className="field">
               <label className="label req">القسم</label>
