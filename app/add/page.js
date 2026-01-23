@@ -53,6 +53,33 @@ const DEFAULT_CATEGORIES = [
   { slug: 'other', name: 'أخرى / غير مصنف' },
 ];
 
+
+const DEFAULT_GOVERNORATES = [
+  { key: 'amanat_al_asimah', nameAr: 'أمانة العاصمة', order: 1, enabled: true },
+  { key: 'sanaa', nameAr: 'صنعاء', order: 2, enabled: true },
+  { key: 'aden', nameAr: 'عدن', order: 3, enabled: true },
+  { key: 'taiz', nameAr: 'تعز', order: 4, enabled: true },
+  { key: 'ibb', nameAr: 'إب', order: 5, enabled: true },
+  { key: 'al_hudaydah', nameAr: 'الحديدة', order: 6, enabled: true },
+  { key: 'hadramout', nameAr: 'حضرموت', order: 7, enabled: true },
+  { key: 'dhamar', nameAr: 'ذمار', order: 8, enabled: true },
+  { key: 'al_bayda', nameAr: 'البيضاء', order: 9, enabled: true },
+  { key: 'hajjah', nameAr: 'حجة', order: 10, enabled: true },
+  { key: 'lahij', nameAr: 'لحج', order: 11, enabled: true },
+  { key: 'abyan', nameAr: 'أبين', order: 12, enabled: true },
+  { key: 'al_dhalea', nameAr: 'الضالع', order: 13, enabled: true },
+  { key: 'al_mahra', nameAr: 'المهرة', order: 14, enabled: true },
+  { key: 'al_jawf', nameAr: 'الجوف', order: 15, enabled: true },
+  { key: 'al_mahweet', nameAr: 'المحويت', order: 16, enabled: true },
+  { key: 'marib', nameAr: 'مأرب', order: 17, enabled: true },
+  { key: 'raymah', nameAr: 'ريمة', order: 18, enabled: true },
+  { key: 'saada', nameAr: 'صعدة', order: 19, enabled: true },
+  { key: 'shabwah', nameAr: 'شبوة', order: 20, enabled: true },
+  { key: 'amran', nameAr: 'عمران', order: 21, enabled: true },
+  { key: 'socotra', nameAr: 'سقطرى', order: 22, enabled: true },
+];
+
+
 export default function AddPage() {
   const { user, loading } = useAuth();
   const rates = useRates();
@@ -60,6 +87,7 @@ export default function AddPage() {
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [city, setCity] = useState('');
+  const [govKey, setGovKey] = useState('');
   // ✅ مهم: لا يوجد قسم افتراضي
   const [category, setCategory] = useState('');
   // ✅ فروع الأقسام (هرمية)
@@ -135,6 +163,13 @@ export default function AddPage() {
   const [catsLoading, setCatsLoading] = useState(true);
   const [catsSource, setCatsSource] = useState('loading'); // loading | firestore | fallback
 
+  // ✅ المحافظات (المدن) - تحميلها من Firestore أو استخدام fallback
+  const [govs, setGovs] = useState(DEFAULT_GOVERNORATES);
+  const [govsLoading, setGovsLoading] = useState(true);
+  const [govsSource, setGovsSource] = useState('loading'); // loading | firestore | fallback
+
+
+
   // ✅ تحميل الأقسام من Firestore
   useEffect(() => {
     const unsub = db.collection('categories').onSnapshot(
@@ -186,6 +221,62 @@ export default function AddPage() {
     return () => unsub();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ✅ تحميل المحافظات (taxonomy_governorates) من Firestore
+  useEffect(() => {
+    const unsub = db.collection('taxonomy_governorates').onSnapshot(
+      (snap) => {
+        const arr = snap.docs
+          .map((d) => {
+            const data = d.data() || {};
+            return {
+              key: d.id,
+              nameAr: data.nameAr || data.name_ar || data.name || d.id,
+              order: typeof data.order === 'number' ? data.order : Number(data.order || 0),
+              enabled: data.enabled !== false,
+            };
+          })
+          .filter((x) => x.enabled);
+
+        arr.sort((a, b) => {
+          const ao = Number.isFinite(a.order) ? a.order : 0;
+          const bo = Number.isFinite(b.order) ? b.order : 0;
+          if (ao !== bo) return ao - bo;
+          return String(a.nameAr || '').localeCompare(String(b.nameAr || ''), 'ar');
+        });
+
+        if (arr.length) {
+          setGovs(arr);
+          setGovsSource('firestore');
+        } else {
+          setGovs(DEFAULT_GOVERNORATES);
+          setGovsSource('fallback');
+        }
+
+        setGovsLoading(false);
+      },
+      (err) => {
+        console.error('Failed to load taxonomy_governorates:', err);
+        setGovs(DEFAULT_GOVERNORATES);
+        setGovsLoading(false);
+        setGovsSource('fallback');
+      }
+    );
+
+    return () => unsub();
+  }, []);
+
+  // ✅ اجعل city مشتقة من govKey (حتى ما يصير اختلاف أسماء)
+  useEffect(() => {
+    if (!govKey) {
+      setCity('');
+      return;
+    }
+    const found = (govs || []).find((g) => g.key === govKey);
+    setCity(found?.nameAr ? String(found.nameAr) : '');
+  }, [govKey, govs]);
+
+
 
   
   // ✅ عند تغيير القسم: صفّر الفروع
@@ -298,7 +389,7 @@ export default function AddPage() {
     if (!desc.trim()) newErrors.desc = 'الرجاء إدخال وصف للإعلان';
     else if (desc.trim().length < 10) newErrors.desc = 'الوصف يجب أن يكون 10 أحرف على الأقل';
 
-    if (!city.trim()) newErrors.city = 'الرجاء إدخال المدينة';
+    if (!govKey) newErrors.govKey = 'الرجاء اختيار المحافظة';
 
     // ✅ القسم إجباري
     if (!category) newErrors.category = 'الرجاء اختيار القسم';
@@ -438,6 +529,7 @@ export default function AddPage() {
         title: title.trim(),
         description: desc.trim(),
         city: city.trim(),
+        governorateKey: String(govKey || '').trim(),
 
         // ✅ مهم جدًا: نخزّن key الإنجليزي المطابق لـ Firestore
         category: String(category || '').trim(),
@@ -662,20 +754,29 @@ export default function AddPage() {
             {errors.desc && <div className="form-error">{errors.desc}</div>}
           </div>
 
-          {/* المدينة والقسم */}
+          {/* المحافظة والقسم */}
           <div className="form-row">
             <div className="form-group">
-              <label className="form-label required">المدينة</label>
-              <input
-                className={`form-input ${errors.city ? 'error' : ''}`}
-                value={city}
+              <label className="form-label required">
+                المحافظة {govsSource === 'fallback' ? '(Fallback)' : ''}
+              </label>
+              <select
+                className={`form-select ${errors.govKey ? 'error' : ''}`}
+                value={govKey}
                 onChange={(e) => {
-                  setCity(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, city: undefined }));
+                  setGovKey(e.target.value);
+                  if (submitAttempted) setErrors((prev) => ({ ...prev, govKey: undefined }));
                 }}
-                placeholder="مثال: صنعاء"
-              />
-              {errors.city && <div className="form-error">{errors.city}</div>}
+                disabled={govsLoading}
+              >
+                <option value="">{govsLoading ? 'جاري تحميل المحافظات...' : 'اختر المحافظة'}</option>
+                {(govs || []).map((g) => (
+                  <option key={g.key} value={g.key}>
+                    {g.nameAr}
+                  </option>
+                ))}
+              </select>
+              {errors.govKey && <div className="form-error">{errors.govKey}</div>}
             </div>
 
             <div className="form-group">
