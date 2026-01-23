@@ -7,6 +7,8 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
+import { normalizeCategoryKey } from '@/lib/categories';
+
 // ✅ taxonomy (اللي أضفتوه قبل)
 import {
   inferListingTaxonomy,
@@ -84,23 +86,22 @@ String.prototype.hashCode = function() {
 // ✅ توحيد القسم - محسّن لالتقاط جميع الأنماط
 function getListingCategoryValue(listing) {
   if (!listing) return 'other';
-  
-  // جرب جميع الحقول الممكنة للقسم
+
+  // جرب جميع الحقول الممكنة للقسم (قد تكون string أو object)
   const possibleCategoryFields = [
-    'rootCategory', 'category', 'section', 'cat',
-    'categoryKey', 'category_id', 'categoryId',
-    'type', 'mainCategory', 'subCategory', 'group'
+    'rootCategory', 'rootCategorySlug',
+    'category', 'categorySlug', 'categoryKey',
+    'section', 'cat',
+    'category_id', 'categoryId', 'categoryID',
+    'type', 'mainCategory', 'subCategory', 'group',
   ];
-  
+
   for (const field of possibleCategoryFields) {
     if (listing[field] != null && listing[field] !== '') {
-      const value = listing[field];
-      if (typeof value === 'string' || typeof value === 'number') {
-        return String(value).trim();
-      }
+      return listing[field];
     }
   }
-  
+
   return 'other';
 }
 
@@ -127,6 +128,17 @@ function normalizeCoords(listing) {
     if (Array.isArray(listing.coords) && listing.coords.length >= 2) {
       const lat = toNum(listing.coords[0]);
       const lng = toNum(listing.coords[1]);
+      if (lat != null && lng != null) return [lat, lng];
+    }
+    // دعم Firestore GeoPoint (latitude/longitude) وبعض أشكال serialization
+    if (listing.coords.latitude != null && listing.coords.longitude != null) {
+      const lat = toNum(listing.coords.latitude);
+      const lng = toNum(listing.coords.longitude);
+      if (lat != null && lng != null) return [lat, lng];
+    }
+    if (listing.coords._latitude != null && listing.coords._longitude != null) {
+      const lat = toNum(listing.coords._latitude);
+      const lng = toNum(listing.coords._longitude);
       if (lat != null && lng != null) return [lat, lng];
     }
     if (listing.coords.lat != null && listing.coords.lng != null) {
@@ -178,167 +190,7 @@ function inYemen([lat, lng]) {
   );
 }
 
-// ✅ توحيد اسم القسم - محسّن مع المزيد من المرادفات
-function normalizeCategoryKey(v) {
-  if (v == null) return 'other';
-  
-  const raw = String(v).trim().toLowerCase();
-  if (!raw) return 'other';
-  
-  // تنظيف النص
-  const cleaned = raw
-    .replace(/\s+/g, '_')
-    .replace(/-/g, '_')
-    .replace(/__+/g, '_')
-    .replace(/[^\w\u0600-\u06FF_]/g, '') // إزالة الرموز الخاصة مع الحفاظ على العربية
-    .trim();
-
-  // قاموس موسع للمرادفات
-  const synonymMap = {
-    // سيارات
-    'سيارات': 'cars',
-    'سيارة': 'cars',
-    'سياره': 'cars',
-    'car': 'cars',
-    'automotive': 'cars',
-    'مركبات': 'cars',
-    
-    // عقارات
-    'عقارات': 'realestate',
-    'عقار': 'realestate',
-    'عقارية': 'realestate',
-    'real_estate': 'realestate',
-    'realestate': 'realestate',
-    'property': 'realestate',
-    'properties': 'realestate',
-    
-    // جوالات
-    'جوالات': 'phones',
-    'جوال': 'phones',
-    'موبايل': 'phones',
-    'موبيل': 'phones',
-    'mobiles': 'phones',
-    'mobile': 'phones',
-    'هواتف': 'phones',
-    'هاتف': 'phones',
-    
-    // إلكترونيات
-    'إلكترونيات': 'electronics',
-    'الكترونيات': 'electronics',
-    'الكتروني': 'electronics',
-    'electronic': 'electronics',
-    'electronics': 'electronics',
-    'اجهزة': 'electronics',
-    'أجهزة': 'electronics',
-    
-    // دراجات
-    'دراجات_نارية': 'motorcycles',
-    'دراجات': 'motorcycles',
-    'دراجة': 'motorcycles',
-    'motorbikes': 'motorcycles',
-    'motorcycles': 'motorcycles',
-    'bikes': 'motorcycles',
-    
-    // معدات ثقيلة
-    'معدات_ثقيلة': 'heavy_equipment',
-    'معداتثقيلة': 'heavy_equipment',
-    'معدات': 'heavy_equipment',
-    'equipment': 'heavy_equipment',
-    'heavy_equipment': 'heavy_equipment',
-    'heavyequipment': 'heavy_equipment',
-    'مكائن': 'heavy_equipment',
-    
-    // طاقة شمسية
-    'طاقة_شمسية': 'solar',
-    'طاقةشمسية': 'solar',
-    'شمسية': 'solar',
-    'solar': 'solar',
-    'solar_energy': 'solar',
-    
-    // نت وشبكات
-    'نت_وشبكات': 'networks',
-    'نت_و_شبكات': 'networks',
-    'نتوشبكات': 'networks',
-    'شبكات': 'networks',
-    'network': 'networks',
-    'networks': 'networks',
-    'انترنت': 'networks',
-    
-    // صيانة
-    'صيانة': 'maintenance',
-    'maintenance': 'maintenance',
-    'تصليح': 'maintenance',
-    'اصلاح': 'maintenance',
-    'repair': 'maintenance',
-    
-    // أثاث
-    'أثاث': 'furniture',
-    'اثاث': 'furniture',
-    'furniture': 'furniture',
-    'أثاث_منزلي': 'furniture',
-    'اثاث_منزلي': 'furniture',
-    
-    // أدوات منزلية
-    'أدوات_منزلية': 'home_tools',
-    'ادوات_منزلية': 'home_tools',
-    'أدواتمنزلية': 'home_tools',
-    'ادواتمنزلية': 'home_tools',
-    'أدوات': 'home_tools',
-    'ادوات': 'home_tools',
-    'tools': 'home_tools',
-    
-    // ملابس
-    'ملابس': 'clothes',
-    'clothes': 'clothes',
-    'clothing': 'clothes',
-    'أزياء': 'clothes',
-    'ازياء': 'clothes',
-    'fashion': 'clothes',
-    
-    // حيوانات
-    'حيوانات_وطيور': 'animals',
-    'حيوانات': 'animals',
-    'animals': 'animals',
-    'pets': 'animals',
-    'طيور': 'animals',
-    'birds': 'animals',
-    
-    // وظائف
-    'وظائف': 'jobs',
-    'وظيفة': 'jobs',
-    'jobs': 'jobs',
-    'employment': 'jobs',
-    'عمل': 'jobs',
-    'وظيفه': 'jobs',
-    
-    // خدمات
-    'خدمات': 'services',
-    'service': 'services',
-    'services': 'services',
-    
-    // أخرى
-    'اخرى': 'other',
-    'أخرى': 'other',
-    'other': 'other',
-    'متنوع': 'other',
-    'مختلف': 'other',
-    'general': 'other',
-  };
-
-  // أولاً: ابحث عن تطابق مباشر
-  if (synonymMap[cleaned]) {
-    return synonymMap[cleaned];
-  }
-
-  // ثانياً: ابحث عن تطابق جزئي
-  for (const [key, value] of Object.entries(synonymMap)) {
-    if (cleaned.includes(key) || key.includes(cleaned)) {
-      return value;
-    }
-  }
-
-  return 'other';
-}
+// ✅ توحيد اسم القسم: استخدم المصدر الواحد في lib/categories.js
 
 // ✅ ألوان + أيقونات لكل قسم
 const CAT_STYLE = {
