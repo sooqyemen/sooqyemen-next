@@ -159,6 +159,11 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
   const [listing, setListing] = useState(initialListing);
   const [loading, setLoading] = useState(!initialListing);
   const [error, setError] = useState(null);
+  
+  // لا تعرض/تحمّل المزاد إذا الإعلان ليس مزادًا
+  useEffect(() => {
+    if (!listing?.auctionEnabled) setShowAuction(false);
+  }, [listing?.auctionEnabled]);
 
   const [startingChat, setStartingChat] = useState(false);
   const [chatErr, setChatErr] = useState('');
@@ -223,7 +228,7 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
     );
 
     if (commentsRef.current) observer.observe(commentsRef.current);
-    if (auctionRef.current) observer.observe(auctionRef.current);
+    if (listing?.auctionEnabled && auctionRef.current) observer.observe(auctionRef.current);
 
     return () => {
       observer.disconnect();
@@ -542,23 +547,25 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                 </div>
               </div>
 
-              <div className="sidebar-card" ref={auctionRef}>
-                <h3>المزاد</h3>
-                {!showAuction && listing?.auctionEnabled ? (
-                  <div className="lazy-load-box">
-                    <button 
-                      type="button"
-                      className="btn btnPrimary"
-                      onClick={() => setShowAuction(true)}
-                      style={{ width: '100%' }}
-                    >
-                      ⚡ عرض المزاد
-                    </button>
-                  </div>
-                ) : (
-                  <AuctionBox listingId={listing.id} listing={listing} />
-                )}
-              </div>
+              {listing?.auctionEnabled ? (
+                <div className="sidebar-card" ref={auctionRef}>
+                  <h3>المزاد</h3>
+                  {!showAuction ? (
+                    <div className="lazy-load-box">
+                      <button 
+                        type="button"
+                        className="btn btnPrimary"
+                        onClick={() => setShowAuction(true)}
+                        style={{ width: '100%' }}
+                      >
+                        ⚡ عرض المزاد
+                      </button>
+                    </div>
+                  ) : (
+                    <AuctionBox listingId={listing.id} listing={listing} />
+                  )}
+                </div>
+              ) : null}
 
               <div className="sidebar-card">
                 <h3>الموقع</h3>
