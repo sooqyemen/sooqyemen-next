@@ -8,6 +8,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 import { normalizeCategoryKey } from '@/lib/categories';
+import { db } from '@/lib/firebaseClient';
 
 // ✅ taxonomy (اللي أضفتوه قبل)
 import {
@@ -32,6 +33,31 @@ const YEMEN_BOUNDS = [
 ];
 
 const DEFAULT_CENTER = [15.3694, 44.1910];
+
+const GOV_FALLBACK = [
+  { key: 'amanat_al_asimah', nameAr: 'أمانة العاصمة', order: 1 },
+  { key: 'sanaa', nameAr: 'صنعاء', order: 2 },
+  { key: 'aden', nameAr: 'عدن', order: 3 },
+  { key: 'taiz', nameAr: 'تعز', order: 4 },
+  { key: 'ibb', nameAr: 'إب', order: 5 },
+  { key: 'al_hudaydah', nameAr: 'الحديدة', order: 6 },
+  { key: 'hadramout', nameAr: 'حضرموت', order: 7 },
+  { key: 'dhamar', nameAr: 'ذمار', order: 8 },
+  { key: 'hajjah', nameAr: 'حجة', order: 9 },
+  { key: 'amran', nameAr: 'عمران', order: 10 },
+  { key: 'marib', nameAr: 'مأرب', order: 11 },
+  { key: 'shabwah', nameAr: 'شبوة', order: 12 },
+  { key: 'abyan', nameAr: 'أبين', order: 13 },
+  { key: 'lahj', nameAr: 'لحج', order: 14 },
+  { key: 'al_dhalea', nameAr: 'الضالع', order: 15 },
+  { key: 'al_bayda', nameAr: 'البيضاء', order: 16 },
+  { key: 'al_jawf', nameAr: 'الجوف', order: 17 },
+  { key: 'saada', nameAr: 'صعدة', order: 18 },
+  { key: 'al_mahwit', nameAr: 'المحويت', order: 19 },
+  { key: 'raymah', nameAr: 'ريمة', order: 20 },
+  { key: 'al_mahrah', nameAr: 'المهرة', order: 21 },
+  { key: 'socotra', nameAr: 'سقطرى', order: 22 },
+];
 
 // LocalStorage key
 const SEEN_KEY = 'sooq_seen_listings_v1';
@@ -106,6 +132,63 @@ function getListingCategoryValue(listing) {
 }
 
 // ✅ توحيد الإحداثيات - محسّن للتعامل مع تنسيقات متنوعة
+// ✅ توحيد مفتاح المحافظة (govKey) + fallback من city/nameAr
+function normalizeGovKey(v) {
+  if (!v && v !== 0) return '';
+  return String(v).trim().toLowerCase();
+}
+
+function getListingGovKey(listing, nameToKey) {
+  if (!listing) return '';
+
+  // 1) حقول مباشرة بمفتاح إنجليزي
+  const direct = [
+    'govKey',
+    'governorateKey',
+    'governorate_id',
+    'governorateId',
+    'governorateID',
+    'gov',
+    'governorate',
+  ];
+
+  for (const k of direct) {
+    const val = listing[k];
+    if (!val) continue;
+
+    // object? { key, id, value }
+    if (typeof val === 'object') {
+      const maybe = val.key || val.id || val.value || val.slug;
+      const n = normalizeGovKey(maybe);
+      if (n) return n;
+      continue;
+    }
+
+    const n = normalizeGovKey(val);
+    if (n) return n;
+  }
+
+  // 2) fallback من اسم المحافظة بالعربي (داخل الحقول)
+  const nameFields = ['governorateNameAr', 'govNameAr', 'governorateAr', 'nameAr'];
+  for (const k of nameFields) {
+    const n = listing[k];
+    if (typeof n === 'string' && n.trim()) {
+      const trimmed = n.trim();
+      const key = nameToKey?.get(trimmed);
+      if (key) return normalizeGovKey(key);
+    }
+  }
+
+  // 3) fallback من city (لو بيانات قديمة)
+  if (typeof listing.city === 'string' && listing.city.trim()) {
+    const trimmedCity = listing.city.trim();
+    const key = nameToKey?.get(trimmedCity);
+    if (key) return normalizeGovKey(key);
+  }
+
+  return '';
+}
+
 function normalizeCoords(listing) {
   if (!listing) return null;
   
@@ -313,6 +396,10 @@ export default function HomeMapView({ listings = [] }) {
   const [pageMap, setPageMap] = useState(null);
   const [fsMap, setFsMap] = useState(null);
 
+  // ✅ المحافظات (taxonomy_governorates)
+  const [govOptions, setGovOptions] = useState(GOV_FALLBACK);
+  const [activeGov, setActiveGov] = useState('all');
+
   const [activeCat, setActiveCat] = useState('all');
   const [sub1, setSub1] = useState('');
   const [sub2, setSub2] = useState('');
@@ -330,6 +417,40 @@ export default function HomeMapView({ listings = [] }) {
   useEffect(() => {
     setPortalReady(true);
   }, []);
+
+// تحميل المحافظات من Firestore (مع fallback محلي إذا فشل أو لا توجد صلاحية)
+useEffect(() => {
+  let alive = true;
+
+  const load = async () => {
+    try {
+      const snap = await db.collection('taxonomy_governorates').get();
+      const arr = snap.docs
+        .map((d) => {
+          const data = d.data() || {};
+          return {
+            key: String(d.id || '').trim(),
+            nameAr: String(data.nameAr || data.name || d.id || '').trim(),
+            order: typeof data.order === 'number' ? data.order : Number(data.order || 999),
+            enabled: data.enabled !== false,
+          };
+        })
+        .filter((g) => g.key && g.enabled)
+        .sort((a, b) => (a.order || 999) - (b.order || 999));
+
+      if (alive && arr.length) {
+        setGovOptions(arr);
+      }
+    } catch {
+      // احتفظ بالـ GOV_FALLBACK
+    }
+  };
+
+  load();
+  return () => {
+    alive = false;
+  };
+}, []);
 
   useEffect(() => {
     if (!isFullscreen) return;
@@ -382,6 +503,29 @@ export default function HomeMapView({ listings = [] }) {
     setIsFullscreen(true);
   };
 
+  const govNameToKey = useMemo(() => {
+    const m = new Map();
+    for (const g of govOptions || []) {
+      if (g?.nameAr) m.set(String(g.nameAr).trim(), g.key);
+    }
+    // fallback: كمان من القائمة المحلية
+    for (const g of GOV_FALLBACK) {
+      if (g?.nameAr && !m.has(String(g.nameAr).trim())) m.set(String(g.nameAr).trim(), g.key);
+    }
+    return m;
+  }, [govOptions]);
+
+  const govKeyToName = useMemo(() => {
+    const m = new Map();
+    for (const g of govOptions || []) {
+      if (g?.key) m.set(String(g.key), g.nameAr || g.key);
+    }
+    for (const g of GOV_FALLBACK) {
+      if (g?.key && !m.has(String(g.key))) m.set(String(g.key), g.nameAr || g.key);
+    }
+    return m;
+  }, [govOptions]);
+
   const points = useMemo(() => {
     const filteredOut = [];
     const processed = (listings || [])
@@ -430,12 +574,15 @@ export default function HomeMapView({ listings = [] }) {
           tax = null;
         }
 
+        const govKey = getListingGovKey(l, govNameToKey);
+
         return {
           ...l,
           _id: String(id),
           _coords: c,
           _categoryValue: categoryValue,
           _catKey: catKey,
+          _govKey: govKey,
           _tax: tax,
           _originalIndex: index,
         };
@@ -475,6 +622,22 @@ export default function HomeMapView({ listings = [] }) {
     });
   };
 
+  const govCounts = useMemo(() => {
+    const m = new Map();
+    for (const g of govOptions || []) {
+      if (g?.key) m.set(String(g.key), 0);
+    }
+    for (const g of GOV_FALLBACK) {
+      if (g?.key && !m.has(String(g.key))) m.set(String(g.key), 0);
+    }
+    for (const p of points) {
+      const k = p._govKey;
+      if (!k) continue;
+      m.set(k, (m.get(k) || 0) + 1);
+    }
+    return m;
+  }, [points, govOptions]);
+
   const catCounts = useMemo(() => {
     const m = new Map();
     ALL_CATEGORIES.forEach(cat => {
@@ -506,12 +669,13 @@ export default function HomeMapView({ listings = [] }) {
   const baseFilteredPoints = useMemo(() => {
     let arr = points;
     if (activeCat !== 'all') arr = arr.filter((p) => p._catKey === activeCat);
+    if (activeGov !== 'all') arr = arr.filter((p) => p._govKey === activeGov);
 
     if (nearbyOn && boundsObj) {
       arr = arr.filter((p) => boundsObj.contains(L.latLng(p._coords[0], p._coords[1])));
     }
     return arr;
-  }, [points, activeCat, nearbyOn, boundsObj]);
+  }, [points, activeCat, activeGov, nearbyOn, boundsObj]);
 
   const subCounts = useMemo(() => {
     const out = {
@@ -614,9 +778,38 @@ export default function HomeMapView({ listings = [] }) {
     );
   };
 
-  const ChipsOverlay = ({ isFullscreenMode = false }) => (
+  const ChipsOverlay = ({ isFullscreenMode = false }) => {
+    const stop = (e) => {
+      try { e.stopPropagation(); } catch {}
+    };
+    const govList = (govOptions && govOptions.length) ? govOptions : GOV_FALLBACK;
+    return (
     <div className={`sooq-mapOverlay ${isFullscreenMode ? 'sooq-mapOverlay--fullscreen' : ''}`}>
-      <div className="sooq-chips" role="tablist" aria-label="فلترة الأقسام">
+<div className="sooq-govRow" onClick={stop} onPointerDown={stop} onTouchStart={stop}>
+  <select
+    className="sooq-govSelect"
+    value={activeGov}
+    onChange={(e) => setActiveGov(e.target.value)}
+    aria-label="فلترة حسب المحافظة"
+  >
+    <option value="all">كل المحافظات ({points.length})</option>
+    {govList.map((g) => {
+      const c = govCounts.get(String(g.key)) || 0;
+      return (
+        <option key={g.key} value={g.key} disabled={!c}>
+          {(g.nameAr || g.key)} ({c})
+        </option>
+      );
+    })}
+  </select>
+
+  {activeGov !== 'all' ? (
+    <button type="button" className="sooq-govClear" onClick={() => setActiveGov('all')}>
+      إزالة
+    </button>
+  ) : null}
+</div>
+      <div className="sooq-chips" onClick={stop} onPointerDown={stop} onTouchStart={stop} role="tablist" aria-label="فلترة الأقسام">
         <button
           type="button"
           className={`sooq-chip ${activeCat === 'all' ? 'isActive' : ''}`}
@@ -648,7 +841,7 @@ export default function HomeMapView({ listings = [] }) {
       </div>
 
       {activeCat === 'cars' && subCounts.carMake.size > 0 ? (
-        <div className="sooq-chips sooq-chips--sub" role="tablist" aria-label="فلترة ماركات السيارات">
+        <div className="sooq-chips sooq-chips--sub" onClick={stop} onPointerDown={stop} onTouchStart={stop} role="tablist" aria-label="فلترة ماركات السيارات">
           {sub1 ? (
             <button type="button" className="sooq-chip" onClick={() => setSub1('')}>
               ↩ رجوع
@@ -670,7 +863,7 @@ export default function HomeMapView({ listings = [] }) {
       ) : null}
 
       {activeCat === 'phones' && subCounts.phoneBrand.size > 0 ? (
-        <div className="sooq-chips sooq-chips--sub" role="tablist" aria-label="فلترة ماركات الجوالات">
+        <div className="sooq-chips sooq-chips--sub" onClick={stop} onPointerDown={stop} onTouchStart={stop} role="tablist" aria-label="فلترة ماركات الجوالات">
           {sub1 ? (
             <button type="button" className="sooq-chip" onClick={() => setSub1('')}>
               ↩ رجوع
@@ -693,7 +886,7 @@ export default function HomeMapView({ listings = [] }) {
 
       {activeCat === 'realestate' && (subCounts.dealType.size > 0 || subCounts.propertyType.size > 0) ? (
         <>
-          <div className="sooq-chips sooq-chips--sub" role="tablist" aria-label="فلترة بيع/إيجار">
+          <div className="sooq-chips sooq-chips--sub" onClick={stop} onPointerDown={stop} onTouchStart={stop} role="tablist" aria-label="فلترة بيع/إيجار">
             {(sub1 || sub2) ? (
               <button
                 type="button"
@@ -724,7 +917,7 @@ export default function HomeMapView({ listings = [] }) {
           </div>
 
           {sub1 ? (
-            <div className="sooq-chips sooq-chips--sub" role="tablist" aria-label="فلترة نوع العقار">
+            <div className="sooq-chips sooq-chips--sub" onClick={stop} onPointerDown={stop} onTouchStart={stop} role="tablist" aria-label="فلترة نوع العقار">
               {PROPERTY_TYPES.filter((p) => subCounts.propertyType.get(p.key)).map((p) => (
                 <button
                   key={p.key}
@@ -741,7 +934,8 @@ export default function HomeMapView({ listings = [] }) {
         </>
       ) : null}
     </div>
-  );
+    );
+  };
 
   const MapBody = ({ mode, hideZoomControls = false }) => (
     <>
@@ -1324,6 +1518,34 @@ export default function HomeMapView({ listings = [] }) {
         .sooq-mapOverlay--fullscreen::-webkit-scrollbar-thumb:hover {
           background: rgba(0, 0, 0, 0.3);
         }
+.sooq-govRow{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  padding:10px 10px 0;
+  pointer-events:auto;
+}
+.sooq-govSelect{
+  flex:1;
+  height:34px;
+  border-radius:10px;
+  border:1px solid rgba(0,0,0,.10);
+  background:rgba(255,255,255,.95);
+  font-size:13px;
+  padding:0 10px;
+}
+.sooq-govClear{
+  height:34px;
+  border-radius:10px;
+  border:1px solid rgba(0,0,0,.10);
+  background:rgba(255,255,255,.95);
+  padding:0 10px;
+  font-size:13px;
+  cursor:pointer;
+}
+.sooq-govClear:active{ transform: translateY(1px); }
+
+
       `}</style>
     </div>
   );
