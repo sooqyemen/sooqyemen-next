@@ -356,6 +356,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const cursorReadyRef = useRef(false);
   const loadMoreRef = useRef(null);
   const aliveRef = useRef(true);
+  const usedInitialRef = useRef(false);
 
   useEffect(() => {
     aliveRef.current = true;
@@ -370,6 +371,13 @@ export default function CategoryListings({ category, initialListings = [] }) {
     if (!qp) return;
     setQ((prev) => (safeStr(prev) === qp ? prev : qp));
   }, [searchParams]);
+
+// ✅ sync governorate from URL (?gov=aden) optional
+useEffect(() => {
+  const g = safeStr(searchParams?.get('gov') || searchParams?.get('g'));
+  if (!g) return;
+  setGovKey((prev) => (safeStr(prev) === g ? prev : g));
+}, [searchParams]);
 
   const catsRaw = Array.isArray(category) ? category : [category];
   const cats = catsRaw.map(normalizeCategoryKey).filter(Boolean);
@@ -395,6 +403,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const [animalType, setAnimalType] = useState('');
   const [jobType, setJobType] = useState('');
   const [serviceType, setServiceType] = useState('');
+// ✅ فلتر المحافظة (Governorate)
+const [govKey, setGovKey] = useState('');
+const [govOptions, setGovOptions] = useState([]);
+const [govLoading, setGovLoading] = useState(false);
+
 
   // ✅ reset when category changes
   useEffect(() => {
@@ -416,7 +429,96 @@ export default function CategoryListings({ category, initialListings = [] }) {
     setAnimalType('');
     setJobType('');
     setServiceType('');
+    setGovKey('');
+    usedInitialRef.current = false;
   }, [single]);
+
+// ✅ Load governorates from Firestore (taxonomy_governorates) for filtering
+useEffect(() => {
+  let cancelled = false;
+
+  async function loadGovs() {
+    setGovLoading(true);
+    try {
+      const snap = await db.collection('taxonomy_governorates').orderBy('order', 'asc').get();
+      const rows = snap.docs
+        .map((d) => ({ key: d.id, ...(d.data() || {}) }))
+        .map((g) => ({
+          key: safeStr(g.key),
+          nameAr: safeStr(g.nameAr || g.name || g.title || g.label),
+          order: typeof g.order === 'number' ? g.order : Number(g.order || 0),
+          enabled: g.enabled !== false,
+        }))
+        .filter((g) => g.key && g.nameAr && g.enabled);
+
+      // fallback if empty
+      const finalRows = rows.length
+        ? rows
+        : [
+    { key: 'amanat_al_asimah', nameAr: 'أمانة العاصمة', order: 1 },
+    { key: 'sanaa', nameAr: 'صنعاء', order: 2 },
+    { key: 'aden', nameAr: 'عدن', order: 3 },
+    { key: 'taiz', nameAr: 'تعز', order: 4 },
+    { key: 'ibb', nameAr: 'إب', order: 5 },
+    { key: 'al_hudaydah', nameAr: 'الحديدة', order: 6 },
+    { key: 'hadramaut', nameAr: 'حضرموت', order: 7 },
+    { key: 'dhamar', nameAr: 'ذمار', order: 8 },
+    { key: 'hajjah', nameAr: 'حجة', order: 9 },
+    { key: 'amran', nameAr: 'عمران', order: 10 },
+    { key: 'marib', nameAr: 'مأرب', order: 11 },
+    { key: 'shabwah', nameAr: 'شبوة', order: 12 },
+    { key: 'abyan', nameAr: 'أبين', order: 13 },
+    { key: 'lahij', nameAr: 'لحج', order: 14 },
+    { key: 'al_dhale', nameAr: 'الضالع', order: 15 },
+    { key: 'al_bayda', nameAr: 'البيضاء', order: 16 },
+    { key: 'al_jawf', nameAr: 'الجوف', order: 17 },
+    { key: 'saada', nameAr: 'صعدة', order: 18 },
+    { key: 'al_mahwit', nameAr: 'المحويت', order: 19 },
+    { key: 'raymah', nameAr: 'ريمة', order: 20 },
+    { key: 'al_mahrah', nameAr: 'المهرة', order: 21 },
+    { key: 'socotra', nameAr: 'أرخبيل سقطرى', order: 22 }
+  ];
+
+      if (!cancelled) setGovOptions(finalRows);
+    } catch (e) {
+      console.error(e);
+      if (!cancelled) {
+        setGovOptions([
+    { key: 'amanat_al_asimah', nameAr: 'أمانة العاصمة', order: 1 },
+    { key: 'sanaa', nameAr: 'صنعاء', order: 2 },
+    { key: 'aden', nameAr: 'عدن', order: 3 },
+    { key: 'taiz', nameAr: 'تعز', order: 4 },
+    { key: 'ibb', nameAr: 'إب', order: 5 },
+    { key: 'al_hudaydah', nameAr: 'الحديدة', order: 6 },
+    { key: 'hadramaut', nameAr: 'حضرموت', order: 7 },
+    { key: 'dhamar', nameAr: 'ذمار', order: 8 },
+    { key: 'hajjah', nameAr: 'حجة', order: 9 },
+    { key: 'amran', nameAr: 'عمران', order: 10 },
+    { key: 'marib', nameAr: 'مأرب', order: 11 },
+    { key: 'shabwah', nameAr: 'شبوة', order: 12 },
+    { key: 'abyan', nameAr: 'أبين', order: 13 },
+    { key: 'lahij', nameAr: 'لحج', order: 14 },
+    { key: 'al_dhale', nameAr: 'الضالع', order: 15 },
+    { key: 'al_bayda', nameAr: 'البيضاء', order: 16 },
+    { key: 'al_jawf', nameAr: 'الجوف', order: 17 },
+    { key: 'saada', nameAr: 'صعدة', order: 18 },
+    { key: 'al_mahwit', nameAr: 'المحويت', order: 19 },
+    { key: 'raymah', nameAr: 'ريمة', order: 20 },
+    { key: 'al_mahrah', nameAr: 'المهرة', order: 21 },
+    { key: 'socotra', nameAr: 'أرخبيل سقطرى', order: 22 }
+  ]);
+      }
+    } finally {
+      if (!cancelled) setGovLoading(false);
+    }
+  }
+
+  loadGovs();
+  return () => {
+    cancelled = true;
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   const CAT_COLOR = useMemo(() => getCategoryBaseColor(single), [single]);
 
@@ -446,11 +548,15 @@ export default function CategoryListings({ category, initialListings = [] }) {
     }
 
     try {
-      const ref = db
+      let ref = db
         .collection('listings')
-        .where('category', '==', single)
-        .orderBy('createdAt', 'desc')
-        .limit(PAGE_SIZE);
+        .where('category', '==', single);
+
+      if (govKey) {
+        ref = ref.where('govKey', '==', govKey);
+      }
+
+      ref = ref.orderBy('createdAt', 'desc').limit(PAGE_SIZE);
 
       const snap = await ref.get();
       const data = snap.docs
@@ -469,7 +575,9 @@ export default function CategoryListings({ category, initialListings = [] }) {
     } catch (e) {
       console.error(e);
       if (!aliveRef.current) return;
-      setErr(e?.message || 'فشل تحميل إعلانات القسم');
+      const msg = e?.message || 'فشل تحميل إعلانات القسم';
+      const isIndex = (e?.code === 'failed-precondition') || /index/i.test(msg);
+      setErr(isIndex ? '⚠️ فلتر المحافظة يحتاج إنشاء Index في Firestore. افتح Firestore > Indexes أو اضغط رابط Create index الذي يظهر في Console ثم أعد المحاولة.' : msg);
       setLoading(false);
       setHasMore(false);
     }
@@ -480,11 +588,15 @@ export default function CategoryListings({ category, initialListings = [] }) {
     if (!single) return;
 
     try {
-      const ref = db
+      let ref = db
         .collection('listings')
-        .where('category', '==', single)
-        .orderBy('createdAt', 'desc')
-        .limit(PAGE_SIZE);
+        .where('category', '==', single);
+
+      if (govKey) {
+        ref = ref.where('govKey', '==', govKey);
+      }
+
+      ref = ref.orderBy('createdAt', 'desc').limit(PAGE_SIZE);
 
       const snap = await ref.get();
       lastDocRef.current = snap.docs[snap.docs.length - 1] || null;
@@ -521,12 +633,15 @@ export default function CategoryListings({ category, initialListings = [] }) {
         return;
       }
 
-      const ref = db
+      let ref = db
         .collection('listings')
-        .where('category', '==', single)
-        .orderBy('createdAt', 'desc')
-        .startAfter(lastDoc)
-        .limit(PAGE_SIZE);
+        .where('category', '==', single);
+
+      if (govKey) {
+        ref = ref.where('govKey', '==', govKey);
+      }
+
+      ref = ref.orderBy('createdAt', 'desc').startAfter(lastDoc).limit(PAGE_SIZE);
 
       const snap = await ref.get();
       const data = snap.docs.map((d) => normalizeListing({ id: d.id, ...d.data() })).filter(Boolean);
@@ -544,14 +659,17 @@ export default function CategoryListings({ category, initialListings = [] }) {
     } catch (e) {
       console.error(e);
       if (!aliveRef.current) return;
-      setErr(e?.message || 'فشل تحميل المزيد');
+      const msg = e?.message || 'فشل تحميل المزيد';
+      const isIndex = (e?.code === 'failed-precondition') || /index/i.test(msg);
+      setErr(isIndex ? '⚠️ فلتر المحافظة يحتاج إنشاء Index في Firestore. افتح Firestore > Indexes أو اضغط رابط Create index الذي يظهر في Console ثم أعد المحاولة.' : msg);
       setLoadingMore(false);
     }
   }
 
   // ✅ initial SSR vs client fetch
   useEffect(() => {
-    if (Array.isArray(initialListings) && initialListings.length > 0) {
+    if (!govKey && !usedInitialRef.current && Array.isArray(initialListings) && initialListings.length > 0) {
+      usedInitialRef.current = true;
       setItems(initialListings.map(normalizeListing).filter(Boolean));
       setLoading(false);
       setErr('');
@@ -562,7 +680,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
     }
     fetchFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [single]);
+  }, [single, govKey]);
 
   // ✅ Infinite scroll (نوقفه في وضع الخريطة)
   useEffect(() => {
@@ -586,7 +704,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
       } catch {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, hasMore, loading, loadingMore, single]);
+  }, [view, hasMore, loading, loadingMore, single, govKey]);
 
   // ✅ Taxonomy enrich
   const itemsWithTax = useMemo(() => {
@@ -681,6 +799,15 @@ export default function CategoryListings({ category, initialListings = [] }) {
     const catKey = single || '';
     const query = safeStr(q).toLowerCase();
     let arr = itemsWithTax;
+// ✅ governorate filter
+const selGov = safeStr(govKey).toLowerCase();
+if (selGov) {
+  arr = arr.filter((l) => {
+    const lk = safeStr(l?.govKey || l?.governorateKey || l?.governorate || l?.gov).toLowerCase();
+    return lk === selGov;
+  });
+}
+
 
     // cars
     if (catKey === 'cars') {
@@ -784,6 +911,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
     animalType,
     jobType,
     serviceType,
+    govKey,
   ]);
 
   // ====== options for chips ======
@@ -1377,6 +1505,21 @@ export default function CategoryListings({ category, initialListings = [] }) {
               <button className={`btn ${view === 'map' ? 'btnPrimary' : ''}`} onClick={() => setView('map')}>
                 🗺️ خريطة
               </button>
+            </div>
+
+            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+              <span className="muted" style={{ fontWeight: 900 }}>المحافظة:</span>
+              <select
+                className="input"
+                value={govKey}
+                onChange={(e) => setGovKey(e.target.value)}
+                style={{ minWidth: 170 }}
+              >
+                <option value="">{govLoading ? 'جاري التحميل...' : 'الكل'}</option>
+                {govOptions.map((g) => (
+                  <option key={g.key} value={g.key}>{g.nameAr}</option>
+                ))}
+              </select>
             </div>
 
             <input
