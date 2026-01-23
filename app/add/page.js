@@ -525,112 +525,123 @@ export default function AddPage() {
       const lat = Array.isArray(coords) ? Number(coords[0]) : null;
       const lng = Array.isArray(coords) ? Number(coords[1]) : null;
 
-      await db.collection('listings').add({
-        title: title.trim(),
-        description: desc.trim(),
-        city: city.trim(),
-        governorateKey: String(govKey || '').trim(),
+      const selectedGov = govs.find((g) => g.key === govKey);
+      const cityToSave = selectedGov ? selectedGov.nameAr : String(city || '').trim();
 
-        // ✅ مهم جدًا: نخزّن key الإنجليزي المطابق لـ Firestore
-        category: String(category || '').trim(),
+      const payload = {
+title: title.trim(),
+    description: desc.trim(),
+    city: cityToSave,
+    governorateKey: String(govKey || '').trim(),
 
-        // ✅ فروع الأقسام (Taxonomy)
-        carMake: category === 'cars' ? (carMake || null) : null,
-        carMakeText: category === 'cars' && carMake === 'other' ? (carMakeText.trim() || null) : null,
+    // ✅ مهم جدًا: نخزّن key الإنجليزي المطابق لـ Firestore
+    category: String(category || '').trim(),
 
-        // carModel: نخزّن key موحد + نص عند اختيار "أخرى" أو عند عدم توفر preset
-        carModel:
-          category === 'cars'
-            ? (carModel && carModel !== 'other'
-                ? carModel
-                : (carModelText.trim() ? slugKey(carModelText) : null))
-            : null,
-        carModelText:
-          category === 'cars' && (carModel === 'other' || (carModelText.trim() && carModel !== 'other'))
-            ? (carModelText.trim() || null)
-            : null,
+    // ✅ فروع الأقسام (Taxonomy)
+    carMake: category === 'cars' ? (carMake || null) : null,
+    carMakeText: category === 'cars' && carMake === 'other' ? (carMakeText.trim() || null) : null,
 
-        // بقية الأقسام
-        electronicsType: category === 'electronics' ? (electronicsType || null) : null,
-        electronicsTypeText: category === 'electronics' && electronicsType === 'other' ? (electronicsTypeText.trim() || null) : null,
+    // carModel: نخزّن key موحد + نص عند اختيار "أخرى" أو عند عدم توفر preset
+    carModel:
+      category === 'cars'
+        ? (carModel && carModel !== 'other'
+            ? carModel
+            : (carModelText.trim() ? slugKey(carModelText) : null))
+        : null,
+    carModelText:
+      category === 'cars' && (carModel === 'other' || (carModelText.trim() && carModel !== 'other'))
+        ? (carModelText.trim() || null)
+        : null,
 
-        motorcycleBrand: category === 'motorcycles' ? (motorcycleBrand || null) : null,
-        motorcycleBrandText: category === 'motorcycles' && motorcycleBrand === 'other' ? (motorcycleBrandText.trim() || null) : null,
+    // بقية الأقسام
+    electronicsType: category === 'electronics' ? (electronicsType || null) : null,
+    electronicsTypeText: category === 'electronics' && electronicsType === 'other' ? (electronicsTypeText.trim() || null) : null,
 
-        heavyEquipmentType: category === 'heavy_equipment' ? (heavyEquipmentType || null) : null,
-        heavyEquipmentTypeText:
-          category === 'heavy_equipment' && heavyEquipmentType === 'other' ? (heavyEquipmentTypeText.trim() || null) : null,
+    motorcycleBrand: category === 'motorcycles' ? (motorcycleBrand || null) : null,
+    motorcycleBrandText: category === 'motorcycles' && motorcycleBrand === 'other' ? (motorcycleBrandText.trim() || null) : null,
 
-        solarType: category === 'solar' ? (solarType || null) : null,
-        solarTypeText: category === 'solar' && solarType === 'other' ? (solarTypeText.trim() || null) : null,
+    heavyEquipmentType: category === 'heavy_equipment' ? (heavyEquipmentType || null) : null,
+    heavyEquipmentTypeText:
+      category === 'heavy_equipment' && heavyEquipmentType === 'other' ? (heavyEquipmentTypeText.trim() || null) : null,
 
-        networkType: category === 'networks' ? (networkType || null) : null,
-        networkTypeText: category === 'networks' && networkType === 'other' ? (networkTypeText.trim() || null) : null,
+    solarType: category === 'solar' ? (solarType || null) : null,
+    solarTypeText: category === 'solar' && solarType === 'other' ? (solarTypeText.trim() || null) : null,
 
-        maintenanceType: category === 'maintenance' ? (maintenanceType || null) : null,
-        maintenanceTypeText:
-          category === 'maintenance' && maintenanceType === 'other' ? (maintenanceTypeText.trim() || null) : null,
+    networkType: category === 'networks' ? (networkType || null) : null,
+    networkTypeText: category === 'networks' && networkType === 'other' ? (networkTypeText.trim() || null) : null,
 
-        furnitureType: category === 'furniture' ? (furnitureType || null) : null,
-        furnitureTypeText: category === 'furniture' && furnitureType === 'other' ? (furnitureTypeText.trim() || null) : null,
+    maintenanceType: category === 'maintenance' ? (maintenanceType || null) : null,
+    maintenanceTypeText:
+      category === 'maintenance' && maintenanceType === 'other' ? (maintenanceTypeText.trim() || null) : null,
 
-        homeToolsType: category === 'home_tools' ? (homeToolsType || null) : null,
-        homeToolsTypeText:
-          category === 'home_tools' && homeToolsType === 'other' ? (homeToolsTypeText.trim() || null) : null,
+    furnitureType: category === 'furniture' ? (furnitureType || null) : null,
+    furnitureTypeText: category === 'furniture' && furnitureType === 'other' ? (furnitureTypeText.trim() || null) : null,
 
-        clothesType: category === 'clothes' ? (clothesType || null) : null,
-        clothesTypeText: category === 'clothes' && clothesType === 'other' ? (clothesTypeText.trim() || null) : null,
+    homeToolsType: category === 'home_tools' ? (homeToolsType || null) : null,
+    homeToolsTypeText:
+      category === 'home_tools' && homeToolsType === 'other' ? (homeToolsTypeText.trim() || null) : null,
 
-        animalType: category === 'animals' ? (animalType || null) : null,
-        animalTypeText: category === 'animals' && animalType === 'other' ? (animalTypeText.trim() || null) : null,
+    clothesType: category === 'clothes' ? (clothesType || null) : null,
+    clothesTypeText: category === 'clothes' && clothesType === 'other' ? (clothesTypeText.trim() || null) : null,
 
-        jobType: category === 'jobs' ? (jobType || null) : null,
-        jobTypeText: category === 'jobs' && jobType === 'other' ? (jobTypeText.trim() || null) : null,
+    animalType: category === 'animals' ? (animalType || null) : null,
+    animalTypeText: category === 'animals' && animalType === 'other' ? (animalTypeText.trim() || null) : null,
 
-        serviceType: category === 'services' ? (serviceType || null) : null,
-        serviceTypeText: category === 'services' && serviceType === 'other' ? (serviceTypeText.trim() || null) : null,
+    jobType: category === 'jobs' ? (jobType || null) : null,
+    jobTypeText: category === 'jobs' && jobType === 'other' ? (jobTypeText.trim() || null) : null,
 
-        phoneBrand: category === 'phones' ? (phoneBrand || null) : null,
-        phoneBrandText: category === 'phones' && phoneBrand === 'other' ? (phoneBrandText.trim() || null) : null,
+    serviceType: category === 'services' ? (serviceType || null) : null,
+    serviceTypeText: category === 'services' && serviceType === 'other' ? (serviceTypeText.trim() || null) : null,
 
-        dealType: category === 'realestate' ? (dealType || null) : null,
-        propertyType: category === 'realestate' ? (propertyType || null) : null,
-        propertyTypeText:
-          category === 'realestate' && propertyType === 'other' ? (propertyTypeText.trim() || null) : null,
+    phoneBrand: category === 'phones' ? (phoneBrand || null) : null,
+    phoneBrandText: category === 'phones' && phoneBrand === 'other' ? (phoneBrandText.trim() || null) : null,
 
-        phone: phone.trim() || null,
-        isWhatsapp: !!isWhatsapp,
+    dealType: category === 'realestate' ? (dealType || null) : null,
+    propertyType: category === 'realestate' ? (propertyType || null) : null,
+    propertyTypeText:
+      category === 'realestate' && propertyType === 'other' ? (propertyTypeText.trim() || null) : null,
 
-        priceYER: Number(priceYER),
-        originalPrice: Number(price),
-        originalCurrency: currency,
-        currencyBase: 'YER',
+    phone: phone.trim() || null,
+    isWhatsapp: !!isWhatsapp,
 
-        // ✅ نخزّن أكثر من صيغة لتضمن عمل الخريطة في كل مكان
-        coords: lat != null && lng != null ? [lat, lng] : null,
-        lat: lat != null ? lat : null,
-        lng: lng != null ? lng : null,
+    priceYER: Number(priceYER),
+    originalPrice: Number(price),
+    originalCurrency: currency,
+    currencyBase: 'YER',
 
-        locationLabel: locationLabel || null,
+    // ✅ نخزّن أكثر من صيغة لتضمن عمل الخريطة في كل مكان
+    coords: lat != null && lng != null ? [lat, lng] : null,
+    lat: lat != null ? lat : null,
+    lng: lng != null ? lng : null,
 
-        images: imageUrls,
+    locationLabel: locationLabel || null,
 
-        userId: user.uid,
-        userEmail: user.email || null,
-        userName: user.displayName || null,
+    images: imageUrls,
 
-        views: 0,
-        likes: 0,
-        isActive: true,
+    userId: user.uid,
+    userEmail: user.email || null,
+    userName: user.displayName || null,
 
-        auctionEnabled: !!auctionEnabled,
-        auctionEndAt: endAt,
-        currentBidYER: auctionEnabled ? Number(priceYER) : null,
+    views: 0,
+    likes: 0,
+    isActive: true,
 
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      });
+    auctionEnabled: !!auctionEnabled,
+    auctionEndAt: endAt,
 
-      alert('🎉 تم نشر الإعلان بنجاح!');
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      };
+
+      // ✅ لا نضيف حقول المزاد إلا إذا كان الإعلان مزاد فعلاً
+      if (auctionEnabled) {
+        payload.auctionEnabled = true;
+        payload.auctionEndAt = auctionEndAt || null;
+        payload.currentBidYER = Number(priceYER);
+        payload.bidsCount = 0;
+      }
+
+      const docRef = await db.collection('listings').add(payload);
+alert('🎉 تم نشر الإعلان بنجاح!');
       window.location.href = '/';
     } catch (e) {
       console.error(e);
