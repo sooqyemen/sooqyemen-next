@@ -409,6 +409,38 @@ const [govOptions, setGovOptions] = useState([]);
 const [govLoading, setGovLoading] = useState(false);
 
 
+  // ✅ Map nameAr -> key (علشان الفلتر يشتغل حتى لو الإعلان القديم ما فيه govKey)
+  const govNameToKey = useMemo(() => {
+    const m = new Map();
+    (govOptions || []).forEach((g) => {
+      const key = safeStr(g?.key).toLowerCase();
+      const name = safeStr(g?.nameAr).toLowerCase();
+      if (key && name) m.set(name, key);
+    });
+    return m;
+  }, [govOptions]);
+
+  const getListingGovKey = (l) => {
+    // 1) prefer explicit keys
+    const raw = safeStr(l?.govKey || l?.governorateKey || l?.governorate || l?.gov);
+    if (raw) return raw.toLowerCase();
+
+    // 2) try to map Arabic city/governorate name -> key
+    const cityName = safeStr(l?.city);
+    const cityLower = cityName.toLowerCase();
+    if (!cityLower) return '';
+
+    const mapped = govNameToKey.get(cityLower);
+    if (mapped) return mapped.toLowerCase();
+
+    // 3) sometimes city is already stored as key
+    if (/^[a-z0-9_]+$/.test(cityLower)) return cityLower;
+
+    return '';
+  };
+
+
+
   // ✅ reset when category changes
   useEffect(() => {
     setCarMake('');
@@ -551,11 +583,6 @@ useEffect(() => {
       let ref = db
         .collection('listings')
         .where('category', '==', single);
-
-      if (govKey) {
-        ref = ref.where('govKey', '==', govKey);
-      }
-
       ref = ref.orderBy('createdAt', 'desc').limit(PAGE_SIZE);
 
       const snap = await ref.get();
@@ -577,7 +604,7 @@ useEffect(() => {
       if (!aliveRef.current) return;
       const msg = e?.message || 'فشل تحميل إعلانات القسم';
       const isIndex = (e?.code === 'failed-precondition') || /index/i.test(msg);
-      setErr(isIndex ? '⚠️ فلتر المحافظة يحتاج إنشاء Index في Firestore. افتح Firestore > Indexes أو اضغط رابط Create index الذي يظهر في Console ثم أعد المحاولة.' : msg);
+      setErr(isIndex ? '⚠️ الاستعلام يحتاج إنشاء Index في Firestore. افتح Firestore > Indexes أو اضغط رابط Create index الذي يظهر في Console ثم أعد المحاولة.' : msg);
       setLoading(false);
       setHasMore(false);
     }
@@ -591,11 +618,6 @@ useEffect(() => {
       let ref = db
         .collection('listings')
         .where('category', '==', single);
-
-      if (govKey) {
-        ref = ref.where('govKey', '==', govKey);
-      }
-
       ref = ref.orderBy('createdAt', 'desc').limit(PAGE_SIZE);
 
       const snap = await ref.get();
@@ -636,11 +658,6 @@ useEffect(() => {
       let ref = db
         .collection('listings')
         .where('category', '==', single);
-
-      if (govKey) {
-        ref = ref.where('govKey', '==', govKey);
-      }
-
       ref = ref.orderBy('createdAt', 'desc').startAfter(lastDoc).limit(PAGE_SIZE);
 
       const snap = await ref.get();
@@ -661,7 +678,7 @@ useEffect(() => {
       if (!aliveRef.current) return;
       const msg = e?.message || 'فشل تحميل المزيد';
       const isIndex = (e?.code === 'failed-precondition') || /index/i.test(msg);
-      setErr(isIndex ? '⚠️ فلتر المحافظة يحتاج إنشاء Index في Firestore. افتح Firestore > Indexes أو اضغط رابط Create index الذي يظهر في Console ثم أعد المحاولة.' : msg);
+      setErr(isIndex ? '⚠️ الاستعلام يحتاج إنشاء Index في Firestore. افتح Firestore > Indexes أو اضغط رابط Create index الذي يظهر في Console ثم أعد المحاولة.' : msg);
       setLoadingMore(false);
     }
   }
@@ -799,13 +816,10 @@ useEffect(() => {
     const catKey = single || '';
     const query = safeStr(q).toLowerCase();
     let arr = itemsWithTax;
-// ✅ governorate filter
+// ✅ governorate filter (يدعم الإعلانات القديمة اللي ما فيها govKey)
 const selGov = safeStr(govKey).toLowerCase();
 if (selGov) {
-  arr = arr.filter((l) => {
-    const lk = safeStr(l?.govKey || l?.governorateKey || l?.governorate || l?.gov).toLowerCase();
-    return lk === selGov;
-  });
+  arr = arr.filter((l) => getListingGovKey(l) === selGov);
 }
 
 
