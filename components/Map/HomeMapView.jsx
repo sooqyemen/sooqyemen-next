@@ -470,7 +470,6 @@ export default function HomeMapView({ listings = [] }) {
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [portalReady, setPortalReady] = useState(false);
-  const [openedOnce, setOpenedOnce] = useState(false);
 
   useEffect(() => {
     setSeen(readSeen());
@@ -526,10 +525,9 @@ export default function HomeMapView({ listings = [] }) {
     };
   }, [pageMap, fsMap, isFullscreen]);
 
+  // تم إزالة openedOnce لجعل النقر يعمل دائمًا
   const handleMapClick = () => {
-    if (isMobile && openedOnce) return;
     setIsFullscreen(true);
-    if (isMobile) setOpenedOnce(true);
   };
 
   const points = useMemo(() => {
