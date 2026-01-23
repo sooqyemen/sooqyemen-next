@@ -20,7 +20,7 @@ const CATEGORY_LABELS = {
   animals: 'حيوانات وطيور',
   jobs: 'وظائف',
   services: 'خدمات',
-  other: 'أخرى / غير مصنف',
+  other: 'أخرى',
 };
 
 function getCategoryLabel(listing) {
@@ -31,6 +31,12 @@ function getCategoryLabel(listing) {
   return CATEGORY_LABELS[raw] || raw;
 }
 
+// ✅ دالة لتقصير النص
+function truncateText(text, maxLength = 80) {
+  if (!text) return '';
+  return text.length > maxLength ? text.slice(0, maxLength) + '…' : text;
+}
+
 export default function ListingCard({ listing, variant = 'grid' }) {
   const img = (Array.isArray(listing?.images) && listing.images[0]) || listing?.image || null;
 
@@ -38,229 +44,297 @@ export default function ListingCard({ listing, variant = 'grid' }) {
   const city = listing?.city || listing?.region || '';
 
   // وصف مختصر
-  const rawDesc = String(listing?.description || '');
-  const shortDesc = rawDesc.length > 90 ? rawDesc.slice(0, 90) + '…' : rawDesc;
+  const shortDesc = truncateText(String(listing?.description || ''), 65);
 
   const href = `/listing/${listing?.id}`;
 
-  // ✅ وضع القائمة: كرت أفقي (مناسب للجوال)
+  // ✅ وضع القائمة: كرت أفقي (مناسب للجوال) - مصغر
   if (variant === 'list') {
     return (
-      <Link href={href} className="card lc-list" style={{ display: 'flex', flexDirection: 'column', textDecoration: 'none' }}>
-        <div className="row lc-list-row" style={{ gap: 12, alignItems: 'center' }}>
-          {/* صورة */}
-          <div className="lc-thumb">
+      <Link href={href} className="card lc-list" style={{ 
+        display: 'flex', 
+        textDecoration: 'none',
+        padding: '10px',
+        borderRadius: '10px',
+        marginBottom: '8px',
+        background: 'white',
+        border: '1px solid #eef2f7',
+        transition: 'all 0.2s ease',
+        minHeight: '90px'
+      }}>
+        <div className="lc-list-content" style={{ 
+          display: 'flex', 
+          gap: '10px', 
+          alignItems: 'flex-start',
+          width: '100%'
+        }}>
+          {/* صورة مصغرة */}
+          <div className="lc-thumb" style={{
+            width: '75px',
+            height: '75px',
+            borderRadius: '8px',
+            overflow: 'hidden',
+            border: '1px solid #f1f5f9',
+            background: '#f8fafc',
+            flex: '0 0 auto',
+          }}>
             {img ? (
               <Image
                 src={img}
                 alt={listing?.title || 'إعلان'}
                 className="lc-thumb-img"
-                width={120}
-                height={95}
-                style={{ objectFit: 'cover' }}
+                width={75}
+                height={75}
+                style={{ objectFit: 'cover', width: '100%', height: '100%' }}
                 loading="lazy"
               />
             ) : (
-              <div className="lc-thumb-empty">بدون صورة</div>
+              <div style={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#94a3b8',
+                fontWeight: '600',
+                fontSize: '10px',
+              }}>
+                بدون صورة
+              </div>
             )}
           </div>
 
           {/* محتوى */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="lc-title">
-              {listing?.title || 'بدون عنوان'}
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '75px' }}>
+            <div className="lc-title" style={{
+              fontWeight: '700',
+              fontSize: '12.5px',
+              lineHeight: '1.3',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              marginBottom: '4px',
+              color: '#1e293b'
+            }}>
+              {truncateText(listing?.title || 'بدون عنوان', 45)}
             </div>
 
-            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-              <span className="muted" style={{ fontSize: 12 }}>
-                {city ? `📍 ${city}` : '📍 —'}
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              marginBottom: '6px'
+            }}>
+              <span style={{ 
+                fontSize: '11px',
+                color: '#64748b',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px'
+              }}>
+                <span style={{ fontSize: '10px' }}>📍</span>
+                {city ? truncateText(city, 15) : '—'}
               </span>
-              <span className="muted" style={{ fontSize: 12 }}>
+              <span style={{ fontSize: '11px', color: '#64748b' }}>
                 👁️ {Number(listing?.views || 0)}
               </span>
             </div>
 
-            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-              <span className="badge">{getCategoryLabel(listing)}</span>
-              <Price listing={listing} variant="compact" />
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              marginTop: 'auto'
+            }}>
+              <span style={{
+                padding: '3px 8px',
+                borderRadius: '12px',
+                background: '#f1f5f9',
+                color: '#475569',
+                fontSize: '10.5px',
+                fontWeight: '600',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                maxWidth: '70px'
+              }}>
+                {getCategoryLabel(listing)}
+              </span>
+              <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#3b82f6' }}>
+                <Price listing={listing} variant="compact" />
+              </div>
             </div>
-
-            <div className="muted lc-desc" style={{ marginTop: 8 }}>{shortDesc || ""}</div>
           </div>
         </div>
-
-        <style jsx>{`
-          .lc-list-row { flex-wrap: nowrap; }
-          .lc-thumb {
-            width: 120px;
-            height: 95px;
-            border-radius: 12px;
-            overflow: hidden;
-            border: 1px solid #e2e8f0;
-            background: #ffffff;
-            flex: 0 0 auto;
-          }
-          .lc-thumb-img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
-          }
-          .lc-thumb-empty{
-            width: 100%;
-            height: 100%;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            color:#94a3b8;
-            font-weight:800;
-            font-size:12px;
-          }
-          .lc-title{
-            font-weight: 900;
-            font-size: 14px;
-            line-height: 1.4;
-            min-height: 38px;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-          }
-          .lc-desc{
-            font-size: 12.5px;
-            line-height: 1.5;
-            min-height: 36px;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-          }
-
-          @media (max-width: 480px) {
-            .lc-thumb { width: 105px; height: 88px; }
-            .lc-title { font-size: 14px; min-height: 39px; }
-          }
-        `}</style>
       </Link>
     );
   }
 
-  // ✅ وضع الشبكة: كرت عمودي (مثل الرئيسية)
+  // ✅ وضع الشبكة: كرت عمودي (مثل الرئيسية) - مصغر
   return (
-    <Link href={href} className="card lc-grid" style={{ display: 'flex', flexDirection: 'column', textDecoration: 'none' }}>
+    <Link href={href} className="card lc-grid" style={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      textDecoration: 'none',
+      borderRadius: '12px',
+      overflow: 'hidden',
+      background: 'white',
+      border: '1px solid #eef2f7',
+      transition: 'all 0.2s ease',
+      height: '100%',
+      ':hover': {
+        borderColor: '#cbd5e1',
+        transform: 'translateY(-2px)',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+      }
+    }}>
       {/* الصورة */}
-      {img ? (
-        <div className="lc-imgWrap">
+      <div style={{
+        position: 'relative',
+        width: '100%',
+        height: '120px',
+        overflow: 'hidden',
+        background: '#f8fafc',
+        borderBottom: '1px solid #f1f5f9'
+      }}>
+        {img ? (
           <Image
             src={img}
             alt={listing?.title || 'إعلان'}
-            className="lc-img"
-            width={300}
-            height={200}
+            fill
             style={{ objectFit: 'cover' }}
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             loading="lazy"
           />
-        </div>
-      ) : (
-        <div className="lc-imgEmpty">بدون صورة</div>
-      )}
+        ) : (
+          <div style={{
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#94a3b8',
+            fontWeight: '600',
+            fontSize: '11px',
+          }}>
+            بدون صورة
+          </div>
+        )}
+      </div>
 
-      <div className="lc-body" style={{ marginTop: 10 }}>
+      {/* المحتوى */}
+      <div style={{ 
+        padding: '10px',
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
         {/* العنوان */}
-        <div className="lc-title">
-          {listing?.title || 'بدون عنوان'}
+        <div style={{
+          fontWeight: '700',
+          fontSize: '13px',
+          lineHeight: '1.3',
+          marginBottom: '8px',
+          color: '#1e293b',
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+          height: '34px'
+        }}>
+          {truncateText(listing?.title || 'بدون عنوان', 50)}
         </div>
 
-        {/* المدينة + عدد المشاهدات */}
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-          <span className="muted" style={{ fontSize: 12 }}>
-            {city ? `📍 ${city}` : '📍 —'}
+        {/* المدينة والمشاهدات */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '10px'
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '4px',
+            fontSize: '11px',
+            color: '#64748b'
+          }}>
+            <span style={{ fontSize: '10px' }}>📍</span>
+            <span>{city ? truncateText(city, 12) : '—'}</span>
+          </div>
+          <div style={{ 
+            fontSize: '11px', 
+            color: '#64748b',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '3px'
+          }}>
+            <span>👁️</span>
+            <span>{Number(listing?.views || 0)}</span>
+          </div>
+        </div>
+
+        {/* القسم والسعر */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginTop: 'auto'
+        }}>
+          <span style={{
+            padding: '3px 8px',
+            borderRadius: '12px',
+            background: '#f1f5f9',
+            color: '#475569',
+            fontSize: '10.5px',
+            fontWeight: '600',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxWidth: '80px'
+          }}>
+            {getCategoryLabel(listing)}
           </span>
-          <span className="muted" style={{ fontSize: 12 }}>
-            👁️ {Number(listing?.views || 0)}
-          </span>
+          <div style={{ fontSize: '13px', fontWeight: '800', color: '#3b82f6' }}>
+            <Price listing={listing} variant="compact" />
+          </div>
         </div>
 
-        {/* القسم + السعر */}
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-          <span className="badge">{getCategoryLabel(listing)}</span>
-          <Price listing={listing} variant="compact" />
-        </div>
-
-        {/* وصف مختصر */}
-        <p className="muted lc-desc" style={{ marginTop: 8, marginBottom: 0 }}>{shortDesc || ""}</p>
+        {/* الوصف المختصر (اختياري) */}
+        {shortDesc && (
+          <div style={{
+            marginTop: '8px',
+            fontSize: '11px',
+            color: '#64748b',
+            lineHeight: '1.4',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden'
+          }}>
+            {shortDesc}
+          </div>
+        )}
       </div>
 
       <style jsx>{`
-        .lc-grid{
-          overflow: hidden;
-          display: flex;
-          flex-direction: column;
-          height: 100%;
+        .card:hover {
+          border-color: #cbd5e1;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.08);
         }
-        .lc-body{
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-        }
-
-        .lc-body{ padding: 10px; }
-
-        .lc-imgWrap{
-          overflow: hidden;
-          border-radius: 12px;
-          border: 1px solid #e2e8f0;
-          background: #ffffff;
-          height: 170px;
-          width: 100%;
-          position: relative;
-        }
-        .lc-img{
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          display: block;
-        }
-        .lc-imgEmpty{
-          height: 170px;
-          border-radius: 12px;
-          border: 1px solid #e2e8f0;
-          background: #f8fafc;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          color:#94a3b8;
-          font-weight:900;
-          font-size:13px;
-        }
-
-        .lc-title{
-          font-weight: 900;
-          margin-bottom: 4px;
-          line-height: 1.4;
-          min-height: 38px;
-          font-size: 14px;
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
-        .lc-desc{
-          font-size: 12.5px;
-          line-height: 1.5;
-          min-height: 36px;
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
-
+        
         @media (max-width: 768px) {
-          .lc-imgWrap, .lc-imgEmpty { height: 150px; }
+          .lc-grid {
+            border-radius: 10px;
+          }
         }
+        
         @media (max-width: 480px) {
-          .lc-imgWrap, .lc-imgEmpty { height: 140px; }
-          .lc-title { font-size: 14px; min-height: 39px; }
+          .lc-grid {
+            border-radius: 8px;
+          }
         }
       `}</style>
     </Link>
