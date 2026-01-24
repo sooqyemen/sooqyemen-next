@@ -1,4 +1,3 @@
-// components/Map/HomeMapView.jsx
 'use client';
 
 import Link from 'next/link';
@@ -8,15 +7,16 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// ✅ Taxonomy (هرمية الأقسام)
+import { normalizeCategoryKey } from '@/lib/categories';
+import { db } from '@/lib/firebaseClient';
+
+// ✅ taxonomy (اللي أضفتوه قبل)
 import {
   inferListingTaxonomy,
   CAR_MAKES,
   PHONE_BRANDS,
   DEAL_TYPES,
   PROPERTY_TYPES,
-  MOTORCYCLE_BRANDS,
-  getMotorcycleModelsByBrand,
 } from '@/lib/taxonomy';
 
 // Fix Leaflet default icon paths (Next.js)
@@ -33,6 +33,31 @@ const YEMEN_BOUNDS = [
 ];
 
 const DEFAULT_CENTER = [15.3694, 44.1910];
+
+const GOV_FALLBACK = [
+  { key: 'amanat_al_asimah', nameAr: 'أمانة العاصمة', order: 1 },
+  { key: 'sanaa', nameAr: 'صنعاء', order: 2 },
+  { key: 'aden', nameAr: 'عدن', order: 3 },
+  { key: 'taiz', nameAr: 'تعز', order: 4 },
+  { key: 'ibb', nameAr: 'إب', order: 5 },
+  { key: 'al_hudaydah', nameAr: 'الحديدة', order: 6 },
+  { key: 'hadramout', nameAr: 'حضرموت', order: 7 },
+  { key: 'dhamar', nameAr: 'ذمار', order: 8 },
+  { key: 'hajjah', nameAr: 'حجة', order: 9 },
+  { key: 'amran', nameAr: 'عمران', order: 10 },
+  { key: 'marib', nameAr: 'مأرب', order: 11 },
+  { key: 'shabwah', nameAr: 'شبوة', order: 12 },
+  { key: 'abyan', nameAr: 'أبين', order: 13 },
+  { key: 'lahj', nameAr: 'لحج', order: 14 },
+  { key: 'al_dhalea', nameAr: 'الضالع', order: 15 },
+  { key: 'al_bayda', nameAr: 'البيضاء', order: 16 },
+  { key: 'al_jawf', nameAr: 'الجوف', order: 17 },
+  { key: 'saada', nameAr: 'صعدة', order: 18 },
+  { key: 'al_mahwit', nameAr: 'المحويت', order: 19 },
+  { key: 'raymah', nameAr: 'ريمة', order: 20 },
+  { key: 'al_mahrah', nameAr: 'المهرة', order: 21 },
+  { key: 'socotra', nameAr: 'سقطرى', order: 22 },
+];
 
 // LocalStorage key
 const SEEN_KEY = 'sooq_seen_listings_v1';
@@ -53,158 +78,202 @@ function writeSeen(set) {
   } catch {}
 }
 
-// ✅ توحيد ID
+// ✅ توحيد ID - محسّن للتعامل مع أنواع مختلفة
 function getListingId(listing) {
-  return (
-    listing?.id ??
-    listing?._id ??
-    listing?.docId ??
-    listing?.uid ??
-    listing?.slug ??
-    listing?.listingId ??
-    null
-  );
+  if (!listing) return null;
+  
+  // جرب جميع الحقول الممكنة
+  const possibleIdFields = [
+    'id', '_id', 'docId', 'uid', 'slug', 
+    'listingId', 'adId', 'postId', 'itemId'
+  ];
+  
+  for (const field of possibleIdFields) {
+    if (listing[field] != null && listing[field] !== '') {
+      return String(listing[field]);
+    }
+  }
+  
+  // إذا لم يوجد ID، نولد واحدًا مؤقتًا بناءً على المحتوى
+  return `temp_${JSON.stringify(listing).hashCode()}`;
 }
 
-// ✅ توحيد القسم (root)
+// ✅ دالة مساعدة لإنشاء hash من النص
+String.prototype.hashCode = function() {
+  let hash = 0;
+  for (let i = 0; i < this.length; i++) {
+    const char = this.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash);
+};
+
+// ✅ توحيد القسم - محسّن لالتقاط جميع الأنماط
 function getListingCategoryValue(listing) {
-  return (
-    listing?.category ??
-    listing?.section ??
-    listing?.cat ??
-    listing?.categoryKey ??
-    listing?.category_id ??
-    listing?.categoryId ??
-    listing?.type ??
-    'other'
-  );
+  if (!listing) return 'other';
+
+  // جرب جميع الحقول الممكنة للقسم (قد تكون string أو object)
+  const possibleCategoryFields = [
+    'rootCategory', 'rootCategorySlug',
+    'category', 'categorySlug', 'categoryKey',
+    'section', 'cat',
+    'category_id', 'categoryId', 'categoryID',
+    'type', 'mainCategory', 'subCategory', 'group',
+  ];
+
+  for (const field of possibleCategoryFields) {
+    if (listing[field] != null && listing[field] !== '') {
+      return listing[field];
+    }
+  }
+
+  return 'other';
 }
 
-// ✅ توحيد الإحداثيات
+// ✅ توحيد الإحداثيات - محسّن للتعامل مع تنسيقات متنوعة
+// ✅ توحيد مفتاح المحافظة (govKey) + fallback من city/nameAr
+function normalizeGovKey(v) {
+  if (!v && v !== 0) return '';
+  return String(v).trim().toLowerCase();
+}
+
+function getListingGovKey(listing, nameToKey) {
+  if (!listing) return '';
+
+  // 1) حقول مباشرة بمفتاح إنجليزي
+  const direct = [
+    'govKey',
+    'governorateKey',
+    'governorate_id',
+    'governorateId',
+    'governorateID',
+    'gov',
+    'governorate',
+  ];
+
+  for (const k of direct) {
+    const val = listing[k];
+    if (!val) continue;
+
+    // object? { key, id, value }
+    if (typeof val === 'object') {
+      const maybe = val.key || val.id || val.value || val.slug;
+      const n = normalizeGovKey(maybe);
+      if (n) return n;
+      continue;
+    }
+
+    const n = normalizeGovKey(val);
+    if (n) return n;
+  }
+
+  // 2) fallback من اسم المحافظة بالعربي (داخل الحقول)
+  const nameFields = ['governorateNameAr', 'govNameAr', 'governorateAr', 'nameAr'];
+  for (const k of nameFields) {
+    const n = listing[k];
+    if (typeof n === 'string' && n.trim()) {
+      const trimmed = n.trim();
+      const key = nameToKey?.get(trimmed);
+      if (key) return normalizeGovKey(key);
+    }
+  }
+
+  // 3) fallback من city (لو بيانات قديمة)
+  if (typeof listing.city === 'string' && listing.city.trim()) {
+    const trimmedCity = listing.city.trim();
+    const key = nameToKey?.get(trimmedCity);
+    if (key) return normalizeGovKey(key);
+  }
+
+  return '';
+}
+
 function normalizeCoords(listing) {
+  if (!listing) return null;
+  
   const toNum = (v) => {
-    const n = typeof v === 'string' ? parseFloat(v) : v;
+    if (v == null) return null;
+    const n = typeof v === 'string' ? parseFloat(v.replace(',', '.')) : v;
     return Number.isFinite(n) ? n : null;
   };
 
-  // 1) coords: [lat,lng]
-  if (Array.isArray(listing?.coords) && listing.coords.length === 2) {
-    const lat = toNum(listing.coords[0]);
-    const lng = toNum(listing.coords[1]);
+  // أولاً: تحقق من الحقول المباشرة
+  const lat = toNum(listing.lat ?? listing.latitude ?? listing.latitud);
+  const lng = toNum(listing.lng ?? listing.lon ?? listing.long ?? listing.longitude);
+  
+  if (lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+    return [lat, lng];
+  }
+
+  // ثانياً: تحقق من كائن coords
+  if (listing.coords) {
+    if (Array.isArray(listing.coords) && listing.coords.length >= 2) {
+      const lat = toNum(listing.coords[0]);
+      const lng = toNum(listing.coords[1]);
+      if (lat != null && lng != null) return [lat, lng];
+    }
+    // دعم Firestore GeoPoint (latitude/longitude) وبعض أشكال serialization
+    if (listing.coords.latitude != null && listing.coords.longitude != null) {
+      const lat = toNum(listing.coords.latitude);
+      const lng = toNum(listing.coords.longitude);
+      if (lat != null && lng != null) return [lat, lng];
+    }
+    if (listing.coords._latitude != null && listing.coords._longitude != null) {
+      const lat = toNum(listing.coords._latitude);
+      const lng = toNum(listing.coords._longitude);
+      if (lat != null && lng != null) return [lat, lng];
+    }
+    if (listing.coords.lat != null && listing.coords.lng != null) {
+      const lat = toNum(listing.coords.lat);
+      const lng = toNum(listing.coords.lng);
+      if (lat != null && lng != null) return [lat, lng];
+    }
+  }
+
+  // ثالثاً: تحقق من كائن location
+  if (listing.location) {
+    const lat = toNum(listing.location.lat ?? listing.location.latitude);
+    const lng = toNum(listing.location.lng ?? listing.location.lon ?? listing.location.longitude);
     if (lat != null && lng != null) return [lat, lng];
   }
 
-  // 2) coords: {lat,lng}
-  if (listing?.coords?.lat != null && listing?.coords?.lng != null) {
-    const lat = toNum(listing.coords.lat);
-    const lng = toNum(listing.coords.lng);
+  // رابعاً: تحقق من كائن geo
+  if (listing.geo) {
+    const lat = toNum(listing.geo.lat ?? listing.geo.latitude);
+    const lng = toNum(listing.geo.lng ?? listing.geo.lon ?? listing.geo.longitude);
     if (lat != null && lng != null) return [lat, lng];
   }
 
-  // 3) lat/lng مباشرة
-  if (listing?.lat != null && (listing?.lng != null || listing?.lon != null)) {
-    const lat = toNum(listing.lat);
-    const lng = toNum(listing.lng ?? listing.lon);
-    if (lat != null && lng != null) return [lat, lng];
-  }
-
-  // 4) latitude/longitude
-  if (listing?.latitude != null && listing?.longitude != null) {
-    const lat = toNum(listing.latitude);
-    const lng = toNum(listing.longitude);
-    if (lat != null && lng != null) return [lat, lng];
-  }
-
-  // 5) location / geo
-  if (listing?.location?.lat != null && listing?.location?.lng != null) {
-    const lat = toNum(listing.location.lat);
-    const lng = toNum(listing.location.lng);
-    if (lat != null && lng != null) return [lat, lng];
-  }
-  if (listing?.geo?.lat != null && (listing?.geo?.lng != null || listing?.geo?.lon != null)) {
-    const lat = toNum(listing.geo.lat);
-    const lng = toNum(listing.geo.lng ?? listing.geo.lon);
-    if (lat != null && lng != null) return [lat, lng];
+  // خامساً: تحقق من حقل address إذا كان يحتوي على إحداثيات
+  if (listing.address && typeof listing.address === 'string') {
+    const coordMatch = listing.address.match(/(-?\d+\.?\d*),\s*(-?\d+\.?\d*)/);
+    if (coordMatch) {
+      const lat = toNum(coordMatch[1]);
+      const lng = toNum(coordMatch[2]);
+      if (lat != null && lng != null) return [lat, lng];
+    }
   }
 
   return null;
 }
 
+// ✅ توسيع حدود اليمن لتشمل جميع المناطق
+const YEMEN_EXPANDED_BOUNDS = [
+  [11.0, 40.0], // جنوب غرب موسع
+  [20.0, 55.0], // شمال شرق موسع
+];
+
 function inYemen([lat, lng]) {
   return (
-    lat >= YEMEN_BOUNDS[0][0] &&
-    lat <= YEMEN_BOUNDS[1][0] &&
-    lng >= YEMEN_BOUNDS[0][1] &&
-    lng <= YEMEN_BOUNDS[1][1]
+    lat >= YEMEN_EXPANDED_BOUNDS[0][0] &&
+    lat <= YEMEN_EXPANDED_BOUNDS[1][0] &&
+    lng >= YEMEN_EXPANDED_BOUNDS[0][1] &&
+    lng <= YEMEN_EXPANDED_BOUNDS[1][1]
   );
 }
 
-// ✅ توحيد اسم القسم (rootKey)
-function normalizeCategoryKey(v) {
-  const raw = String(v || '').trim();
-  if (!raw) return 'other';
-  const lowered = raw.toLowerCase();
-  const norm = lowered.replace(/\s+/g, '_').replace(/-/g, '_').replace(/__+/g, '_');
-
-  const map = {
-    real_estate: 'realestate',
-    realestate: 'realestate',
-    mobiles: 'phones',
-    mobile: 'phones',
-    phones: 'phones',
-    phone: 'phones',
-    animals_birds: 'animals',
-    animalsbirds: 'animals',
-    animals: 'animals',
-    heavy_equipment: 'heavy_equipment',
-    heavyequipment: 'heavy_equipment',
-    'heavy equipment': 'heavy_equipment',
-    network: 'networks',
-    networks: 'networks',
-    maintenance: 'maintenance',
-    home_tools: 'home_tools',
-    hometools: 'home_tools',
-    'home tools': 'home_tools',
-    cars: 'cars',
-    electronics: 'electronics',
-    motorcycles: 'motorcycles',
-    solar: 'solar',
-    furniture: 'furniture',
-    clothes: 'clothes',
-    jobs: 'jobs',
-    services: 'services',
-    other: 'other',
-
-    // عربي
-    سيارات: 'cars',
-    عقارات: 'realestate',
-    جوالات: 'phones',
-    إلكترونيات: 'electronics',
-    الكترونيات: 'electronics',
-    دراجات_نارية: 'motorcycles',
-    دراجات: 'motorcycles',
-    معدات_ثقيلة: 'heavy_equipment',
-    طاقة_شمسية: 'solar',
-    نت_وشبكات: 'networks',
-    نت_و_شبكات: 'networks',
-    صيانة: 'maintenance',
-    أثاث: 'furniture',
-    اثاث: 'furniture',
-    ملابس: 'clothes',
-    حيوانات_وطيور: 'animals',
-    حيوانات: 'animals',
-    وظائف: 'jobs',
-    خدمات: 'services',
-    اخرى: 'other',
-    أخرى: 'other',
-    أدوات_منزلية: 'home_tools',
-    ادوات_منزلية: 'home_tools',
-    'أدوات منزلية': 'home_tools',
-    'ادوات منزلية': 'home_tools',
-  };
-
-  return map[norm] || map[raw] || norm || 'other';
-}
+// ✅ توحيد اسم القسم: استخدم المصدر الواحد في lib/categories.js
 
 // ✅ ألوان + أيقونات لكل قسم
 const CAT_STYLE = {
@@ -225,6 +294,9 @@ const CAT_STYLE = {
   services: { color: '#0f172a', icon: '🧰', label: 'خدمات' },
   other: { color: '#475569', icon: '📦', label: 'أخرى' },
 };
+
+// ✅ جميع الأقسام المتاحة
+const ALL_CATEGORIES = Object.keys(CAT_STYLE);
 
 function getCatStyle(categoryValue) {
   const key = normalizeCategoryKey(categoryValue);
@@ -248,19 +320,47 @@ function buildDivIcon({ color, icon }, isSeen) {
 
 // ✅ صورة الإعلان
 function pickImage(listing) {
-  const imgs = listing?.images;
-  if (Array.isArray(imgs) && imgs.length > 0) {
-    const first = imgs[0];
-    if (typeof first === 'string') return first;
-    if (first && typeof first === 'object') return first.url || first.src || first.path || null;
+  if (!listing) return null;
+  
+  // جرب عدة حقول للصورة
+  const imageFields = [
+    'image', 'cover', 'thumbnail', 'mainImage', 'imageUrl',
+    'photo', 'picture', 'img', 'featuredImage'
+  ];
+  
+  for (const field of imageFields) {
+    if (listing[field]) {
+      if (typeof listing[field] === 'string') return listing[field];
+      if (typeof listing[field] === 'object' && listing[field].url) {
+        return listing[field].url;
+      }
+    }
   }
-  return listing?.image || listing?.cover || listing?.thumbnail || listing?.mainImage || listing?.imageUrl || null;
+  
+  // تحقق من مصفوفة الصور
+  if (Array.isArray(listing.images) && listing.images.length > 0) {
+    const firstImg = listing.images[0];
+    if (typeof firstImg === 'string') return firstImg;
+    if (firstImg && typeof firstImg === 'object') {
+      return firstImg.url || firstImg.src || firstImg.path || null;
+    }
+  }
+  
+  if (Array.isArray(listing.photos) && listing.photos.length > 0) {
+    const firstPhoto = listing.photos[0];
+    if (typeof firstPhoto === 'string') return firstPhoto;
+    if (firstPhoto && typeof firstPhoto === 'object') {
+      return firstPhoto.url || firstPhoto.src || firstPhoto.path || null;
+    }
+  }
+  
+  return null;
 }
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
-    const check = () => setIsMobile(window.matchMedia('(max-width: 520px)').matches);
+    const check = () => setIsMobile(window.matchMedia('(max-width: 768px)').matches);
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
@@ -287,28 +387,26 @@ function useIsTouchDevice() {
 
 export default function HomeMapView({ listings = [] }) {
   const [seen, setSeen] = useState(() => new Set());
+  const [debugMode, setDebugMode] = useState(false);
+  const [filteredOutListings, setFilteredOutListings] = useState([]);
 
   const isMobile = useIsMobile();
   const isTouch = useIsTouchDevice();
 
-  // ✅ خريطتين منفصلتين: واحدة داخل الصفحة + واحدة ملء الشاشة
   const [pageMap, setPageMap] = useState(null);
   const [fsMap, setFsMap] = useState(null);
 
-  // ✅ فلتر هرمي
-  const [activeRoot, setActiveRoot] = useState('all'); // all | cars | realestate | phones | ...
-  const [activeCarMake, setActiveCarMake] = useState('');
-  const [activeMotorcycleBrand, setActiveMotorcycleBrand] = useState('');
-  const [activeMotorcycleModel, setActiveMotorcycleModel] = useState(''); // toyota...
-  const [activePhoneBrand, setActivePhoneBrand] = useState(''); // apple...
-  const [activeDealType, setActiveDealType] = useState(''); // sale/rent
-  const [activePropertyType, setActivePropertyType] = useState(''); // land/house...
+  // ✅ المحافظات (taxonomy_governorates)
+  const [govOptions, setGovOptions] = useState(GOV_FALLBACK);
+  const [activeGov, setActiveGov] = useState('all');
 
-  // فلترة القريب
+  const [activeCat, setActiveCat] = useState('all');
+  const [sub1, setSub1] = useState('');
+  const [sub2, setSub2] = useState('');
+
   const [nearbyOn, setNearbyOn] = useState(false);
-  const [nearbyBounds, setNearbyBounds] = useState(null); // [[south, west],[north,east]]
+  const [nearbyBounds, setNearbyBounds] = useState(null);
 
-  // ملء الشاشة عبر Portal
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [portalReady, setPortalReady] = useState(false);
 
@@ -320,7 +418,40 @@ export default function HomeMapView({ listings = [] }) {
     setPortalReady(true);
   }, []);
 
-  // ✅ قفل تمرير الصفحة أثناء ملء الشاشة
+// تحميل المحافظات من Firestore (مع fallback محلي إذا فشل أو لا توجد صلاحية)
+useEffect(() => {
+  let alive = true;
+
+  const load = async () => {
+    try {
+      const snap = await db.collection('taxonomy_governorates').get();
+      const arr = snap.docs
+        .map((d) => {
+          const data = d.data() || {};
+          return {
+            key: String(d.id || '').trim(),
+            nameAr: String(data.nameAr || data.name || d.id || '').trim(),
+            order: typeof data.order === 'number' ? data.order : Number(data.order || 999),
+            enabled: data.enabled !== false,
+          };
+        })
+        .filter((g) => g.key && g.enabled)
+        .sort((a, b) => (a.order || 999) - (b.order || 999));
+
+      if (alive && arr.length) {
+        setGovOptions(arr);
+      }
+    } catch {
+      // احتفظ بالـ GOV_FALLBACK
+    }
+  };
+
+  load();
+  return () => {
+    alive = false;
+  };
+}, []);
+
   useEffect(() => {
     if (!isFullscreen) return;
     const prev = document.body.style.overflow;
@@ -330,7 +461,6 @@ export default function HomeMapView({ listings = [] }) {
     };
   }, [isFullscreen]);
 
-  // ✅ مزامنة العرض بين الخريطتين (عند فتح/إغلاق)
   useEffect(() => {
     if (!isFullscreen) return;
     if (!pageMap || !fsMap) return;
@@ -347,7 +477,6 @@ export default function HomeMapView({ listings = [] }) {
     } catch {}
   }, [isFullscreen, pageMap, fsMap]);
 
-  // ✅ invalidateSize للماب الحالي
   useEffect(() => {
     const m = isFullscreen ? fsMap : pageMap;
     if (!m) return;
@@ -369,21 +498,83 @@ export default function HomeMapView({ listings = [] }) {
     };
   }, [pageMap, fsMap, isFullscreen]);
 
+  // تم إزالة openedOnce لجعل النقر يعمل دائمًا
+  const handleMapClick = () => {
+    setIsFullscreen(true);
+  };
+
+  const govNameToKey = useMemo(() => {
+    const m = new Map();
+    for (const g of govOptions || []) {
+      if (g?.nameAr) m.set(String(g.nameAr).trim(), g.key);
+    }
+    // fallback: كمان من القائمة المحلية
+    for (const g of GOV_FALLBACK) {
+      if (g?.nameAr && !m.has(String(g.nameAr).trim())) m.set(String(g.nameAr).trim(), g.key);
+    }
+    return m;
+  }, [govOptions]);
+
+  const govKeyToName = useMemo(() => {
+    const m = new Map();
+    for (const g of govOptions || []) {
+      if (g?.key) m.set(String(g.key), g.nameAr || g.key);
+    }
+    for (const g of GOV_FALLBACK) {
+      if (g?.key && !m.has(String(g.key))) m.set(String(g.key), g.nameAr || g.key);
+    }
+    return m;
+  }, [govOptions]);
+
   const points = useMemo(() => {
-    return (listings || [])
-      .map((l) => {
+    const filteredOut = [];
+    const processed = (listings || [])
+      .map((l, index) => {
         const id = getListingId(l);
-        if (!id) return null;
+        
+        if (!id) {
+          filteredOut.push({
+            listing: l,
+            reason: 'لا يوجد ID',
+            index
+          });
+          return null;
+        }
 
         const c = normalizeCoords(l);
-        if (!c) return null;
-        if (!inYemen(c)) return null;
+        
+        if (!c) {
+          filteredOut.push({
+            listing: l,
+            reason: 'لا توجد إحداثيات صالحة',
+            id,
+            index
+          });
+          return null;
+        }
+        
+        if (!inYemen(c)) {
+          filteredOut.push({
+            listing: l,
+            reason: 'خارج حدود اليمن',
+            coords: c,
+            id,
+            index
+          });
+          return null;
+        }
 
         const categoryValue = getListingCategoryValue(l);
         const catKey = normalizeCategoryKey(categoryValue);
+        
+        let tax = null;
+        try {
+          tax = inferListingTaxonomy(l, catKey);
+        } catch {
+          tax = null;
+        }
 
-        // ✅ استنتاج الفروع (سيارات/عقارات/جوالات)
-        const _tax = inferListingTaxonomy(l, catKey);
+        const govKey = getListingGovKey(l, govNameToKey);
 
         return {
           ...l,
@@ -391,13 +582,23 @@ export default function HomeMapView({ listings = [] }) {
           _coords: c,
           _categoryValue: categoryValue,
           _catKey: catKey,
-          _tax,
+          _govKey: govKey,
+          _tax: tax,
+          _originalIndex: index,
         };
       })
       .filter(Boolean);
-  }, [listings]);
+    
+    if (debugMode) {
+      setFilteredOutListings(filteredOut);
+      console.log('✅ الإعلانات المعالجة:', processed.length);
+      console.log('❌ الإعلانات المستبعدة:', filteredOut);
+      console.log('📊 الإجمالي:', listings.length);
+    }
+    
+    return processed;
+  }, [listings, debugMode]);
 
-  // كاش للأيقونات
   const iconCache = useMemo(() => new Map(), []);
   const getMarkerIcon = (categoryValue, isSeenFlag) => {
     const key = normalizeCategoryKey(categoryValue);
@@ -421,6 +622,38 @@ export default function HomeMapView({ listings = [] }) {
     });
   };
 
+  const govCounts = useMemo(() => {
+    const m = new Map();
+    for (const g of govOptions || []) {
+      if (g?.key) m.set(String(g.key), 0);
+    }
+    for (const g of GOV_FALLBACK) {
+      if (g?.key && !m.has(String(g.key))) m.set(String(g.key), 0);
+    }
+    for (const p of points) {
+      const k = p._govKey;
+      if (!k) continue;
+      m.set(k, (m.get(k) || 0) + 1);
+    }
+    return m;
+  }, [points, govOptions]);
+
+  const catCounts = useMemo(() => {
+    const m = new Map();
+    ALL_CATEGORIES.forEach(cat => {
+      m.set(cat, 0);
+    });
+    for (const p of points) {
+      const k = p._catKey || 'other';
+      m.set(k, (m.get(k) || 0) + 1);
+    }
+    return m;
+  }, [points]);
+
+  const availableCats = useMemo(() => {
+    return ALL_CATEGORIES;
+  }, []);
+
   const boundsObj = useMemo(() => {
     if (!nearbyBounds) return null;
     try {
@@ -433,138 +666,66 @@ export default function HomeMapView({ listings = [] }) {
     }
   }, [nearbyBounds]);
 
-  // ✅ فلترة حسب القريب أولاً (نستخدمها لبناء خيارات الفلاتر)
-  const nearbyFilteredPoints = useMemo(() => {
-    if (!nearbyOn || !boundsObj) return points;
-    return points.filter((p) => boundsObj.contains(L.latLng(p._coords[0], p._coords[1])));
-  }, [points, nearbyOn, boundsObj]);
+  const baseFilteredPoints = useMemo(() => {
+    let arr = points;
+    if (activeCat !== 'all') arr = arr.filter((p) => p._catKey === activeCat);
+    if (activeGov !== 'all') arr = arr.filter((p) => p._govKey === activeGov);
 
-  // ✅ Counts للأقسام الرئيسية
-  const rootCounts = useMemo(() => {
-    const m = new Map();
-    for (const p of nearbyFilteredPoints) {
-      const k = p._catKey || 'other';
-      m.set(k, (m.get(k) || 0) + 1);
+    if (nearbyOn && boundsObj) {
+      arr = arr.filter((p) => boundsObj.contains(L.latLng(p._coords[0], p._coords[1])));
     }
-    return m;
-  }, [nearbyFilteredPoints]);
+    return arr;
+  }, [points, activeCat, activeGov, nearbyOn, boundsObj]);
 
-  const availableRoots = useMemo(() => {
-    const keys = Object.keys(CAT_STYLE);
-    return keys.filter((k) => (rootCounts.get(k) || 0) > 0);
-  }, [rootCounts]);
+  const subCounts = useMemo(() => {
+    const out = {
+      carMake: new Map(),
+      phoneBrand: new Map(),
+      dealType: new Map(),
+      propertyType: new Map(),
+    };
 
-  // ✅ Counts للفروع حسب القسم
-  const carsMakeCounts = useMemo(() => {
-    const m = new Map();
-    for (const p of nearbyFilteredPoints) {
-      if (p._catKey !== 'cars') continue;
-      const mk = p?._tax?.carMake || '';
-      if (!mk) continue;
-      m.set(mk, (m.get(mk) || 0) + 1);
+    for (const p of baseFilteredPoints) {
+      const t = p._tax;
+      if (!t) continue;
+
+      if (p._catKey === 'cars' && t.carMake) {
+        out.carMake.set(t.carMake, (out.carMake.get(t.carMake) || 0) + 1);
+      }
+      if (p._catKey === 'phones' && t.phoneBrand) {
+        out.phoneBrand.set(t.phoneBrand, (out.phoneBrand.get(t.phoneBrand) || 0) + 1);
+      }
+      if (p._catKey === 'realestate') {
+        if (t.dealType) out.dealType.set(t.dealType, (out.dealType.get(t.dealType) || 0) + 1);
+        if (t.propertyType)
+          out.propertyType.set(t.propertyType, (out.propertyType.get(t.propertyType) || 0) + 1);
+      }
     }
-    return m;
-  }, [nearbyFilteredPoints]);
+    return out;
+  }, [baseFilteredPoints]);
 
-  const phonesBrandCounts = useMemo(() => {
-    const m = new Map();
-    for (const p of nearbyFilteredPoints) {
-      if (p._catKey !== 'phones') continue;
-      const bk = p?._tax?.phoneBrand || '';
-      if (!bk) continue;
-      m.set(bk, (m.get(bk) || 0) + 1);
-    }
-    return m;
-  }, [nearbyFilteredPoints]);
-
-  const motorcycleBrandCounts = useMemo(() => {
-    const m = new Map();
-    for (const p of nearbyFilteredPoints) {
-      if (p._catKey !== 'motorcycles') continue;
-      const bk = p?._tax?.motorcycleBrand || '';
-      if (!bk) continue;
-      m.set(bk, (m.get(bk) || 0) + 1);
-    }
-    return m;
-  }, [nearbyFilteredPoints]);
-
-  const motorcycleModelCounts = useMemo(() => {
-    const m = new Map();
-    for (const p of nearbyFilteredPoints) {
-      if (p._catKey !== 'motorcycles') continue;
-      if (activeMotorcycleBrand && (p?._tax?.motorcycleBrand || '') !== activeMotorcycleBrand) continue;
-      const mk = p?._tax?.motorcycleModel || '';
-      if (!mk) continue;
-      m.set(mk, (m.get(mk) || 0) + 1);
-    }
-    return m;
-  }, [nearbyFilteredPoints, activeMotorcycleBrand]);
-
-  const realestateDealCounts = useMemo(() => {
-    const m = new Map();
-    for (const p of nearbyFilteredPoints) {
-      if (p._catKey !== 'realestate') continue;
-      const dk = p?._tax?.dealType || '';
-      if (!dk) continue;
-      m.set(dk, (m.get(dk) || 0) + 1);
-    }
-    return m;
-  }, [nearbyFilteredPoints]);
-
-  const realestatePropCounts = useMemo(() => {
-    const m = new Map();
-    for (const p of nearbyFilteredPoints) {
-      if (p._catKey !== 'realestate') continue;
-      if (activeDealType && (p?._tax?.dealType || '') !== activeDealType) continue;
-
-      const pk = p?._tax?.propertyType || '';
-      if (!pk) continue;
-      m.set(pk, (m.get(pk) || 0) + 1);
-    }
-    return m;
-  }, [nearbyFilteredPoints, activeDealType]);
-
-  // ✅ الفلاتر الأساسية + الهرمية
   const filteredPoints = useMemo(() => {
-    let arr = nearbyFilteredPoints;
+    let arr = baseFilteredPoints;
 
-    if (activeRoot !== 'all') {
-      arr = arr.filter((p) => p._catKey === activeRoot);
+    if (activeCat === 'cars' && sub1) {
+      arr = arr.filter((p) => p._tax?.carMake === sub1);
     }
-
-    if (activeRoot === 'cars' && activeCarMake) {
-      arr = arr.filter((p) => (p?._tax?.carMake || '') === activeCarMake);
+    if (activeCat === 'phones' && sub1) {
+      arr = arr.filter((p) => p._tax?.phoneBrand === sub1);
     }
-
-    if (activeRoot === 'phones' && activePhoneBrand) {
-      arr = arr.filter((p) => (p?._tax?.phoneBrand || '') === activePhoneBrand);
-    }
-
-    if (activeRoot === 'motorcycles') {
-      if (activeMotorcycleBrand) {
-        arr = arr.filter((p) => (p?._tax?.motorcycleBrand || '') === activeMotorcycleBrand);
-      }
-      if (activeMotorcycleModel) {
-        arr = arr.filter((p) => (p?._tax?.motorcycleModel || '') === activeMotorcycleModel);
-      }
-    }
-
-    if (activeRoot === 'realestate') {
-      if (activeDealType) arr = arr.filter((p) => (p?._tax?.dealType || '') === activeDealType);
-      if (activePropertyType) arr = arr.filter((p) => (p?._tax?.propertyType || '') === activePropertyType);
+    if (activeCat === 'realestate') {
+      if (sub1) arr = arr.filter((p) => p._tax?.dealType === sub1);
+      if (sub2) arr = arr.filter((p) => p._tax?.propertyType === sub2);
     }
 
     return arr;
-  }, [
-    nearbyFilteredPoints,
-    activeRoot,
-    activeCarMake,
-    activePhoneBrand,
-    activeDealType,
-    activePropertyType,
-  ]);
+  }, [baseFilteredPoints, activeCat, sub1, sub2]);
 
-  // ✅ تطبيق قريب حسب حدود الخريطة الحالية
+  useEffect(() => {
+    setSub1('');
+    setSub2('');
+  }, [activeCat]);
+
   const applyNearbyFromMap = (m) => {
     if (!m) return;
     try {
@@ -584,12 +745,10 @@ export default function HomeMapView({ listings = [] }) {
     setNearbyBounds(null);
   };
 
-  // ✅ زر تحديد الموقع (في ملء الشاشة فقط)
   const locateMe = () => {
     const m = fsMap;
     if (!m) return;
 
-    // Toggle: لو القريب شغال اضغط مرة ثانية يلغي
     if (nearbyOn) {
       resetNearby();
       return;
@@ -619,312 +778,180 @@ export default function HomeMapView({ listings = [] }) {
     );
   };
 
-  // ✅ فتح ملء الشاشة للجوال دائماً عند النقر على الخريطة (بدون مانع / بدون openedOnce)
-  const openFullscreenFromMap = () => {
-    if (!isMobile) return;
-    if (isFullscreen) return;
-    setIsFullscreen(true);
-  };
+  const ChipsOverlay = ({ isFullscreenMode = false }) => {
+    const stop = (e) => {
+      try { e.stopPropagation(); } catch {}
+    };
+    const govList = (govOptions && govOptions.length) ? govOptions : GOV_FALLBACK;
+    return (
+    <div className={`sooq-mapOverlay ${isFullscreenMode ? 'sooq-mapOverlay--fullscreen' : ''}`}>
+<div className="sooq-govRow" onClick={stop} onPointerDown={stop} onTouchStart={stop}>
+  <select
+    className="sooq-govSelect"
+    value={activeGov}
+    onChange={(e) => setActiveGov(e.target.value)}
+    aria-label="فلترة حسب المحافظة"
+  >
+    <option value="all">كل المحافظات ({points.length})</option>
+    {govList.map((g) => {
+      const c = govCounts.get(String(g.key)) || 0;
+      return (
+        <option key={g.key} value={g.key} disabled={!c}>
+          {(g.nameAr || g.key)} ({c})
+        </option>
+      );
+    })}
+  </select>
 
-  // ✅ اختيارات الفلاتر
-  const chooseRoot = (k) => {
-    setActiveRoot(k);
-    // تصفير الفروع عند تبديل القسم
-    setActiveCarMake('');
-    setActivePhoneBrand('');
-    setActiveDealType('');
-    setActivePropertyType('');
-  };
+  {activeGov !== 'all' ? (
+    <button type="button" className="sooq-govClear" onClick={() => setActiveGov('all')}>
+      إزالة
+    </button>
+  ) : null}
+</div>
+      <div className="sooq-chips" onClick={stop} onPointerDown={stop} onTouchStart={stop} role="tablist" aria-label="فلترة الأقسام">
+        <button
+          type="button"
+          className={`sooq-chip ${activeCat === 'all' ? 'isActive' : ''}`}
+          onClick={() => setActiveCat('all')}
+        >
+          الكل <span className="sooq-chipCount">{points.length}</span>
+        </button>
 
-  const backToRoots = () => {
-    setActiveRoot('all');
-    setActiveCarMake('');
-    setActivePhoneBrand('');
-    setActiveDealType('');
-    setActivePropertyType('');
-  };
-
-  const backRealestateToDeal = () => {
-    setActiveDealType('');
-    setActivePropertyType('');
-  };
-
-  // ✅ Overlay chips (هرمي)
-  const ChipsOverlay = (
-    <div
-      className="sooq-mapOverlay"
-      // مهم: منع فتح ملء الشاشة عند لمس الشيبس (كان يسبب "ترمش" وما يختار)
-      onPointerDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className="sooq-chips" role="tablist" aria-label="فلترة الأقسام">
-        {/* المستوى الأول */}
-        {activeRoot === 'all' ? (
-          <>
+        {availableCats.map((k) => {
+          const s = CAT_STYLE[k] || CAT_STYLE.other;
+          const c = catCounts.get(k) || 0;
+          const hasListings = c > 0;
+          
+          return (
             <button
+              key={k}
               type="button"
-              className={`sooq-chip isActive`}
-              onClick={() => chooseRoot('all')}
+              className={`sooq-chip ${activeCat === k ? 'isActive' : ''} ${!hasListings ? 'sooq-chip--disabled' : ''}`}
+              onClick={() => hasListings && setActiveCat(k)}
+              title={hasListings ? s.label : `${s.label} (لا توجد إعلانات)`}
+              disabled={!hasListings}
             >
-              الكل <span className="sooq-chipCount">{nearbyFilteredPoints.length}</span>
+              <span className="sooq-chipDot" style={{ background: s.color }} />
+              <span className="sooq-chipText">{s.label}</span>
+              <span className="sooq-chipCount">{c}</span>
             </button>
-
-            {availableRoots.map((k) => {
-              const s = CAT_STYLE[k] || CAT_STYLE.other;
-              const c = rootCounts.get(k) || 0;
-              return (
-                <button
-                  key={k}
-                  type="button"
-                  className="sooq-chip"
-                  onClick={() => chooseRoot(k)}
-                  title={s.label}
-                >
-                  <span className="sooq-chipDot" style={{ background: s.color }} />
-                  <span className="sooq-chipText">{s.label}</span>
-                  <span className="sooq-chipCount">{c}</span>
-                </button>
-              );
-            })}
-          </>
-        ) : null}
-
-        {/* المستوى الثاني: سيارات -> ماركات */}
-        {activeRoot === 'cars' ? (
-          <>
-            <button type="button" className="sooq-chip" onClick={backToRoots} title="رجوع للأقسام">
-              ⬅︎ الأقسام
-            </button>
-
-            <button
-              type="button"
-              className={`sooq-chip ${activeCarMake === '' ? 'isActive' : ''}`}
-              onClick={() => setActiveCarMake('')}
-              title="كل السيارات"
-            >
-              الكل <span className="sooq-chipCount">{rootCounts.get('cars') || 0}</span>
-            </button>
-
-            {CAR_MAKES.filter((x) => (carsMakeCounts.get(x.key) || 0) > 0).map((x) => (
-              <button
-                key={x.key}
-                type="button"
-                className={`sooq-chip ${activeCarMake === x.key ? 'isActive' : ''}`}
-                onClick={() => setActiveCarMake(x.key)}
-                title={x.label}
-              >
-                <span className="sooq-chipText">{x.label}</span>
-                <span className="sooq-chipCount">{carsMakeCounts.get(x.key) || 0}</span>
-              </button>
-            ))}
-          </>
-        ) : null}
-
-        {/* المستوى الثاني: جوالات -> ماركات */}
-        {activeRoot === 'phones' ? (
-          <>
-            <button type="button" className="sooq-chip" onClick={backToRoots} title="رجوع للأقسام">
-              ⬅︎ الأقسام
-            </button>
-
-            <button
-              type="button"
-              className={`sooq-chip ${activePhoneBrand === '' ? 'isActive' : ''}`}
-              onClick={() => setActivePhoneBrand('')}
-              title="كل الجوالات"
-            >
-              الكل <span className="sooq-chipCount">{rootCounts.get('phones') || 0}</span>
-            </button>
-
-            {PHONE_BRANDS.filter((x) => (phonesBrandCounts.get(x.key) || 0) > 0).map((x) => (
-              <button
-                key={x.key}
-                type="button"
-                className={`sooq-chip ${activePhoneBrand === x.key ? 'isActive' : ''}`}
-                onClick={() => setActivePhoneBrand(x.key)}
-                title={x.label}
-              >
-                <span className="sooq-chipText">{x.label}</span>
-                <span className="sooq-chipCount">{phonesBrandCounts.get(x.key) || 0}</span>
-              </button>
-            ))}
-          </>
-        ) : null}
-
-
-
-        {/* المستوى الثاني والثالث: دراجات -> ماركات -> موديلات */}
-        {activeRoot === 'motorcycles' ? (
-          <>
-            <button type="button" className="sooq-chip" onClick={backToRoots} title="رجوع للأقسام">
-              ⬅︎ الأقسام
-            </button>
-
-            {/* مستوى الماركات */}
-            {!activeMotorcycleBrand ? (
-              <>
-                <button
-                  type="button"
-                  className={`sooq-chip ${activeMotorcycleBrand === '' ? 'isActive' : ''}`}
-                  onClick={() => {
-                    setActiveMotorcycleBrand('');
-                    setActiveMotorcycleModel('');
-                  }}
-                  title="كل الدراجات"
-                >
-                  الكل <span className="sooq-chipCount">{rootCounts.get('motorcycles') || 0}</span>
-                </button>
-
-                {MOTORCYCLE_BRANDS.filter((x) => (motorcycleBrandCounts.get(x.key) || 0) > 0).map((x) => (
-                  <button
-                    key={x.key}
-                    type="button"
-                    className={`sooq-chip ${activeMotorcycleBrand === x.key ? 'isActive' : ''}`}
-                    onClick={() => {
-                      setActiveMotorcycleBrand(x.key);
-                      setActiveMotorcycleModel('');
-                    }}
-                    title={x.label}
-                  >
-                    <span className="sooq-chipText">{x.label}</span>
-                    <span className="sooq-chipCount">{motorcycleBrandCounts.get(x.key) || 0}</span>
-                  </button>
-                ))}
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="sooq-chip"
-                  onClick={() => {
-                    setActiveMotorcycleBrand('');
-                    setActiveMotorcycleModel('');
-                  }}
-                  title="رجوع للماركات"
-                >
-                  ⬅︎ الماركات
-                </button>
-
-                <button
-                  type="button"
-                  className={`sooq-chip ${activeMotorcycleModel === '' ? 'isActive' : ''}`}
-                  onClick={() => setActiveMotorcycleModel('')}
-                  title="كل الموديلات"
-                >
-                  الكل <span className="sooq-chipCount">{motorcycleBrandCounts.get(activeMotorcycleBrand) || 0}</span>
-                </button>
-
-                {getMotorcycleModelsByBrand(activeMotorcycleBrand)
-                  .filter((x) => (motorcycleModelCounts.get(x.key) || 0) > 0)
-                  .map((x) => (
-                    <button
-                      key={x.key}
-                      type="button"
-                      className={`sooq-chip ${activeMotorcycleModel === x.key ? 'isActive' : ''}`}
-                      onClick={() => setActiveMotorcycleModel(x.key)}
-                      title={x.label}
-                    >
-                      <span className="sooq-chipText">{x.label}</span>
-                      <span className="sooq-chipCount">{motorcycleModelCounts.get(x.key) || 0}</span>
-                    </button>
-                  ))}
-              </>
-            )}
-          </>
-        ) : null}
-
-        {/* المستوى الثاني والثالث: عقارات -> بيع/إيجار -> نوع */}
-        {activeRoot === 'realestate' ? (
-          <>
-            {/* رجوع للأقسام */}
-            <button type="button" className="sooq-chip" onClick={backToRoots} title="رجوع للأقسام">
-              ⬅︎ الأقسام
-            </button>
-
-            {/* مستوى بيع/إيجار */}
-            {!activeDealType ? (
-              <>
-                {DEAL_TYPES.filter((x) => (realestateDealCounts.get(x.key) || 0) > 0).map((x) => (
-                  <button
-                    key={x.key}
-                    type="button"
-                    className={`sooq-chip ${activeDealType === x.key ? 'isActive' : ''}`}
-                    onClick={() => {
-                      setActiveDealType(x.key);
-                      setActivePropertyType('');
-                    }}
-                    title={x.label}
-                  >
-                    <span className="sooq-chipText">{x.label}</span>
-                    <span className="sooq-chipCount">{realestateDealCounts.get(x.key) || 0}</span>
-                  </button>
-                ))}
-              </>
-            ) : (
-              <>
-                {/* رجوع خطوة لبيع/إيجار */}
-                <button type="button" className="sooq-chip" onClick={backRealestateToDeal} title="رجوع">
-                  ⬅︎ بيع/إيجار
-                </button>
-
-                {/* كل الأنواع */}
-                <button
-                  type="button"
-                  className={`sooq-chip ${activePropertyType === '' ? 'isActive' : ''}`}
-                  onClick={() => setActivePropertyType('')}
-                  title="كل الأنواع"
-                >
-                  الكل
-                  <span className="sooq-chipCount">
-                    {nearbyFilteredPoints.filter(
-                      (p) =>
-                        p._catKey === 'realestate' &&
-                        (p?._tax?.dealType || '') === activeDealType
-                    ).length || 0}
-                  </span>
-                </button>
-
-                {PROPERTY_TYPES.filter((x) => (realestatePropCounts.get(x.key) || 0) > 0).map((x) => (
-                  <button
-                    key={x.key}
-                    type="button"
-                    className={`sooq-chip ${activePropertyType === x.key ? 'isActive' : ''}`}
-                    onClick={() => setActivePropertyType(x.key)}
-                    title={x.label}
-                  >
-                    <span className="sooq-chipText">{x.label}</span>
-                    <span className="sooq-chipCount">{realestatePropCounts.get(x.key) || 0}</span>
-                  </button>
-                ))}
-              </>
-            )}
-          </>
-        ) : null}
+          );
+        })}
       </div>
+
+      {activeCat === 'cars' && subCounts.carMake.size > 0 ? (
+        <div className="sooq-chips sooq-chips--sub" onClick={stop} onPointerDown={stop} onTouchStart={stop} role="tablist" aria-label="فلترة ماركات السيارات">
+          {sub1 ? (
+            <button type="button" className="sooq-chip" onClick={() => setSub1('')}>
+              ↩ رجوع
+            </button>
+          ) : null}
+
+          {CAR_MAKES.filter((m) => subCounts.carMake.get(m.key)).map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              className={`sooq-chip ${sub1 === m.key ? 'isActive' : ''}`}
+              onClick={() => setSub1(m.key)}
+            >
+              <span className="sooq-chipText">{m.label}</span>
+              <span className="sooq-chipCount">{subCounts.carMake.get(m.key)}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {activeCat === 'phones' && subCounts.phoneBrand.size > 0 ? (
+        <div className="sooq-chips sooq-chips--sub" onClick={stop} onPointerDown={stop} onTouchStart={stop} role="tablist" aria-label="فلترة ماركات الجوالات">
+          {sub1 ? (
+            <button type="button" className="sooq-chip" onClick={() => setSub1('')}>
+              ↩ رجوع
+            </button>
+          ) : null}
+
+          {PHONE_BRANDS.filter((b) => subCounts.phoneBrand.get(b.key)).map((b) => (
+            <button
+              key={b.key}
+              type="button"
+              className={`sooq-chip ${sub1 === b.key ? 'isActive' : ''}`}
+              onClick={() => setSub1(b.key)}
+            >
+              <span className="sooq-chipText">{b.label}</span>
+              <span className="sooq-chipCount">{subCounts.phoneBrand.get(b.key)}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {activeCat === 'realestate' && (subCounts.dealType.size > 0 || subCounts.propertyType.size > 0) ? (
+        <>
+          <div className="sooq-chips sooq-chips--sub" onClick={stop} onPointerDown={stop} onTouchStart={stop} role="tablist" aria-label="فلترة بيع/إيجار">
+            {(sub1 || sub2) ? (
+              <button
+                type="button"
+                className="sooq-chip"
+                onClick={() => {
+                  setSub1('');
+                  setSub2('');
+                }}
+              >
+                ↩ رجوع
+              </button>
+            ) : null}
+
+            {DEAL_TYPES.filter((d) => subCounts.dealType.get(d.key)).map((d) => (
+              <button
+                key={d.key}
+                type="button"
+                className={`sooq-chip ${sub1 === d.key ? 'isActive' : ''}`}
+                onClick={() => {
+                  setSub1(d.key);
+                  setSub2('');
+                }}
+              >
+                <span className="sooq-chipText">{d.label}</span>
+                <span className="sooq-chipCount">{subCounts.dealType.get(d.key)}</span>
+              </button>
+            ))}
+          </div>
+
+          {sub1 ? (
+            <div className="sooq-chips sooq-chips--sub" onClick={stop} onPointerDown={stop} onTouchStart={stop} role="tablist" aria-label="فلترة نوع العقار">
+              {PROPERTY_TYPES.filter((p) => subCounts.propertyType.get(p.key)).map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  className={`sooq-chip ${sub2 === p.key ? 'isActive' : ''}`}
+                  onClick={() => setSub2(p.key)}
+                >
+                  <span className="sooq-chipText">{p.label}</span>
+                  <span className="sooq-chipCount">{subCounts.propertyType.get(p.key)}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </div>
-  );
+    );
+  };
 
-  const MapBody = ({ mode }) => (
+  const MapBody = ({ mode, hideZoomControls = false }) => (
     <>
-      {availableRoots.length > 0 ? ChipsOverlay : null}
-
       <MapContainer
         whenCreated={mode === 'fs' ? setFsMap : setPageMap}
         center={DEFAULT_CENTER}
         zoom={7}
         minZoom={6}
         maxZoom={18}
-        zoomControl={!isTouch} // ✅ +/− فقط لغير اللمس
+        zoomControl={!hideZoomControls && !isTouch}
         style={{ height: '100%', width: '100%' }}
-        maxBounds={YEMEN_BOUNDS}
+        maxBounds={YEMEN_EXPANDED_BOUNDS}
         maxBoundsViscosity={1.0}
         scrollWheelZoom
       >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution="&copy; OpenStreetMap contributors"
-        />
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap contributors" />
 
         {filteredPoints.map((l) => {
           const img = pickImage(l);
@@ -935,9 +962,7 @@ export default function HomeMapView({ listings = [] }) {
             <Marker key={l._id} position={l._coords} icon={getMarkerIcon(l._categoryValue || l._catKey, isSeenFlag)}>
               <Popup>
                 <div className="sooq-popupMini">
-                  {img ? (
-                    <img className="sooq-popupMiniImg" src={img} alt={l.title || 'صورة'} loading="lazy" />
-                  ) : null}
+                  {img ? <img className="sooq-popupMiniImg" src={img} alt={l.title || 'صورة'} loading="lazy" /> : null}
                   <div className="sooq-popupMiniTitle" title={l.title || ''}>
                     {l.title || 'بدون عنوان'}
                   </div>
@@ -960,12 +985,52 @@ export default function HomeMapView({ listings = [] }) {
 
   return (
     <div className="card" style={{ padding: 12 }}>
-      <div style={{ fontWeight: 900, marginBottom: 10 }}>🗺️ عرض الإعلانات على الخريطة</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ fontWeight: 900 }}>🗺️ عرض الإعلانات على الخريطة</div>
+        <button 
+          onClick={() => setDebugMode(!debugMode)}
+          style={{
+            padding: '4px 8px',
+            fontSize: 12,
+            background: debugMode ? '#dc2626' : '#3b82f6',
+            color: 'white',
+            border: 'none',
+            borderRadius: 4,
+            cursor: 'pointer'
+          }}
+        >
+          {debugMode ? 'إيقاف التصحيح' : 'تفعيل وضع التصحيح'}
+        </button>
+      </div>
 
-      {/* خريطة داخل الصفحة */}
+      {debugMode && filteredOutListings.length > 0 && (
+        <div style={{
+          background: '#fee2e2',
+          padding: 10,
+          borderRadius: 8,
+          marginBottom: 10,
+          fontSize: 12,
+          border: '1px solid #fecaca'
+        }}>
+          <div style={{ fontWeight: 'bold', color: '#dc2626', marginBottom: 5 }}>
+            ⚠️ {filteredOutListings.length} إعلان مستبعد من الخريطة:
+          </div>
+          <div style={{ maxHeight: 100, overflowY: 'auto' }}>
+            {filteredOutListings.map((item, idx) => (
+              <div key={idx} style={{ marginBottom: 3 }}>
+                <strong>#{item.index}:</strong> {item.reason}
+                {item.coords && ` (${item.coords[0]}, ${item.coords[1]})`}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div
         className="sooq-mapWrap"
-        onClick={openFullscreenFromMap} // ✅ الآن دائماً يفتح ملء الشاشة على الجوال عند النقر
+        onClick={handleMapClick}
+        onPointerDown={handleMapClick}
+        onTouchStart={handleMapClick}
         style={{
           width: '100%',
           height: 'min(520px, 70vh)',
@@ -973,8 +1038,14 @@ export default function HomeMapView({ listings = [] }) {
           borderRadius: 14,
           overflow: 'hidden',
           border: '1px solid #e2e8f0',
+          cursor: 'pointer',
+          position: 'relative',
         }}
       >
+        <div className="sooq-open-fs-hint">
+          انقر لفتح الخريطة كاملة الشاشة
+        </div>
+        {availableCats.length > 0 ? <ChipsOverlay /> : null}
         <MapBody mode="page" />
       </div>
 
@@ -984,19 +1055,28 @@ export default function HomeMapView({ listings = [] }) {
           : 'لا توجد إعلانات مطابقة للفلتر/أو لا توجد إعلانات لها موقع داخل اليمن.'}
       </div>
 
-      {/* ملء الشاشة */}
       {portalReady && isFullscreen
         ? createPortal(
             <div className="sooq-fsOverlay" role="dialog" aria-label="الخريطة">
-              <button type="button" className="sooq-fsCloseOnly" onClick={() => setIsFullscreen(false)}>
-                ✕
+              <ChipsOverlay isFullscreenMode={true} />
+
+              {/* زر الإغلاق صغير جداً ومخفي في الزاوية */}
+              <button 
+                type="button" 
+                className="sooq-fsCloseBtn" 
+                onClick={() => setIsFullscreen(false)}
+                aria-label="إغلاق الخريطة"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
               </button>
 
               <div className="sooq-fsMap">
-                <MapBody mode="fs" />
+                <MapBody mode="fs" hideZoomControls={true} />
               </div>
 
-              {/* ✅ زر تحديد موقعي (يظهر في ملء الشاشة فقط) */}
+              {/* زر تحديد الموقع في أسفل اليسار */}
               <button
                 type="button"
                 className={`sooq-locateBtn ${nearbyOn ? 'isActive' : ''}`}
@@ -1004,7 +1084,9 @@ export default function HomeMapView({ listings = [] }) {
                 aria-label={nearbyOn ? 'إلغاء القريب من موقعي' : 'تحديد موقعي'}
                 title={nearbyOn ? 'عرض الكل' : 'تحديد موقعي'}
               >
-                🎯
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2ZM12 11.5C10.62 11.5 9.5 10.38 9.5 9C9.5 7.62 10.62 6.5 12 6.5C13.38 6.5 14.5 7.62 14.5 9C14.5 10.38 13.38 11.5 12 11.5Z" fill="currentColor"/>
+                </svg>
               </button>
             </div>,
             document.body
@@ -1012,10 +1094,32 @@ export default function HomeMapView({ listings = [] }) {
         : null}
 
       <style jsx global>{`
-        /* ====== Chips overlay ====== */
         .sooq-mapWrap {
           position: relative;
           background: #fff;
+        }
+
+        .sooq-open-fs-hint {
+          position: absolute;
+          top: 10px;
+          right: 10px;
+          z-index: 1005;
+          background: rgba(255, 255, 255, 0.9);
+          backdrop-filter: blur(4px);
+          padding: 6px 12px;
+          border-radius: 20px;
+          font-size: 12px;
+          font-weight: 600;
+          color: #334155;
+          border: 1px solid rgba(0, 0, 0, 0.1);
+          pointer-events: none;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        @media (max-width: 768px) {
+          .sooq-open-fs-hint {
+            display: none;
+          }
         }
 
         .sooq-mapOverlay {
@@ -1025,6 +1129,31 @@ export default function HomeMapView({ listings = [] }) {
           right: 10px;
           z-index: 1004;
           pointer-events: none;
+          transition: all 0.3s ease;
+        }
+
+        .sooq-mapOverlay--fullscreen {
+          position: fixed !important;
+          top: 0 !important;
+          left: 0 !important;
+          right: 0 !important;
+          padding: 12px;
+          background: rgba(255, 255, 255, 0.98);
+          backdrop-filter: blur(10px);
+          border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          z-index: 999999;
+          pointer-events: auto;
+          max-height: 200px;
+          overflow-y: auto;
+        }
+
+        @media (max-width: 768px) {
+          .sooq-mapOverlay--fullscreen {
+            padding: 8px;
+            top: env(safe-area-inset-top, 0px) !important;
+            max-height: 180px;
+          }
         }
 
         .sooq-chips {
@@ -1038,6 +1167,18 @@ export default function HomeMapView({ listings = [] }) {
           backdrop-filter: blur(8px);
           box-shadow: 0 10px 18px rgba(0, 0, 0, 0.12);
           align-items: center;
+          min-height: 44px;
+        }
+
+        .sooq-mapOverlay--fullscreen .sooq-chips {
+          background: rgba(255, 255, 255, 0.95);
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+          padding: 10px;
+          min-height: 50px;
+        }
+
+        .sooq-chips--sub {
+          margin-top: 8px;
         }
 
         .sooq-chip {
@@ -1053,11 +1194,29 @@ export default function HomeMapView({ listings = [] }) {
           cursor: pointer;
           white-space: nowrap;
           user-select: none;
+          transition: all 0.2s ease;
+        }
+
+        .sooq-chip:not(:disabled):hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
         }
 
         .sooq-chip.isActive {
           border-color: rgba(0, 0, 0, 0.18);
           box-shadow: 0 8px 14px rgba(0, 0, 0, 0.12);
+          font-weight: 900;
+        }
+
+        .sooq-chip--disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          background: #f8fafc;
+        }
+
+        .sooq-chip--disabled:hover {
+          transform: none;
+          box-shadow: none;
         }
 
         .sooq-chipDot {
@@ -1083,7 +1242,11 @@ export default function HomeMapView({ listings = [] }) {
           font-weight: 800;
         }
 
-        /* ====== Popup Mini (صغير جدا) ====== */
+        .sooq-chip--disabled .sooq-chipCount {
+          background: rgba(0, 0, 0, 0.04);
+          color: #94a3b8;
+        }
+
         .sooq-popupMini {
           width: 140px;
           display: grid;
@@ -1119,9 +1282,15 @@ export default function HomeMapView({ listings = [] }) {
           text-decoration: none;
           font-weight: 900;
           font-size: 12px;
+          transition: all 0.2s ease;
         }
 
-        @media (max-width: 520px) {
+        .sooq-popupMiniBtn:hover {
+          opacity: 0.9;
+          transform: translateY(-1px);
+        }
+
+        @media (max-width: 768px) {
           .sooq-popupMini {
             width: 120px;
           }
@@ -1133,79 +1302,135 @@ export default function HomeMapView({ listings = [] }) {
           }
         }
 
-        /* ====== Fullscreen overlay ====== */
         .sooq-fsOverlay {
           position: fixed;
           inset: 0;
           z-index: 999999;
           background: #fff;
+          display: flex;
+          flex-direction: column;
         }
 
         .sooq-fsMap {
-          position: absolute;
-          inset: 0;
-          height: 100dvh;
-          width: 100vw;
+          position: relative;
+          flex: 1;
+          width: 100%;
+          height: 100vh;
+          margin-top: 0;
         }
 
-        /* ✅ زر إغلاق فقط */
-        .sooq-fsCloseOnly {
+        @media (max-width: 768px) {
+          .sooq-fsMap {
+            height: calc(100vh - 180px);
+            margin-top: 180px;
+          }
+        }
+
+        /* زر الإغلاق صغير جداً ومخفي في الزاوية */
+        .sooq-fsCloseBtn {
           position: fixed;
-          top: calc(env(safe-area-inset-top, 0px) + 12px);
-          right: 12px;
-          z-index: 999999;
-          width: 44px;
-          height: 44px;
-          border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.14);
-          background: rgba(255, 255, 255, 0.9);
-          backdrop-filter: blur(10px);
-          font-weight: 900;
+          top: 10px;
+          left: 10px;
+          z-index: 1000001;
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          border: none;
+          background: rgba(0, 0, 0, 0.3);
+          color: white;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          transition: all 0.2s ease;
+          opacity: 0.7;
         }
 
-        /* ✅ نقل الشيبس تحت زر الإغلاق */
-        .sooq-fsOverlay .sooq-mapOverlay {
-          top: calc(env(safe-area-inset-top, 0px) + 66px);
+        .sooq-fsCloseBtn:hover {
+          background: rgba(0, 0, 0, 0.5);
+          opacity: 1;
+          transform: scale(1.1);
         }
 
-        /* ✅ زر تحديد موقعي (Floating) */
+        .sooq-fsCloseBtn svg {
+          width: 16px;
+          height: 16px;
+        }
+
+        @media (max-width: 768px) {
+          .sooq-fsCloseBtn {
+            top: calc(env(safe-area-inset-top, 0px) + 5px);
+            left: 5px;
+            width: 28px;
+            height: 28px;
+          }
+          .sooq-fsCloseBtn svg {
+            width: 14px;
+            height: 14px;
+          }
+        }
+
+        /* زر تحديد الموقع في أسفل اليسار */
         .sooq-locateBtn {
           position: fixed;
-          right: 12px;
-          bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
-          z-index: 999999;
-          width: 52px;
-          height: 52px;
-          border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.14);
-          background: rgba(255, 255, 255, 0.92);
-          backdrop-filter: blur(10px);
-          font-size: 20px;
+          left: 20px;
+          bottom: calc(env(safe-area-inset-bottom, 0px) + 80px);
+          z-index: 1000000;
+          width: 50px;
+          height: 50px;
+          border-radius: 50%;
+          border: none;
+          background: white;
+          color: #333;
           cursor: pointer;
-          display: inline-flex;
+          display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+          transition: all 0.2s ease;
+        }
+
+        .sooq-locateBtn:hover {
+          background: #f8f9fa;
+          transform: scale(1.05);
+          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
         }
 
         .sooq-locateBtn.isActive {
-          border-color: rgba(0, 0, 0, 0.22);
-          box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
-          transform: translateY(-1px);
+          background: #3b82f6;
+          color: white;
         }
 
-        /* ✅ اخفاء +/− بالجوال/اللمس حتى لو ظهرت من Leaflet */
+        .sooq-locateBtn svg {
+          width: 24px;
+          height: 24px;
+        }
+
+        @media (max-width: 768px) {
+          .sooq-locateBtn {
+            left: 15px;
+            bottom: calc(env(safe-area-inset-bottom, 0px) + 60px);
+            width: 44px;
+            height: 44px;
+          }
+          
+          .sooq-locateBtn svg {
+            width: 20px;
+            height: 20px;
+          }
+        }
+
+        /* إخفاء أزرار التحكم في التكبير/التصغير */
+        .leaflet-control-zoom {
+          display: none !important;
+        }
+
         @media (hover: none) and (pointer: coarse) {
           .leaflet-control-zoom {
             display: none !important;
           }
         }
 
-        /* ====== Marker ====== */
         .sooq-marker {
           background: transparent !important;
           border: 0 !important;
@@ -1257,6 +1482,70 @@ export default function HomeMapView({ listings = [] }) {
           opacity: 0.72;
           filter: grayscale(0.25);
         }
+
+        .sooq-chips::-webkit-scrollbar {
+          height: 6px;
+        }
+
+        .sooq-chips::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.05);
+          border-radius: 3px;
+        }
+
+        .sooq-chips::-webkit-scrollbar-thumb {
+          background: rgba(0, 0, 0, 0.2);
+          border-radius: 3px;
+        }
+
+        .sooq-chips::-webkit-scrollbar-thumb:hover {
+          background: rgba(0, 0, 0, 0.3);
+        }
+
+        .sooq-mapOverlay--fullscreen::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .sooq-mapOverlay--fullscreen::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.05);
+          border-radius: 3px;
+        }
+
+        .sooq-mapOverlay--fullscreen::-webkit-scrollbar-thumb {
+          background: rgba(0, 0, 0, 0.2);
+          border-radius: 3px;
+        }
+
+        .sooq-mapOverlay--fullscreen::-webkit-scrollbar-thumb:hover {
+          background: rgba(0, 0, 0, 0.3);
+        }
+.sooq-govRow{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  padding:10px 10px 0;
+  pointer-events:auto;
+}
+.sooq-govSelect{
+  flex:1;
+  height:34px;
+  border-radius:10px;
+  border:1px solid rgba(0,0,0,.10);
+  background:rgba(255,255,255,.95);
+  font-size:13px;
+  padding:0 10px;
+}
+.sooq-govClear{
+  height:34px;
+  border-radius:10px;
+  border:1px solid rgba(0,0,0,.10);
+  background:rgba(255,255,255,.95);
+  padding:0 10px;
+  font-size:13px;
+  cursor:pointer;
+}
+.sooq-govClear:active{ transform: translateY(1px); }
+
+
       `}</style>
     </div>
   );
