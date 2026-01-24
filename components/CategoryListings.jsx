@@ -9,83 +9,117 @@ import { db } from '@/lib/firebaseClient';
 import { normalizeCategoryKey, getCategoryLabel } from '@/lib/categories';
 import ListingCard from '@/components/ListingCard';
 
+// ✅ دالة تنسيق الأسعار
+function formatPrice(price, currency = 'ريال') {
+  if (!price && price !== 0) return 'غير محدد';
+  const num = Number(price);
+  if (isNaN(num)) return 'غير محدد';
+  
+  if (num === 0) return 'مجاناً';
+  
+  if (num < 1000) {
+    return `${Math.round(num).toLocaleString('ar-YE')} ${currency}`;
+  }
+  
+  if (num < 1000000) {
+    const thousands = num / 1000;
+    let formatted;
+    
+    if (thousands >= 100) {
+      formatted = Math.round(thousands);
+    } else if (thousands >= 10) {
+      formatted = thousands.toFixed(1);
+    } else {
+      formatted = thousands.toFixed(2);
+    }
+    
+    formatted = formatted.toString().replace(/(\.0*|0+)$/, '');
+    return `${formatted} ألف ${currency}`;
+  }
+  
+  const millions = num / 1000000;
+  let formatted;
+  
+  if (millions >= 100) {
+    formatted = Math.round(millions);
+  } else if (millions >= 10) {
+    formatted = millions.toFixed(1);
+  } else {
+    formatted = millions.toFixed(2);
+  }
+  
+  formatted = formatted.toString().replace(/(\.0*|0+)$/, '');
+  return `${formatted} مليون ${currency}`;
+}
+
+// ✅ دالة تنسيق التاريخ
+function formatDate(timestamp) {
+  if (!timestamp) return '';
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  return new Intl.DateTimeFormat('ar-YE', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  }).format(date);
+}
+
 // ✅ Taxonomy (الفروع الهرمية)
 import {
-  // base inference (cars/phones/realestate)
   inferListingTaxonomy,
-
-  // cars
   CAR_MAKES,
   CAR_MODELS_BY_MAKE,
   carMakeLabel,
   carModelLabel,
-
-  // phones
   PHONE_BRANDS,
   phoneBrandLabel,
-
-  // realestate
   DEAL_TYPES,
   PROPERTY_TYPES,
   dealTypeLabel,
   propertyTypeLabel,
-
-  // other single-facet categories
   ELECTRONICS_TYPES,
   electronicsTypeLabel,
   normalizeElectronicsType,
   detectElectronicsTypeFromText,
-
   MOTORCYCLE_BRANDS,
   motorcycleBrandLabel,
   normalizeMotorcycleBrand,
   detectMotorcycleBrandFromText,
-
   HEAVY_EQUIPMENT_TYPES,
   heavyEquipmentTypeLabel,
   normalizeHeavyEquipmentType,
   detectHeavyEquipmentTypeFromText,
-
   SOLAR_TYPES,
   solarTypeLabel,
   normalizeSolarType,
   detectSolarTypeFromText,
-
   NETWORK_TYPES,
   networkTypeLabel,
   normalizeNetworkType,
   detectNetworkTypeFromText,
-
   MAINTENANCE_TYPES,
   maintenanceTypeLabel,
   normalizeMaintenanceType,
   detectMaintenanceTypeFromText,
-
   FURNITURE_TYPES,
   furnitureTypeLabel,
   normalizeFurnitureType,
   detectFurnitureTypeFromText,
-
   HOME_TOOLS_TYPES,
   homeToolsTypeLabel,
   normalizeHomeToolsType,
   detectHomeToolsTypeFromText,
-
   CLOTHES_TYPES,
   clothesTypeLabel,
   normalizeClothesType,
   detectClothesTypeFromText,
-
   ANIMAL_TYPES,
   animalTypeLabel,
   normalizeAnimalType,
   detectAnimalTypeFromText,
-
   JOB_TYPES,
   jobTypeLabel,
   normalizeJobType,
   detectJobTypeFromText,
-
   SERVICE_TYPES,
   serviceTypeLabel,
   normalizeServiceType,
@@ -93,6 +127,15 @@ import {
 } from '@/lib/taxonomy';
 
 const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), { ssr: false });
+
+// ✅ خيارات الترتيب
+const SORT_OPTIONS = [
+  { key: 'newest', label: 'الأحدث', icon: '🕒' },
+  { key: 'price_low', label: 'الأقل سعراً', icon: '💰' },
+  { key: 'price_high', label: 'الأعلى سعراً', icon: '💰' },
+  { key: 'most_viewed', label: 'الأكثر مشاهدة', icon: '👁️' },
+  { key: 'featured', label: 'المميز أولاً', icon: '⭐' }
+];
 
 // ✅ تطبيع أن keys الأقسام يتم حصراً عبر lib/categories.js
 function safeStr(v) {
@@ -135,7 +178,6 @@ function presetMergeWithCounts(preset, countsMap) {
   const used = new Set();
   const out = [];
 
-  // 1) preset in desired order
   for (const p of Array.isArray(preset) ? preset : []) {
     const k = safeStr(p?.key);
     if (!k) continue;
@@ -146,7 +188,6 @@ function presetMergeWithCounts(preset, countsMap) {
     out.push([k, c, label, color]);
   }
 
-  // 2) add any extra keys discovered in data but not in preset
   const extras = [];
   for (const [k, c] of safeMap.entries()) {
     const kk = safeStr(k);
@@ -169,19 +210,11 @@ function pickTaxonomy(listing, categoryKey) {
 
   const out = {
     root,
-
-    // cars
     carMake: inferred.carMake || safeStr(listing?.carMake) || '',
     carModel: inferred.carModel || safeStr(listing?.carModel) || '',
-
-    // phones
     phoneBrand: inferred.phoneBrand || safeStr(listing?.phoneBrand) || '',
-
-    // realestate
     dealType: inferred.dealType || safeStr(listing?.dealType) || '',
     propertyType: inferred.propertyType || safeStr(listing?.propertyType) || '',
-
-    // other (single facet)
     electronicsType: '',
     motorcycleBrand: '',
     heavyEquipmentType: '',
@@ -202,7 +235,6 @@ function pickTaxonomy(listing, categoryKey) {
       const mk = out.carMake;
       const rawModel = safeStr(listing?.carModel || inferred.carModel || listing?.model || '');
       out.carModel = safeStr(rawModel) || '';
-      void mk;
     } else {
       out.carModel = '';
     }
@@ -219,66 +251,97 @@ function pickTaxonomy(listing, categoryKey) {
       listing?.electronicType ??
       listing?.type ??
       '';
-    out.electronicsType =
-      normalizeElectronicsType(v) || detectElectronicsTypeFromText(text) || 'other';
+    out.electronicsType = normalizeElectronicsType(v) || detectElectronicsTypeFromText(text) || 'other';
   }
 
   if (root === 'motorcycles') {
-    const v = listing?.motorcycleBrand ?? listing?.bikeBrand ?? listing?.brand ?? '';
-    out.motorcycleBrand =
-      normalizeMotorcycleBrand(v) || detectMotorcycleBrandFromText(text) || 'other';
+    const v =
+      listing?.motorcycleBrand ??
+      listing?.bikeBrand ??
+      listing?.brand ??
+      '';
+    out.motorcycleBrand = normalizeMotorcycleBrand(v) || detectMotorcycleBrandFromText(text) || 'other';
   }
 
   if (root === 'heavy_equipment') {
-    const v = listing?.heavyEquipmentType ?? listing?.equipmentType ?? listing?.type ?? '';
-    out.heavyEquipmentType =
-      normalizeHeavyEquipmentType(v) || detectHeavyEquipmentTypeFromText(text) || 'other';
+    const v =
+      listing?.heavyEquipmentType ??
+      listing?.equipmentType ??
+      listing?.type ??
+      '';
+    out.heavyEquipmentType = normalizeHeavyEquipmentType(v) || detectHeavyEquipmentTypeFromText(text) || 'other';
   }
 
   if (root === 'solar') {
-    const v = listing?.solarType ?? listing?.type ?? '';
+    const v =
+      listing?.solarType ??
+      listing?.type ??
+      '';
     out.solarType = normalizeSolarType(v) || detectSolarTypeFromText(text) || 'other';
   }
 
   if (root === 'networks') {
-    const v = listing?.networkType ?? listing?.type ?? '';
+    const v =
+      listing?.networkType ??
+      listing?.type ??
+      '';
     out.networkType = normalizeNetworkType(v) || detectNetworkTypeFromText(text) || 'other';
   }
 
   if (root === 'maintenance') {
-    const v = listing?.maintenanceType ?? listing?.type ?? '';
-    out.maintenanceType =
-      normalizeMaintenanceType(v) || detectMaintenanceTypeFromText(text) || 'other';
+    const v =
+      listing?.maintenanceType ??
+      listing?.type ??
+      '';
+    out.maintenanceType = normalizeMaintenanceType(v) || detectMaintenanceTypeFromText(text) || 'other';
   }
 
   if (root === 'furniture') {
-    const v = listing?.furnitureType ?? listing?.type ?? '';
+    const v =
+      listing?.furnitureType ??
+      listing?.type ??
+      '';
     out.furnitureType = normalizeFurnitureType(v) || detectFurnitureTypeFromText(text) || 'other';
   }
 
   if (root === 'home_tools') {
-    const v = listing?.homeToolsType ?? listing?.home_tools_type ?? listing?.type ?? '';
-    out.homeToolsType =
-      normalizeHomeToolsType(v) || detectHomeToolsTypeFromText(text) || 'other';
+    const v =
+      listing?.homeToolsType ??
+      listing?.home_tools_type ??
+      listing?.type ??
+      '';
+    out.homeToolsType = normalizeHomeToolsType(v) || detectHomeToolsTypeFromText(text) || 'other';
   }
 
   if (root === 'clothes') {
-    const v = listing?.clothesType ?? listing?.type ?? '';
+    const v =
+      listing?.clothesType ??
+      listing?.type ??
+      '';
     out.clothesType = normalizeClothesType(v) || detectClothesTypeFromText(text) || 'other';
   }
 
   if (root === 'animals') {
-    const v = listing?.animalType ?? listing?.type ?? '';
+    const v =
+      listing?.animalType ??
+      listing?.type ??
+      '';
     out.animalType = normalizeAnimalType(v) || detectAnimalTypeFromText(text) || 'other';
   }
 
   if (root === 'jobs') {
-    const v = listing?.jobType ?? listing?.type ?? '';
+    const v =
+      listing?.jobType ??
+      listing?.type ??
+      '';
     out.jobType = normalizeJobType(v) || detectJobTypeFromText(text) || 'other';
   }
 
   if (root === 'services') {
-    const v = listing?.serviceType ?? listing?.type ?? '';
+    const v =
+      listing?.serviceType ??
+      listing?.type ??
+      '';
     out.serviceType = normalizeServiceType(v) || detectServiceTypeFromText(text) || 'other';
   }
 
@@ -307,8 +370,11 @@ function getCategoryBaseColor(root) {
 export default function CategoryListings({ category, initialListings = [] }) {
   const PAGE_SIZE = 24;
 
-  const [view, setView] = useState('grid'); // grid | list | map
+  const [view, setView] = useState('grid');
   const [q, setQ] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
+  const [priceRange, setPriceRange] = useState({ min: '', max: '' });
+  const [showPriceFilter, setShowPriceFilter] = useState(false);
   const searchParams = useSearchParams();
 
   const [items, setItems] = useState(() => (Array.isArray(initialListings) ? initialListings : []));
@@ -319,14 +385,40 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const [err, setErr] = useState('');
   const [hasMore, setHasMore] = useState(true);
 
-  // ✅ States للفروع الهرمية
+  const lastDocRef = useRef(null);
+  const cursorReadyRef = useRef(false);
+  const loadMoreRef = useRef(null);
+  const aliveRef = useRef(true);
+  const usedInitialRef = useRef(false);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const qp = safeStr(searchParams?.get('q'));
+    if (!qp) return;
+    setQ((prev) => (safeStr(prev) === qp ? prev : qp));
+  }, [searchParams]);
+
+  useEffect(() => {
+    const g = safeStr(searchParams?.get('gov') || searchParams?.get('g'));
+    if (!g) return;
+    setGovKey((prev) => (safeStr(prev) === g ? prev : g));
+  }, [searchParams]);
+
+  const catsRaw = Array.isArray(category) ? category : [category];
+  const cats = catsRaw.map(normalizeCategoryKey).filter(Boolean);
+  const single = cats.length === 1 ? cats[0] : '';
+
   const [carMake, setCarMake] = useState('');
   const [carModel, setCarModel] = useState('');
-
   const [phoneBrand, setPhoneBrand] = useState('');
   const [dealType, setDealType] = useState('');
   const [propertyType, setPropertyType] = useState('');
-
   const [electronicsType, setElectronicsType] = useState('');
   const [motorcycleBrand, setMotorcycleBrand] = useState('');
   const [heavyEquipmentType, setHeavyEquipmentType] = useState('');
@@ -339,45 +431,10 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const [animalType, setAnimalType] = useState('');
   const [jobType, setJobType] = useState('');
   const [serviceType, setServiceType] = useState('');
-
-  // ✅ فلتر المحافظة (Governorate)
   const [govKey, setGovKey] = useState('');
   const [govOptions, setGovOptions] = useState([]);
   const [govLoading, setGovLoading] = useState(false);
 
-  const lastDocRef = useRef(null);
-  const cursorReadyRef = useRef(false);
-  const loadMoreRef = useRef(null);
-  const aliveRef = useRef(true);
-  const usedInitialRef = useRef(false);
-
-  // ✅ alive guard
-  useEffect(() => {
-    aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-    };
-  }, []);
-
-  // ✅ sync search query from URL (?q=...)
-  useEffect(() => {
-    const qp = safeStr(searchParams?.get('q'));
-    if (!qp) return;
-    setQ((prev) => (safeStr(prev) === qp ? prev : qp));
-  }, [searchParams]);
-
-  // ✅ sync governorate from URL (?gov=aden) optional
-  useEffect(() => {
-    const g = safeStr(searchParams?.get('gov') || searchParams?.get('g'));
-    if (!g) return;
-    setGovKey((prev) => (safeStr(prev) === g ? prev : g));
-  }, [searchParams]);
-
-  const catsRaw = Array.isArray(category) ? category : [category];
-  const cats = catsRaw.map(normalizeCategoryKey).filter(Boolean);
-  const single = cats.length === 1 ? cats[0] : '';
-
-  // ✅ Map nameAr -> key (علشان الفلتر يشتغل حتى لو الإعلان القديم ما فيه govKey)
   const govNameToKey = useMemo(() => {
     const m = new Map();
     (govOptions || []).forEach((g) => {
@@ -389,11 +446,9 @@ export default function CategoryListings({ category, initialListings = [] }) {
   }, [govOptions]);
 
   const getListingGovKey = (l) => {
-    // 1) prefer explicit keys
     const raw = safeStr(l?.govKey || l?.governorateKey || l?.governorate || l?.gov);
     if (raw) return raw.toLowerCase();
 
-    // 2) try to map Arabic city/governorate name -> key
     const cityName = safeStr(l?.city);
     const cityLower = cityName.toLowerCase();
     if (!cityLower) return '';
@@ -401,20 +456,17 @@ export default function CategoryListings({ category, initialListings = [] }) {
     const mapped = govNameToKey.get(cityLower);
     if (mapped) return mapped.toLowerCase();
 
-    // 3) sometimes city is already stored as key
     if (/^[a-z0-9_]+$/.test(cityLower)) return cityLower;
 
     return '';
   };
 
-  // ✅ reset when category changes
   useEffect(() => {
     setCarMake('');
     setCarModel('');
     setPhoneBrand('');
     setDealType('');
     setPropertyType('');
-
     setElectronicsType('');
     setMotorcycleBrand('');
     setHeavyEquipmentType('');
@@ -428,11 +480,10 @@ export default function CategoryListings({ category, initialListings = [] }) {
     setJobType('');
     setServiceType('');
     setGovKey('');
-
+    setPriceRange({ min: '', max: '' });
     usedInitialRef.current = false;
   }, [single]);
 
-  // ✅ Load governorates from Firestore (taxonomy_governorates) for filtering
   useEffect(() => {
     let cancelled = false;
 
@@ -450,32 +501,34 @@ export default function CategoryListings({ category, initialListings = [] }) {
           }))
           .filter((g) => g.key && g.nameAr && g.enabled);
 
-        const fallback = [
-          { key: 'amanat_al_asimah', nameAr: 'أمانة العاصمة', order: 1 },
-          { key: 'sanaa', nameAr: 'صنعاء', order: 2 },
-          { key: 'aden', nameAr: 'عدن', order: 3 },
-          { key: 'taiz', nameAr: 'تعز', order: 4 },
-          { key: 'ibb', nameAr: 'إب', order: 5 },
-          { key: 'al_hudaydah', nameAr: 'الحديدة', order: 6 },
-          { key: 'hadramaut', nameAr: 'حضرموت', order: 7 },
-          { key: 'dhamar', nameAr: 'ذمار', order: 8 },
-          { key: 'hajjah', nameAr: 'حجة', order: 9 },
-          { key: 'amran', nameAr: 'عمران', order: 10 },
-          { key: 'marib', nameAr: 'مأرب', order: 11 },
-          { key: 'shabwah', nameAr: 'شبوة', order: 12 },
-          { key: 'abyan', nameAr: 'أبين', order: 13 },
-          { key: 'lahij', nameAr: 'لحج', order: 14 },
-          { key: 'al_dhale', nameAr: 'الضالع', order: 15 },
-          { key: 'al_bayda', nameAr: 'البيضاء', order: 16 },
-          { key: 'al_jawf', nameAr: 'الجوف', order: 17 },
-          { key: 'saada', nameAr: 'صعدة', order: 18 },
-          { key: 'al_mahwit', nameAr: 'المحويت', order: 19 },
-          { key: 'raymah', nameAr: 'ريمة', order: 20 },
-          { key: 'al_mahrah', nameAr: 'المهرة', order: 21 },
-          { key: 'socotra', nameAr: 'أرخبيل سقطرى', order: 22 },
-        ];
+        const finalRows = rows.length
+          ? rows
+          : [
+              { key: 'amanat_al_asimah', nameAr: 'أمانة العاصمة', order: 1 },
+              { key: 'sanaa', nameAr: 'صنعاء', order: 2 },
+              { key: 'aden', nameAr: 'عدن', order: 3 },
+              { key: 'taiz', nameAr: 'تعز', order: 4 },
+              { key: 'ibb', nameAr: 'إب', order: 5 },
+              { key: 'al_hudaydah', nameAr: 'الحديدة', order: 6 },
+              { key: 'hadramaut', nameAr: 'حضرموت', order: 7 },
+              { key: 'dhamar', nameAr: 'ذمار', order: 8 },
+              { key: 'hajjah', nameAr: 'حجة', order: 9 },
+              { key: 'amran', nameAr: 'عمران', order: 10 },
+              { key: 'marib', nameAr: 'مأرب', order: 11 },
+              { key: 'shabwah', nameAr: 'شبوة', order: 12 },
+              { key: 'abyan', nameAr: 'أبين', order: 13 },
+              { key: 'lahij', nameAr: 'لحج', order: 14 },
+              { key: 'al_dhale', nameAr: 'الضالع', order: 15 },
+              { key: 'al_bayda', nameAr: 'البيضاء', order: 16 },
+              { key: 'al_jawf', nameAr: 'الجوف', order: 17 },
+              { key: 'saada', nameAr: 'صعدة', order: 18 },
+              { key: 'al_mahwit', nameAr: 'المحويت', order: 19 },
+              { key: 'raymah', nameAr: 'ريمة', order: 20 },
+              { key: 'al_mahrah', nameAr: 'المهرة', order: 21 },
+              { key: 'socotra', nameAr: 'أرخبيل سقطرى', order: 22 }
+            ];
 
-        if (!cancelled) setGovOptions(rows.length ? rows : fallback);
+        if (!cancelled) setGovOptions(finalRows);
       } catch (e) {
         console.error(e);
         if (!cancelled) {
@@ -501,7 +554,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
             { key: 'al_mahwit', nameAr: 'المحويت', order: 19 },
             { key: 'raymah', nameAr: 'ريمة', order: 20 },
             { key: 'al_mahrah', nameAr: 'المهرة', order: 21 },
-            { key: 'socotra', nameAr: 'أرخبيل سقطرى', order: 22 },
+            { key: 'socotra', nameAr: 'أرخبيل سقطرى', order: 22 }
           ]);
         }
       } finally {
@@ -524,6 +577,17 @@ export default function CategoryListings({ category, initialListings = [] }) {
     };
     if (!l.id) return null;
     if (l.isActive === false || l.hidden === true) return null;
+    
+    // تنسيق السعر للعرض
+    if (l.price !== undefined) {
+      l.formattedPrice = formatPrice(l.price);
+    }
+    
+    // تنسيق التاريخ
+    if (l.createdAt) {
+      l.formattedDate = formatDate(l.createdAt);
+    }
+    
     return l;
   };
 
@@ -543,7 +607,9 @@ export default function CategoryListings({ category, initialListings = [] }) {
     }
 
     try {
-      let ref = db.collection('listings').where('category', '==', single);
+      let ref = db
+        .collection('listings')
+        .where('category', '==', single);
       ref = ref.orderBy('createdAt', 'desc').limit(PAGE_SIZE);
 
       const snap = await ref.get();
@@ -554,6 +620,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
       if (!aliveRef.current) return;
 
       setItems(data);
+
       lastDocRef.current = snap.docs[snap.docs.length - 1] || null;
       cursorReadyRef.current = true;
 
@@ -563,12 +630,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
       console.error(e);
       if (!aliveRef.current) return;
       const msg = e?.message || 'فشل تحميل إعلانات القسم';
-      const isIndex = e?.code === 'failed-precondition' || /index/i.test(msg);
-      setErr(
-        isIndex
-          ? '⚠️ الاستعلام يحتاج إنشاء Index في Firestore. افتح Firestore > Indexes أو اضغط رابط Create index الذي يظهر في Console ثم أعد المحاولة.'
-          : msg
-      );
+      const isIndex = (e?.code === 'failed-precondition') || /index/i.test(msg);
+      setErr(isIndex ? '⚠️ الاستعلام يحتاج إنشاء Index في Firestore. افتح Firestore > Indexes أو اضغط رابط Create index الذي يظهر في Console ثم أعد المحاولة.' : msg);
       setLoading(false);
       setHasMore(false);
     }
@@ -579,7 +642,9 @@ export default function CategoryListings({ category, initialListings = [] }) {
     if (!single) return;
 
     try {
-      let ref = db.collection('listings').where('category', '==', single);
+      let ref = db
+        .collection('listings')
+        .where('category', '==', single);
       ref = ref.orderBy('createdAt', 'desc').limit(PAGE_SIZE);
 
       const snap = await ref.get();
@@ -617,7 +682,9 @@ export default function CategoryListings({ category, initialListings = [] }) {
         return;
       }
 
-      let ref = db.collection('listings').where('category', '==', single);
+      let ref = db
+        .collection('listings')
+        .where('category', '==', single);
       ref = ref.orderBy('createdAt', 'desc').startAfter(lastDoc).limit(PAGE_SIZE);
 
       const snap = await ref.get();
@@ -637,17 +704,12 @@ export default function CategoryListings({ category, initialListings = [] }) {
       console.error(e);
       if (!aliveRef.current) return;
       const msg = e?.message || 'فشل تحميل المزيد';
-      const isIndex = e?.code === 'failed-precondition' || /index/i.test(msg);
-      setErr(
-        isIndex
-          ? '⚠️ الاستعلام يحتاج إنشاء Index في Firestore. افتح Firestore > Indexes أو اضغط رابط Create index الذي يظهر في Console ثم أعد المحاولة.'
-          : msg
-      );
+      const isIndex = (e?.code === 'failed-precondition') || /index/i.test(msg);
+      setErr(isIndex ? '⚠️ الاستعلام يحتاج إنشاء Index في Firestore. افتح Firestore > Indexes أو اضغط رابط Create index الذي يظهر في Console ثم أعد المحاولة.' : msg);
       setLoadingMore(false);
     }
   }
 
-  // ✅ initial SSR vs client fetch
   useEffect(() => {
     if (!govKey && !usedInitialRef.current && Array.isArray(initialListings) && initialListings.length > 0) {
       usedInitialRef.current = true;
@@ -660,10 +722,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
       return;
     }
     fetchFirstPage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [single, govKey]);
 
-  // ✅ Infinite scroll (نوقفه في وضع الخريطة)
   useEffect(() => {
     if (view === 'map') return;
 
@@ -684,10 +744,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
         obs.disconnect();
       } catch {}
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, hasMore, loading, loadingMore, single, govKey]);
 
-  // ✅ Taxonomy enrich
   const itemsWithTax = useMemo(() => {
     const catKey = single || '';
     return items
@@ -708,7 +766,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
       phoneBrands: new Map(),
       dealTypes: new Map(),
       propertyTypes: new Map(),
-
       electronicsTypes: new Map(),
       motorcycleBrands: new Map(),
       heavyEquipmentTypes: new Map(),
@@ -734,9 +791,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
 
       if (catKey === 'cars') inc(out.carMakes, t.carMake || 'other');
       if (catKey === 'phones') inc(out.phoneBrands, t.phoneBrand || 'other');
-
       if (catKey === 'realestate') inc(out.dealTypes, t.dealType || '');
-
       if (catKey === 'electronics') inc(out.electronicsTypes, t.electronicsType || 'other');
       if (catKey === 'motorcycles') inc(out.motorcycleBrands, t.motorcycleBrand || 'other');
       if (catKey === 'heavy_equipment') inc(out.heavyEquipmentTypes, t.heavyEquipmentType || 'other');
@@ -751,7 +806,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
       if (catKey === 'services') inc(out.serviceTypes, t.serviceType || 'other');
     }
 
-    // carModels: نعرضها فقط عندما تختار ماركة
     if (catKey === 'cars') {
       const mk = safeStr(carMake);
       if (mk) {
@@ -763,7 +817,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
       }
     }
 
-    // propertyTypes: يعتمد على dealType المختار
     if (catKey === 'realestate') {
       const dealFilter = safeStr(dealType);
       for (const l of itemsWithTax) {
@@ -776,93 +829,74 @@ export default function CategoryListings({ category, initialListings = [] }) {
     return out;
   }, [itemsWithTax, single, dealType, carMake]);
 
+  // فلتر حسب المحافظة ونطاق السعر
   const filtered = useMemo(() => {
     const catKey = single || '';
     const query = safeStr(q).toLowerCase();
     let arr = itemsWithTax;
-
-    // ✅ governorate filter (يدعم الإعلانات القديمة اللي ما فيها govKey)
+    
     const selGov = safeStr(govKey).toLowerCase();
     if (selGov) {
       arr = arr.filter((l) => getListingGovKey(l) === selGov);
     }
-
-    // cars
+    
     if (catKey === 'cars') {
       const selMake = safeStr(carMake);
       const selModel = safeStr(carModel);
-
       if (selMake) arr = arr.filter((l) => safeStr(l?._tax?.carMake || 'other') === selMake);
-      if (selMake && selModel)
-        arr = arr.filter((l) => safeStr(l?._tax?.carModel || 'other') === selModel);
+      if (selMake && selModel) arr = arr.filter((l) => safeStr(l?._tax?.carModel || 'other') === selModel);
     }
-
-    // phones
+    
     if (catKey === 'phones') {
       const sel = safeStr(phoneBrand);
       if (sel) arr = arr.filter((l) => safeStr(l?._tax?.phoneBrand || 'other') === sel);
     }
-
-    // realestate
+    
     if (catKey === 'realestate') {
       const selDeal = safeStr(dealType);
       const selProp = safeStr(propertyType);
       if (selDeal) arr = arr.filter((l) => safeStr(l?._tax?.dealType) === selDeal);
       if (selProp) arr = arr.filter((l) => safeStr(l?._tax?.propertyType || 'other') === selProp);
     }
-
-    // single facet categories
-    if (catKey === 'electronics') {
-      const sel = safeStr(electronicsType);
-      if (sel) arr = arr.filter((l) => safeStr(l?._tax?.electronicsType || 'other') === sel);
+    
+    const singleFacetFilters = [
+      { cat: 'electronics', state: electronicsType, key: 'electronicsType' },
+      { cat: 'motorcycles', state: motorcycleBrand, key: 'motorcycleBrand' },
+      { cat: 'heavy_equipment', state: heavyEquipmentType, key: 'heavyEquipmentType' },
+      { cat: 'solar', state: solarType, key: 'solarType' },
+      { cat: 'networks', state: networkType, key: 'networkType' },
+      { cat: 'maintenance', state: maintenanceType, key: 'maintenanceType' },
+      { cat: 'furniture', state: furnitureType, key: 'furnitureType' },
+      { cat: 'home_tools', state: homeToolsType, key: 'homeToolsType' },
+      { cat: 'clothes', state: clothesType, key: 'clothesType' },
+      { cat: 'animals', state: animalType, key: 'animalType' },
+      { cat: 'jobs', state: jobType, key: 'jobType' },
+      { cat: 'services', state: serviceType, key: 'serviceType' },
+    ];
+    
+    singleFacetFilters.forEach(({ cat, state, key }) => {
+      if (catKey === cat && state) {
+        arr = arr.filter((l) => safeStr(l?._tax?.[key] || 'other') === state);
+      }
+    });
+    
+    // فلتر نطاق السعر
+    if (priceRange.min !== '') {
+      const min = Number(priceRange.min);
+      if (!isNaN(min)) {
+        arr = arr.filter(item => (item.price || 0) >= min);
+      }
     }
-    if (catKey === 'motorcycles') {
-      const sel = safeStr(motorcycleBrand);
-      if (sel) arr = arr.filter((l) => safeStr(l?._tax?.motorcycleBrand || 'other') === sel);
+    
+    if (priceRange.max !== '') {
+      const max = Number(priceRange.max);
+      if (!isNaN(max)) {
+        arr = arr.filter(item => (item.price || 0) <= max);
+      }
     }
-    if (catKey === 'heavy_equipment') {
-      const sel = safeStr(heavyEquipmentType);
-      if (sel) arr = arr.filter((l) => safeStr(l?._tax?.heavyEquipmentType || 'other') === sel);
-    }
-    if (catKey === 'solar') {
-      const sel = safeStr(solarType);
-      if (sel) arr = arr.filter((l) => safeStr(l?._tax?.solarType || 'other') === sel);
-    }
-    if (catKey === 'networks') {
-      const sel = safeStr(networkType);
-      if (sel) arr = arr.filter((l) => safeStr(l?._tax?.networkType || 'other') === sel);
-    }
-    if (catKey === 'maintenance') {
-      const sel = safeStr(maintenanceType);
-      if (sel) arr = arr.filter((l) => safeStr(l?._tax?.maintenanceType || 'other') === sel);
-    }
-    if (catKey === 'furniture') {
-      const sel = safeStr(furnitureType);
-      if (sel) arr = arr.filter((l) => safeStr(l?._tax?.furnitureType || 'other') === sel);
-    }
-    if (catKey === 'home_tools') {
-      const sel = safeStr(homeToolsType);
-      if (sel) arr = arr.filter((l) => safeStr(l?._tax?.homeToolsType || 'other') === sel);
-    }
-    if (catKey === 'clothes') {
-      const sel = safeStr(clothesType);
-      if (sel) arr = arr.filter((l) => safeStr(l?._tax?.clothesType || 'other') === sel);
-    }
-    if (catKey === 'animals') {
-      const sel = safeStr(animalType);
-      if (sel) arr = arr.filter((l) => safeStr(l?._tax?.animalType || 'other') === sel);
-    }
-    if (catKey === 'jobs') {
-      const sel = safeStr(jobType);
-      if (sel) arr = arr.filter((l) => safeStr(l?._tax?.jobType || 'other') === sel);
-    }
-    if (catKey === 'services') {
-      const sel = safeStr(serviceType);
-      if (sel) arr = arr.filter((l) => safeStr(l?._tax?.serviceType || 'other') === sel);
-    }
-
+    
     if (!query) return arr;
-
+    
     return arr.filter((l) => {
       const title = safeStr(l.title).toLowerCase();
       const city = safeStr(l.city || l.region || l.locationLabel).toLowerCase();
@@ -870,31 +904,36 @@ export default function CategoryListings({ category, initialListings = [] }) {
       return title.includes(query) || city.includes(query) || desc.includes(query);
     });
   }, [
-    itemsWithTax,
-    single,
-    q,
-    carMake,
-    carModel,
-    phoneBrand,
-    dealType,
-    propertyType,
-    electronicsType,
-    motorcycleBrand,
-    heavyEquipmentType,
-    solarType,
-    networkType,
-    maintenanceType,
-    furnitureType,
-    homeToolsType,
-    clothesType,
-    animalType,
-    jobType,
-    serviceType,
-    govKey,
-    govNameToKey,
+    itemsWithTax, single, q, carMake, carModel, phoneBrand, dealType, propertyType,
+    electronicsType, motorcycleBrand, heavyEquipmentType, solarType, networkType,
+    maintenanceType, furnitureType, homeToolsType, clothesType, animalType, jobType,
+    serviceType, govKey, priceRange
   ]);
 
-  // ====== options for chips ======
+  // الترتيب
+  const sortedListings = useMemo(() => {
+    const list = [...filtered];
+    
+    switch (sortBy) {
+      case 'price_low':
+        return list.sort((a, b) => (a.price || 0) - (b.price || 0));
+      case 'price_high':
+        return list.sort((a, b) => (b.price || 0) - (a.price || 0));
+      case 'most_viewed':
+        return list.sort((a, b) => (b.views || 0) - (a.views || 0));
+      case 'featured':
+        return list.sort((a, b) => 
+          (b.featured ? 1 : 0) - (a.featured ? 1 : 0) ||
+          (b.views || 0) - (a.views || 0)
+        );
+      case 'newest':
+      default:
+        return list.sort((a, b) => 
+          (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
+        );
+    }
+  }, [filtered, sortBy]);
+
   const carMakeOptions = useMemo(() => {
     return presetMergeWithCounts(CAR_MAKES, taxonomyCounts.carMakes).slice(0, 40);
   }, [taxonomyCounts.carMakes]);
@@ -967,7 +1006,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
     return presetMergeWithCounts(SERVICE_TYPES, taxonomyCounts.serviceTypes).slice(0, 60);
   }, [taxonomyCounts.serviceTypes]);
 
-  // ====== UI Chips ======
   const Chip = ({ active, disabled, onClick, icon, text, count, dotColor, title }) => (
     <button
       type="button"
@@ -978,17 +1016,21 @@ export default function CategoryListings({ category, initialListings = [] }) {
       title={title || text}
     >
       <span className="sooq-chipDot" style={{ background: dotColor || CAT_COLOR }} />
-      {icon ? (
-        <span className="sooq-chipIcon" aria-hidden="true">
-          {icon}
-        </span>
-      ) : null}
+      {icon ? <span className="sooq-chipIcon" aria-hidden="true">{icon}</span> : null}
       <span className="sooq-chipText">{text}</span>
       {typeof count === 'number' ? <span className="sooq-chipCount">{count}</span> : null}
     </button>
   );
 
-  const renderSingleFacet = ({ title, icon, selected, setSelected, options, labelOf, prefix }) => (
+  const renderSingleFacet = ({
+    title,
+    icon,
+    selected,
+    setSelected,
+    options,
+    labelOf,
+    prefix,
+  }) => (
     <div className="sooq-taxSection" aria-label={title}>
       <div className="sooq-taxTitle">{title}</div>
       <div className="sooq-chips" role="tablist" aria-label={title}>
@@ -1020,7 +1062,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const TaxonomyInner = () => {
     if (!single) return null;
 
-    // cars (make -> model)
     if (single === 'cars') {
       const mk = safeStr(carMake);
       const md = safeStr(carModel);
@@ -1059,10 +1100,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
         );
       }
 
-      const modelsTotal = Array.from(taxonomyCounts.carModels.values()).reduce(
-        (a, b) => a + Number(b || 0),
-        0
-      );
+      const modelsTotal = Array.from(taxonomyCounts.carModels.values()).reduce((a, b) => a + Number(b || 0), 0);
 
       return (
         <div className="sooq-taxSection" aria-label="فلترة موديلات السيارات">
@@ -1092,7 +1130,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
                 key={k}
                 active={md === k}
                 onClick={() => setCarModel(k)}
-                text={k === 'other' ? 'أخرى' : carModelLabel(mk, k) || k}
+                text={k === 'other' ? 'أخرى' : (carModelLabel(mk, k) || k)}
                 count={c}
                 dotColor={colorForKey(`model:${mk}:${k}`)}
               />
@@ -1102,7 +1140,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
       );
     }
 
-    // phones
     if (single === 'phones') {
       return renderSingleFacet({
         title: '📱 اختر ماركة الجوال',
@@ -1110,12 +1147,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
         selected: phoneBrand,
         setSelected: setPhoneBrand,
         options: phoneBrandOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : phoneBrandLabel(k) || k),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (phoneBrandLabel(k) || k)),
         prefix: 'phone',
       });
     }
 
-    // realestate (deal -> property)
     if (single === 'realestate') {
       const hasDeal = !!safeStr(dealType);
       const visibleDealOptions = hasDeal ? dealTypeOptions.filter(([k]) => k === dealType) : dealTypeOptions;
@@ -1172,7 +1208,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
                     key={k}
                     active={propertyType === k}
                     onClick={() => setPropertyType(k)}
-                    text={k === 'other' ? 'أخرى' : propertyTypeLabel(k) || k}
+                    text={k === 'other' ? 'أخرى' : (propertyTypeLabel(k) || k)}
                     count={c}
                     icon="🏡"
                     dotColor={colorForKey(`property:${k}`)}
@@ -1185,7 +1221,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
       );
     }
 
-    // electronics
     if (single === 'electronics') {
       return renderSingleFacet({
         title: '💻 اختر فئة الإلكترونيات',
@@ -1193,12 +1228,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
         selected: electronicsType,
         setSelected: setElectronicsType,
         options: electronicsTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : electronicsTypeLabel(k) || k),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (electronicsTypeLabel(k) || k)),
         prefix: 'electronics',
       });
     }
 
-    // motorcycles
     if (single === 'motorcycles') {
       return renderSingleFacet({
         title: '🏍️ اختر ماركة الدراجة',
@@ -1206,12 +1240,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
         selected: motorcycleBrand,
         setSelected: setMotorcycleBrand,
         options: motorcycleBrandOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : motorcycleBrandLabel(k) || k),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (motorcycleBrandLabel(k) || k)),
         prefix: 'moto',
       });
     }
 
-    // heavy equipment
     if (single === 'heavy_equipment') {
       return renderSingleFacet({
         title: '🏗️ اختر نوع المعدة',
@@ -1219,12 +1252,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
         selected: heavyEquipmentType,
         setSelected: setHeavyEquipmentType,
         options: heavyEquipmentTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : heavyEquipmentTypeLabel(k) || k),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (heavyEquipmentTypeLabel(k) || k)),
         prefix: 'heavy',
       });
     }
 
-    // solar
     if (single === 'solar') {
       return renderSingleFacet({
         title: '☀️ اختر فئة الطاقة الشمسية',
@@ -1232,12 +1264,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
         selected: solarType,
         setSelected: setSolarType,
         options: solarTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : solarTypeLabel(k) || k),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (solarTypeLabel(k) || k)),
         prefix: 'solar',
       });
     }
 
-    // networks
     if (single === 'networks') {
       return renderSingleFacet({
         title: '📡 اختر فئة الشبكات',
@@ -1245,12 +1276,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
         selected: networkType,
         setSelected: setNetworkType,
         options: networkTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : networkTypeLabel(k) || k),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (networkTypeLabel(k) || k)),
         prefix: 'net',
       });
     }
 
-    // maintenance
     if (single === 'maintenance') {
       return renderSingleFacet({
         title: '🛠️ اختر نوع الصيانة',
@@ -1258,12 +1288,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
         selected: maintenanceType,
         setSelected: setMaintenanceType,
         options: maintenanceTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : maintenanceTypeLabel(k) || k),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (maintenanceTypeLabel(k) || k)),
         prefix: 'maint',
       });
     }
 
-    // furniture
     if (single === 'furniture') {
       return renderSingleFacet({
         title: '🛋️ اختر نوع الأثاث',
@@ -1271,12 +1300,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
         selected: furnitureType,
         setSelected: setFurnitureType,
         options: furnitureTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : furnitureTypeLabel(k) || k),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (furnitureTypeLabel(k) || k)),
         prefix: 'furn',
       });
     }
 
-    // home tools
     if (single === 'home_tools') {
       return renderSingleFacet({
         title: '🏠 اختر نوع الأدوات المنزلية',
@@ -1284,12 +1312,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
         selected: homeToolsType,
         setSelected: setHomeToolsType,
         options: homeToolsTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : homeToolsTypeLabel(k) || k),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (homeToolsTypeLabel(k) || k)),
         prefix: 'home',
       });
     }
 
-    // clothes
     if (single === 'clothes') {
       return renderSingleFacet({
         title: '👕 اختر نوع الملابس',
@@ -1297,12 +1324,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
         selected: clothesType,
         setSelected: setClothesType,
         options: clothesTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : clothesTypeLabel(k) || k),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (clothesTypeLabel(k) || k)),
         prefix: 'clothes',
       });
     }
 
-    // animals
     if (single === 'animals') {
       return renderSingleFacet({
         title: '🐑 اختر نوع الحيوانات',
@@ -1310,12 +1336,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
         selected: animalType,
         setSelected: setAnimalType,
         options: animalTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : animalTypeLabel(k) || k),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (animalTypeLabel(k) || k)),
         prefix: 'animal',
       });
     }
 
-    // jobs
     if (single === 'jobs') {
       return renderSingleFacet({
         title: '💼 اختر نوع الوظيفة',
@@ -1323,12 +1348,11 @@ export default function CategoryListings({ category, initialListings = [] }) {
         selected: jobType,
         setSelected: setJobType,
         options: jobTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : jobTypeLabel(k) || k),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (jobTypeLabel(k) || k)),
         prefix: 'job',
       });
     }
 
-    // services
     if (single === 'services') {
       return renderSingleFacet({
         title: '🧰 اختر نوع الخدمة',
@@ -1336,7 +1360,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
         selected: serviceType,
         setSelected: setServiceType,
         options: serviceTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : serviceTypeLabel(k) || k),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : (serviceTypeLabel(k) || k)),
         prefix: 'service',
       });
     }
@@ -1344,7 +1368,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
     return null;
   };
 
-  // ====== Popular + Hashtags (مثل حراج) ======
   const categoryLabel = useMemo(() => (single ? getCategoryLabel(single) : ''), [single]);
 
   const hashtagOptions = useMemo(() => {
@@ -1377,7 +1400,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
 
     const hasCounts = cleaned.some((o) => o.count > 0);
     const sorted = hasCounts
-      ? [...cleaned].sort((a, b) => b.count - a.count || String(a.label).localeCompare(String(b.label), 'ar'))
+      ? [...cleaned].sort((a, b) => (b.count - a.count) || String(a.label).localeCompare(String(b.label), 'ar'))
       : cleaned;
 
     return sorted.slice(0, max);
@@ -1404,11 +1427,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
     const list = Array.isArray(items) ? items : [];
     return [...list]
       .filter(Boolean)
-      .sort(
-        (a, b) =>
-          Number(b.views || 0) - Number(a.views || 0) ||
-          Number(b.likes || 0) - Number(a.likes || 0)
-      )
+      .sort((a, b) => (Number(b.views || 0) - Number(a.views || 0)) || (Number(b.likes || 0) - Number(a.likes || 0)))
       .slice(0, 8);
   }, [items]);
 
@@ -1447,8 +1466,9 @@ export default function CategoryListings({ category, initialListings = [] }) {
 
   if (loading) {
     return (
-      <div className="card" style={{ padding: 16 }}>
-        <div className="muted">جاري تحميل إعلانات القسم...</div>
+      <div className="loading-container">
+        <div className="loading-spinner"></div>
+        <div className="loading-text">جاري تحميل إعلانات القسم...</div>
       </div>
     );
   }
@@ -1457,9 +1477,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
     return (
       <div className="card" style={{ padding: 16, border: '1px solid #fecaca' }}>
         <div style={{ fontWeight: 900, color: '#b91c1c' }}>⚠️ حدث خطأ</div>
-        <div className="muted" style={{ marginTop: 6 }}>
-          {err}
-        </div>
+        <div className="muted" style={{ marginTop: 6 }}>{err}</div>
       </div>
     );
   }
@@ -1484,9 +1502,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
             </div>
 
             <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-              <span className="muted" style={{ fontWeight: 900 }}>
-                المحافظة:
-              </span>
+              <span className="muted" style={{ fontWeight: 900 }}>المحافظة:</span>
               <select
                 className="input"
                 value={govKey}
@@ -1495,39 +1511,122 @@ export default function CategoryListings({ category, initialListings = [] }) {
               >
                 <option value="">{govLoading ? 'جاري التحميل...' : 'الكل'}</option>
                 {govOptions.map((g) => (
-                  <option key={g.key} value={g.key}>
-                    {g.nameAr}
+                  <option key={g.key} value={g.key}>{g.nameAr}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+              <span className="muted" style={{ fontWeight: 900 }}>ترتيب:</span>
+              <select
+                className="input"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                style={{ minWidth: 140 }}
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.key} value={opt.key}>
+                    {opt.icon} {opt.label}
                   </option>
                 ))}
               </select>
             </div>
 
+            <button
+              className={`btn ${showPriceFilter ? 'btnPrimary' : ''}`}
+              onClick={() => setShowPriceFilter(!showPriceFilter)}
+            >
+              💰 فلتر السعر
+            </button>
+
+            <button
+              className="btn btnSecondary"
+              onClick={fetchFirstPage}
+              disabled={loading}
+              style={{ marginRight: 'auto' }}
+            >
+              🔄 تحديث
+            </button>
+
             <input
               className="input sooq-search"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="ابحث داخل القسم..."
+              placeholder="🔍 ابحث داخل القسم..."
+              style={{ flex: 1, minWidth: 180 }}
             />
           </div>
+
+          {showPriceFilter && (
+            <div className="price-filter" style={{ marginTop: 12, padding: 12, background: '#f8fafc', borderRadius: 8 }}>
+              <div style={{ fontWeight: 900, marginBottom: 8 }}>نطاق السعر (ريال يمني)</div>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  type="number"
+                  className="input"
+                  placeholder="الحد الأدنى"
+                  value={priceRange.min}
+                  onChange={(e) => setPriceRange(prev => ({ ...prev, min: e.target.value }))}
+                  style={{ width: 120 }}
+                />
+                <span>إلى</span>
+                <input
+                  type="number"
+                  className="input"
+                  placeholder="الحد الأقصى"
+                  value={priceRange.max}
+                  onChange={(e) => setPriceRange(prev => ({ ...prev, max: e.target.value }))}
+                  style={{ width: 120 }}
+                />
+                <button
+                  className="btn btnSecondary"
+                  onClick={() => setPriceRange({ min: '', max: '' })}
+                >
+                  مسح
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {sortedListings.length === 0 ? (
         <div className="card" style={{ padding: 16, textAlign: 'center' }}>
           <div style={{ fontWeight: 900 }}>لا توجد إعلانات مطابقة</div>
-          <div className="muted" style={{ marginTop: 6 }}>
-            جرّب تغيير الفلاتر أو البحث.
-          </div>
+          <div className="muted" style={{ marginTop: 6 }}>جرّب تغيير الفلاتر أو البحث.</div>
           <div style={{ marginTop: 12 }}>
-            <Link className="btn btnPrimary" href="/add">
-              ➕ أضف إعلان
-            </Link>
+            <Link className="btn btnPrimary" href="/add">➕ أضف إعلان</Link>
           </div>
         </div>
       ) : view === 'map' ? (
-        <HomeMapView listings={filtered} />
+        <HomeMapView listings={sortedListings} />
       ) : (
         <>
+          <div className="category-stats" style={{
+            display: 'flex',
+            gap: 16,
+            marginBottom: 16,
+            padding: 12,
+            background: '#f8fafc',
+            borderRadius: 8,
+            flexWrap: 'wrap'
+          }}>
+            <div className="stat-item">
+              <span className="stat-label">إجمالي الإعلانات:</span>
+              <span className="stat-value">{items.length.toLocaleString('ar-YE')}</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">المعروض:</span>
+              <span className="stat-value">{sortedListings.length.toLocaleString('ar-YE')}</span>
+            </div>
+            {single === 'cars' && carMake && (
+              <div className="stat-item">
+                <span className="stat-label">الماركة المختارة:</span>
+                <span className="stat-value">{carMakeLabel(carMake)}</span>
+              </div>
+            )}
+          </div>
+
           <div
             style={{
               display: 'grid',
@@ -1535,7 +1634,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
               gap: 10,
             }}
           >
-            {filtered.map((l) => (
+            {sortedListings.map((l) => (
               <ListingCard key={l.id} listing={l} variant={view === 'list' ? 'list' : 'grid'} />
             ))}
           </div>
@@ -1544,21 +1643,14 @@ export default function CategoryListings({ category, initialListings = [] }) {
 
           <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center' }}>
             {loadingMore ? (
-              <div className="muted" style={{ padding: 10 }}>
-                ...جاري تحميل المزيد
-              </div>
+              <div className="muted" style={{ padding: 10 }}>...جاري تحميل المزيد</div>
             ) : hasMore ? (
-              <div className="muted" style={{ padding: 10 }}>
-                انزل لأسفل لتحميل المزيد
-              </div>
+              <div className="muted" style={{ padding: 10 }}>انزل لأسفل لتحميل المزيد</div>
             ) : (
-              <div className="muted" style={{ padding: 10 }}>
-                لا يوجد المزيد
-              </div>
+              <div className="muted" style={{ padding: 10 }}>لا يوجد المزيد</div>
             )}
           </div>
 
-          {/* ✅ الأكثر رواجًا + وسوم (مثل حراج) */}
           {view !== 'map' && popularListings.length >= 4 ? (
             <div className="card" style={{ padding: 14, marginTop: 14 }}>
               <div style={{ fontWeight: 900, marginBottom: 10 }}>🔥 الإعلانات الأكثر رواجًا</div>
@@ -1598,24 +1690,21 @@ export default function CategoryListings({ category, initialListings = [] }) {
           {err && items.length > 0 ? (
             <div className="card" style={{ padding: 12, marginTop: 12, border: '1px solid #fecaca' }}>
               <div style={{ fontWeight: 900, color: '#b91c1c' }}>⚠️</div>
-              <div className="muted" style={{ marginTop: 6 }}>
-                {err}
-              </div>
+              <div className="muted" style={{ marginTop: 6 }}>{err}</div>
             </div>
           ) : null}
         </>
       )}
 
       <style jsx>{`
-        /* ====== Filter shell (نفس شكل الخريطة للشبكة/القائمة) ====== */
+        /* ====== الأنماط الأساسية ====== */
         .sooq-filterShell {
-          margin-bottom: 12px;
-          padding: 12px 12px;
-          border-radius: 16px;
-          background: rgba(255, 255, 255, 0.9);
-          backdrop-filter: blur(10px);
+          margin-bottom: 16px;
+          padding: 16px;
+          border-radius: 12px;
+          background: white;
           border: 1px solid #e2e8f0;
-          box-shadow: 0 12px 22px rgba(0, 0, 0, 0.1);
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
         .sooq-taxSection {
           margin-bottom: 10px;
@@ -1634,9 +1723,10 @@ export default function CategoryListings({ category, initialListings = [] }) {
           display: flex;
           gap: 8px;
           align-items: center;
+          font-size: 16px;
         }
         .sooq-taxSub {
-          font-size: 12px;
+          font-size: 13px;
           font-weight: 900;
           opacity: 0.85;
           margin: 6px 0 6px;
@@ -1646,27 +1736,26 @@ export default function CategoryListings({ category, initialListings = [] }) {
           display: flex;
           gap: 8px;
           overflow-x: auto;
-          padding: 8px;
-          border-radius: 14px;
-          background: rgba(255, 255, 255, 0.55);
-          backdrop-filter: blur(6px);
+          padding: 12px;
+          border-radius: 12px;
+          background: #f8fafc;
           align-items: center;
         }
 
         .sooq-chip {
           display: inline-flex;
           align-items: center;
-          gap: 8px;
-          padding: 8px 10px;
-          border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.1);
-          background: #fff;
-          font-size: 13px;
-          line-height: 1;
+          gap: 6px;
+          padding: 8px 16px;
+          border-radius: 20px;
+          border: 2px solid #e2e8f0;
+          background: white;
+          font-size: 14px;
+          font-weight: 900;
           cursor: pointer;
+          transition: all 0.2s ease;
           white-space: nowrap;
           user-select: none;
-          font-weight: 900;
         }
         .sooq-chip.isDisabled {
           opacity: 0.55;
@@ -1678,9 +1767,16 @@ export default function CategoryListings({ category, initialListings = [] }) {
           cursor: not-allowed;
         }
 
+        .sooq-chip:hover {
+          border-color: #3b82f6;
+          transform: translateY(-2px);
+        }
+
         .sooq-chip.isActive {
-          border-color: rgba(0, 0, 0, 0.2);
-          box-shadow: 0 8px 14px rgba(0, 0, 0, 0.1);
+          border-color: #3b82f6;
+          background: #3b82f6;
+          color: white;
+          box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
         }
 
         .sooq-chipDot {
@@ -1704,19 +1800,20 @@ export default function CategoryListings({ category, initialListings = [] }) {
           height: 18px;
           padding: 0 6px;
           border-radius: 999px;
-          background: rgba(0, 0, 0, 0.06);
+          background: rgba(0, 0, 0, 0.08);
           font-size: 12px;
           font-weight: 900;
         }
 
-        @media (max-width: 520px) {
-          .sooq-chips {
-            padding: 6px;
-          }
-          .sooq-chip {
-            padding: 8px 9px;
-            font-size: 12px;
-          }
+        .sooq-chip.isActive .sooq-chipCount {
+          background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* ====== الهاشتاقات ====== */
+        .sooq-hashtagsBox {
+          background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+          border: 1px solid #bae6fd;
+          border-radius: 12px;
         }
 
         .sooq-hashtags {
@@ -1727,29 +1824,129 @@ export default function CategoryListings({ category, initialListings = [] }) {
         .sooq-tag {
           display: inline-flex;
           align-items: center;
-          gap: 8px;
-          border: 1px solid var(--border);
-          background: #fff;
-          border-radius: 999px;
-          padding: 8px 10px;
+          gap: 6px;
+          border: 1px solid #cbd5e1;
+          background: white;
+          border-radius: 20px;
+          padding: 8px 16px;
           cursor: pointer;
-          transition: transform 0.12s ease, box-shadow 0.12s ease;
-          font-weight: 800;
-          font-size: 13px;
+          transition: all 0.2s ease;
+          font-weight: 900;
+          font-size: 14px;
         }
         .sooq-tag:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 6px 14px rgba(0, 0, 0, 0.06);
+          border-color: #3b82f6;
+          background: #eff6ff;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
         .sooq-tagCount {
           color: #64748b;
           font-weight: 900;
           font-size: 12px;
-          border-left: 1px solid #e2e8f0;
           padding-left: 8px;
+          border-left: 1px solid #e2e8f0;
         }
         .sooq-tagText {
           white-space: nowrap;
+        }
+
+        /* ====== مؤشر التحميل ====== */
+        .loading-container {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 48px;
+        }
+
+        .loading-spinner {
+          width: 48px;
+          height: 48px;
+          border: 4px solid #e2e8f0;
+          border-top-color: #3b82f6;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+          margin-bottom: 16px;
+        }
+
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+          font-size: 16px;
+          color: #64748b;
+          font-weight: 900;
+        }
+
+        /* ====== الإحصائيات ====== */
+        .category-stats {
+          background: #f8fafc;
+          border-radius: 8px;
+          padding: 12px 16px;
+        }
+
+        .stat-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .stat-label {
+          color: #64748b;
+          font-size: 14px;
+        }
+
+        .stat-value {
+          font-weight: 900;
+          color: #1e293b;
+          font-size: 15px;
+        }
+
+        /* ====== فلتر السعر ====== */
+        .price-filter {
+          background: #f8fafc;
+          border-radius: 8px;
+          border: 1px solid #e2e8f0;
+        }
+
+        /* ====== تحسينات للجوال ====== */
+        @media (max-width: 768px) {
+          .sooq-controlsRow .row {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          
+          .sooq-chip {
+            padding: 6px 12px;
+            font-size: 13px;
+          }
+          
+          .category-stats {
+            flex-direction: column;
+            gap: 8px;
+          }
+          
+          .price-filter div {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+        }
+
+        @media (max-width: 520px) {
+          .sooq-chips { 
+            padding: 8px; 
+            gap: 6px;
+          }
+          .sooq-chip { 
+            padding: 6px 10px; 
+            font-size: 12px; 
+          }
+          
+          .sooq-taxTitle {
+            font-size: 15px;
+          }
         }
       `}</style>
     </div>
