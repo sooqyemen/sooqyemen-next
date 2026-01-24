@@ -26,7 +26,6 @@ import {
   JOB_TYPES,
   SERVICE_TYPES,
   MOTORCYCLE_BRANDS,
-  getMotorcycleModelsByBrand,
 } from '@/lib/taxonomy';
 
 const LocationPicker = dynamic(
@@ -54,6 +53,33 @@ const DEFAULT_CATEGORIES = [
   { slug: 'other', name: 'أخرى / غير مصنف' },
 ];
 
+
+const DEFAULT_GOVERNORATES = [
+  { key: 'amanat_al_asimah', nameAr: 'أمانة العاصمة', order: 1, enabled: true },
+  { key: 'sanaa', nameAr: 'صنعاء', order: 2, enabled: true },
+  { key: 'aden', nameAr: 'عدن', order: 3, enabled: true },
+  { key: 'taiz', nameAr: 'تعز', order: 4, enabled: true },
+  { key: 'ibb', nameAr: 'إب', order: 5, enabled: true },
+  { key: 'al_hudaydah', nameAr: 'الحديدة', order: 6, enabled: true },
+  { key: 'hadramaut', nameAr: 'حضرموت', order: 7, enabled: true },
+  { key: 'dhamar', nameAr: 'ذمار', order: 8, enabled: true },
+  { key: 'al_bayda', nameAr: 'البيضاء', order: 9, enabled: true },
+  { key: 'hajjah', nameAr: 'حجة', order: 10, enabled: true },
+  { key: 'lahij', nameAr: 'لحج', order: 11, enabled: true },
+  { key: 'abyan', nameAr: 'أبين', order: 12, enabled: true },
+  { key: 'al_dhale', nameAr: 'الضالع', order: 13, enabled: true },
+  { key: 'al_mahrah', nameAr: 'المهرة', order: 14, enabled: true },
+  { key: 'al_jawf', nameAr: 'الجوف', order: 15, enabled: true },
+  { key: 'al_mahwit', nameAr: 'المحويت', order: 16, enabled: true },
+  { key: 'marib', nameAr: 'مأرب', order: 17, enabled: true },
+  { key: 'raymah', nameAr: 'ريمة', order: 18, enabled: true },
+  { key: 'saada', nameAr: 'صعدة', order: 19, enabled: true },
+  { key: 'shabwah', nameAr: 'شبوة', order: 20, enabled: true },
+  { key: 'amran', nameAr: 'عمران', order: 21, enabled: true },
+  { key: 'socotra', nameAr: 'سقطرى', order: 22, enabled: true },
+];
+
+
 export default function AddPage() {
   const { user, loading } = useAuth();
   const rates = useRates();
@@ -61,6 +87,7 @@ export default function AddPage() {
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [city, setCity] = useState('');
+  const [govKey, setGovKey] = useState('');
   // ✅ مهم: لا يوجد قسم افتراضي
   const [category, setCategory] = useState('');
   // ✅ فروع الأقسام (هرمية)
@@ -81,8 +108,6 @@ export default function AddPage() {
 
   const [motorcycleBrand, setMotorcycleBrand] = useState('');
   const [motorcycleBrandText, setMotorcycleBrandText] = useState('');
-  const [motorcycleModel, setMotorcycleModel] = useState('');
-  const [motorcycleModelText, setMotorcycleModelText] = useState('');
 
   const [heavyEquipmentType, setHeavyEquipmentType] = useState('');
   const [heavyEquipmentTypeText, setHeavyEquipmentTypeText] = useState('');
@@ -138,6 +163,13 @@ export default function AddPage() {
   const [catsLoading, setCatsLoading] = useState(true);
   const [catsSource, setCatsSource] = useState('loading'); // loading | firestore | fallback
 
+  // ✅ المحافظات (المدن) - تحميلها من Firestore أو استخدام fallback
+  const [govs, setGovs] = useState(DEFAULT_GOVERNORATES);
+  const [govsLoading, setGovsLoading] = useState(true);
+  const [govsSource, setGovsSource] = useState('loading'); // loading | firestore | fallback
+
+
+
   // ✅ تحميل الأقسام من Firestore
   useEffect(() => {
     const unsub = db.collection('categories').onSnapshot(
@@ -190,6 +222,62 @@ export default function AddPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ✅ تحميل المحافظات (taxonomy_governorates) من Firestore
+  useEffect(() => {
+    const unsub = db.collection('taxonomy_governorates').onSnapshot(
+      (snap) => {
+        const arr = snap.docs
+          .map((d) => {
+            const data = d.data() || {};
+            return {
+              key: d.id,
+              nameAr: data.nameAr || data.name_ar || data.name || d.id,
+              order: typeof data.order === 'number' ? data.order : Number(data.order || 0),
+              enabled: data.enabled !== false,
+            };
+          })
+          .filter((x) => x.enabled);
+
+        arr.sort((a, b) => {
+          const ao = Number.isFinite(a.order) ? a.order : 0;
+          const bo = Number.isFinite(b.order) ? b.order : 0;
+          if (ao !== bo) return ao - bo;
+          return String(a.nameAr || '').localeCompare(String(b.nameAr || ''), 'ar');
+        });
+
+        if (arr.length) {
+          setGovs(arr);
+          setGovsSource('firestore');
+        } else {
+          setGovs(DEFAULT_GOVERNORATES);
+          setGovsSource('fallback');
+        }
+
+        setGovsLoading(false);
+      },
+      (err) => {
+        console.error('Failed to load taxonomy_governorates:', err);
+        setGovs(DEFAULT_GOVERNORATES);
+        setGovsLoading(false);
+        setGovsSource('fallback');
+      }
+    );
+
+    return () => unsub();
+  }, []);
+
+  // ✅ اجعل city مشتقة من govKey (حتى ما يصير اختلاف أسماء)
+  useEffect(() => {
+    if (!govKey) {
+      setCity('');
+      return;
+    }
+    const found = (govs || []).find((g) => g.key === govKey);
+    setCity(found?.nameAr ? String(found.nameAr) : '');
+  }, [govKey, govs]);
+
+
+
   
   // ✅ عند تغيير القسم: صفّر الفروع
   useEffect(() => {
@@ -210,8 +298,6 @@ export default function AddPage() {
 
     setMotorcycleBrand('');
     setMotorcycleBrandText('');
-    setMotorcycleModel('');
-    setMotorcycleModelText('');
 
     setHeavyEquipmentType('');
     setHeavyEquipmentTypeText('');
@@ -283,17 +369,6 @@ export default function AddPage() {
     return Array.isArray(CAR_MODELS_BY_MAKE?.[mk]) ? CAR_MODELS_BY_MAKE[mk] : [];
   }, [carMake]);
 
-  // ✅ موديلات الدراجة حسب الماركة
-  const motorcycleModelsForBrand = useMemo(() => {
-    const bk = String(motorcycleBrand || '').trim();
-    if (!bk || bk === 'other') return [];
-    try {
-      return getMotorcycleModelsByBrand(bk) || [];
-    } catch {
-      return [];
-    }
-  }, [motorcycleBrand]);
-
   const slugKey = (v) =>
     String(v || '')
       .trim()
@@ -314,7 +389,7 @@ export default function AddPage() {
     if (!desc.trim()) newErrors.desc = 'الرجاء إدخال وصف للإعلان';
     else if (desc.trim().length < 10) newErrors.desc = 'الوصف يجب أن يكون 10 أحرف على الأقل';
 
-    if (!city.trim()) newErrors.city = 'الرجاء إدخال المدينة';
+    if (!govKey) newErrors.govKey = 'الرجاء اختيار المحافظة';
 
     // ✅ القسم إجباري
     if (!category) newErrors.category = 'الرجاء اختيار القسم';
@@ -351,16 +426,7 @@ export default function AddPage() {
       if (electronicsType === 'other' && !electronicsTypeText.trim()) newErrors.electronicsTypeText = 'اكتب نوع الإلكترونيات';
     }
     if (category === 'motorcycles') {
-      if (!motorcycleBrand) newErrors.motorcycleBrand = 'اختر ماركة الدراجة';
       if (motorcycleBrand === 'other' && !motorcycleBrandText.trim()) newErrors.motorcycleBrandText = 'اكتب ماركة الدراجة';
-
-      // ✅ موديل الدراجة (إجباري)
-      if (motorcycleBrand === 'other') {
-        if (!motorcycleModelText.trim()) newErrors.motorcycleModelText = 'اكتب موديل الدراجة';
-      } else {
-        if (!motorcycleModel) newErrors.motorcycleModel = 'اختر موديل الدراجة';
-        if (motorcycleModel === 'other' && !motorcycleModelText.trim()) newErrors.motorcycleModelText = 'اكتب موديل الدراجة';
-      }
     }
     if (category === 'heavy_equipment') {
       if (heavyEquipmentType === 'other' && !heavyEquipmentTypeText.trim()) newErrors.heavyEquipmentTypeText = 'اكتب نوع المعدة';
@@ -459,122 +525,123 @@ export default function AddPage() {
       const lat = Array.isArray(coords) ? Number(coords[0]) : null;
       const lng = Array.isArray(coords) ? Number(coords[1]) : null;
 
-      await db.collection('listings').add({
-        title: title.trim(),
-        description: desc.trim(),
-        city: city.trim(),
+      const selectedGov = govs.find((g) => g.key === govKey);
+      const cityToSave = selectedGov ? selectedGov.nameAr : String(city || '').trim();
 
-        // ✅ مهم جدًا: نخزّن key الإنجليزي المطابق لـ Firestore
-        category: String(category || '').trim(),
-        categoryKey: String(category || '').trim(),
+      const payload = {
+title: title.trim(),
+    description: desc.trim(),
+    city: cityToSave,
+    governorateKey: String(govKey || '').trim(),
 
-        // ✅ فروع الأقسام (Taxonomy)
-        carMake: category === 'cars' ? (carMake || null) : null,
-        carMakeText: category === 'cars' && carMake === 'other' ? (carMakeText.trim() || null) : null,
+    // ✅ مهم جدًا: نخزّن key الإنجليزي المطابق لـ Firestore
+    category: String(category || '').trim(),
 
-        // carModel: نخزّن key موحد + نص عند اختيار "أخرى" أو عند عدم توفر preset
-        carModel:
-          category === 'cars'
-            ? (carModel && carModel !== 'other'
-                ? carModel
-                : (carModelText.trim() ? slugKey(carModelText) : null))
-            : null,
-        carModelText:
-          category === 'cars' && (carModel === 'other' || (carModelText.trim() && carModel !== 'other'))
-            ? (carModelText.trim() || null)
-            : null,
+    // ✅ فروع الأقسام (Taxonomy)
+    carMake: category === 'cars' ? (carMake || null) : null,
+    carMakeText: category === 'cars' && carMake === 'other' ? (carMakeText.trim() || null) : null,
 
-        // بقية الأقسام
-        electronicsType: category === 'electronics' ? (electronicsType || null) : null,
-        electronicsTypeText: category === 'electronics' && electronicsType === 'other' ? (electronicsTypeText.trim() || null) : null,
+    // carModel: نخزّن key موحد + نص عند اختيار "أخرى" أو عند عدم توفر preset
+    carModel:
+      category === 'cars'
+        ? (carModel && carModel !== 'other'
+            ? carModel
+            : (carModelText.trim() ? slugKey(carModelText) : null))
+        : null,
+    carModelText:
+      category === 'cars' && (carModel === 'other' || (carModelText.trim() && carModel !== 'other'))
+        ? (carModelText.trim() || null)
+        : null,
 
-        motorcycleBrand: category === 'motorcycles' ? (motorcycleBrand || null) : null,
-        motorcycleBrandText: category === 'motorcycles' && motorcycleBrand === 'other' ? (motorcycleBrandText.trim() || null) : null,
-        motorcycleModel: category === 'motorcycles'
-          ? (motorcycleBrand && motorcycleBrand !== 'other'
-              ? (motorcycleModel && motorcycleModel !== 'other'
-                  ? motorcycleModel
-                  : (motorcycleModelText.trim() ? slugKey(motorcycleModelText) : null))
-              : (motorcycleModelText.trim() ? slugKey(motorcycleModelText) : null))
-          : null,
-        motorcycleModelText: category === 'motorcycles'
-          ? (motorcycleModelText.trim() || null)
-          : null,
+    // بقية الأقسام
+    electronicsType: category === 'electronics' ? (electronicsType || null) : null,
+    electronicsTypeText: category === 'electronics' && electronicsType === 'other' ? (electronicsTypeText.trim() || null) : null,
 
-        heavyEquipmentType: category === 'heavy_equipment' ? (heavyEquipmentType || null) : null,
-        heavyEquipmentTypeText:
-          category === 'heavy_equipment' && heavyEquipmentType === 'other' ? (heavyEquipmentTypeText.trim() || null) : null,
+    motorcycleBrand: category === 'motorcycles' ? (motorcycleBrand || null) : null,
+    motorcycleBrandText: category === 'motorcycles' && motorcycleBrand === 'other' ? (motorcycleBrandText.trim() || null) : null,
 
-        solarType: category === 'solar' ? (solarType || null) : null,
-        solarTypeText: category === 'solar' && solarType === 'other' ? (solarTypeText.trim() || null) : null,
+    heavyEquipmentType: category === 'heavy_equipment' ? (heavyEquipmentType || null) : null,
+    heavyEquipmentTypeText:
+      category === 'heavy_equipment' && heavyEquipmentType === 'other' ? (heavyEquipmentTypeText.trim() || null) : null,
 
-        networkType: category === 'networks' ? (networkType || null) : null,
-        networkTypeText: category === 'networks' && networkType === 'other' ? (networkTypeText.trim() || null) : null,
+    solarType: category === 'solar' ? (solarType || null) : null,
+    solarTypeText: category === 'solar' && solarType === 'other' ? (solarTypeText.trim() || null) : null,
 
-        maintenanceType: category === 'maintenance' ? (maintenanceType || null) : null,
-        maintenanceTypeText:
-          category === 'maintenance' && maintenanceType === 'other' ? (maintenanceTypeText.trim() || null) : null,
+    networkType: category === 'networks' ? (networkType || null) : null,
+    networkTypeText: category === 'networks' && networkType === 'other' ? (networkTypeText.trim() || null) : null,
 
-        furnitureType: category === 'furniture' ? (furnitureType || null) : null,
-        furnitureTypeText: category === 'furniture' && furnitureType === 'other' ? (furnitureTypeText.trim() || null) : null,
+    maintenanceType: category === 'maintenance' ? (maintenanceType || null) : null,
+    maintenanceTypeText:
+      category === 'maintenance' && maintenanceType === 'other' ? (maintenanceTypeText.trim() || null) : null,
 
-        homeToolsType: category === 'home_tools' ? (homeToolsType || null) : null,
-        homeToolsTypeText:
-          category === 'home_tools' && homeToolsType === 'other' ? (homeToolsTypeText.trim() || null) : null,
+    furnitureType: category === 'furniture' ? (furnitureType || null) : null,
+    furnitureTypeText: category === 'furniture' && furnitureType === 'other' ? (furnitureTypeText.trim() || null) : null,
 
-        clothesType: category === 'clothes' ? (clothesType || null) : null,
-        clothesTypeText: category === 'clothes' && clothesType === 'other' ? (clothesTypeText.trim() || null) : null,
+    homeToolsType: category === 'home_tools' ? (homeToolsType || null) : null,
+    homeToolsTypeText:
+      category === 'home_tools' && homeToolsType === 'other' ? (homeToolsTypeText.trim() || null) : null,
 
-        animalType: category === 'animals' ? (animalType || null) : null,
-        animalTypeText: category === 'animals' && animalType === 'other' ? (animalTypeText.trim() || null) : null,
+    clothesType: category === 'clothes' ? (clothesType || null) : null,
+    clothesTypeText: category === 'clothes' && clothesType === 'other' ? (clothesTypeText.trim() || null) : null,
 
-        jobType: category === 'jobs' ? (jobType || null) : null,
-        jobTypeText: category === 'jobs' && jobType === 'other' ? (jobTypeText.trim() || null) : null,
+    animalType: category === 'animals' ? (animalType || null) : null,
+    animalTypeText: category === 'animals' && animalType === 'other' ? (animalTypeText.trim() || null) : null,
 
-        serviceType: category === 'services' ? (serviceType || null) : null,
-        serviceTypeText: category === 'services' && serviceType === 'other' ? (serviceTypeText.trim() || null) : null,
+    jobType: category === 'jobs' ? (jobType || null) : null,
+    jobTypeText: category === 'jobs' && jobType === 'other' ? (jobTypeText.trim() || null) : null,
 
-        phoneBrand: category === 'phones' ? (phoneBrand || null) : null,
-        phoneBrandText: category === 'phones' && phoneBrand === 'other' ? (phoneBrandText.trim() || null) : null,
+    serviceType: category === 'services' ? (serviceType || null) : null,
+    serviceTypeText: category === 'services' && serviceType === 'other' ? (serviceTypeText.trim() || null) : null,
 
-        dealType: category === 'realestate' ? (dealType || null) : null,
-        propertyType: category === 'realestate' ? (propertyType || null) : null,
-        propertyTypeText:
-          category === 'realestate' && propertyType === 'other' ? (propertyTypeText.trim() || null) : null,
+    phoneBrand: category === 'phones' ? (phoneBrand || null) : null,
+    phoneBrandText: category === 'phones' && phoneBrand === 'other' ? (phoneBrandText.trim() || null) : null,
 
-        phone: phone.trim() || null,
-        isWhatsapp: !!isWhatsapp,
+    dealType: category === 'realestate' ? (dealType || null) : null,
+    propertyType: category === 'realestate' ? (propertyType || null) : null,
+    propertyTypeText:
+      category === 'realestate' && propertyType === 'other' ? (propertyTypeText.trim() || null) : null,
 
-        priceYER: Number(priceYER),
-        originalPrice: Number(price),
-        originalCurrency: currency,
-        currencyBase: 'YER',
+    phone: phone.trim() || null,
+    isWhatsapp: !!isWhatsapp,
 
-        // ✅ نخزّن أكثر من صيغة لتضمن عمل الخريطة في كل مكان
-        coords: lat != null && lng != null ? [lat, lng] : null,
-        lat: lat != null ? lat : null,
-        lng: lng != null ? lng : null,
+    priceYER: Number(priceYER),
+    originalPrice: Number(price),
+    originalCurrency: currency,
+    currencyBase: 'YER',
 
-        locationLabel: locationLabel || null,
+    // ✅ نخزّن أكثر من صيغة لتضمن عمل الخريطة في كل مكان
+    coords: lat != null && lng != null ? [lat, lng] : null,
+    lat: lat != null ? lat : null,
+    lng: lng != null ? lng : null,
 
-        images: imageUrls,
+    locationLabel: locationLabel || null,
 
-        userId: user.uid,
-        userEmail: user.email || null,
-        userName: user.displayName || null,
+    images: imageUrls,
 
-        views: 0,
-        likes: 0,
-        isActive: true,
+    userId: user.uid,
+    userEmail: user.email || null,
+    userName: user.displayName || null,
 
-        auctionEnabled: !!auctionEnabled,
-        auctionEndAt: endAt,
-        currentBidYER: auctionEnabled ? Number(priceYER) : null,
+    views: 0,
+    likes: 0,
+    isActive: true,
 
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      });
+    auctionEnabled: !!auctionEnabled,
+    auctionEndAt: endAt,
 
-      alert('🎉 تم نشر الإعلان بنجاح!');
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      };
+
+      // ✅ لا نضيف حقول المزاد إلا إذا كان الإعلان مزاد فعلاً
+      if (auctionEnabled) {
+        payload.auctionEnabled = true;
+        payload.auctionEndAt = auctionEndAt || null;
+        payload.currentBidYER = Number(priceYER);
+        payload.bidsCount = 0;
+      }
+
+      const docRef = await db.collection('listings').add(payload);
+alert('🎉 تم نشر الإعلان بنجاح!');
       window.location.href = '/';
     } catch (e) {
       console.error(e);
@@ -698,20 +765,29 @@ export default function AddPage() {
             {errors.desc && <div className="form-error">{errors.desc}</div>}
           </div>
 
-          {/* المدينة والقسم */}
+          {/* المحافظة والقسم */}
           <div className="form-row">
             <div className="form-group">
-              <label className="form-label required">المدينة</label>
-              <input
-                className={`form-input ${errors.city ? 'error' : ''}`}
-                value={city}
+              <label className="form-label required">
+                المحافظة {govsSource === 'fallback' ? '(Fallback)' : ''}
+              </label>
+              <select
+                className={`form-select ${errors.govKey ? 'error' : ''}`}
+                value={govKey}
                 onChange={(e) => {
-                  setCity(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, city: undefined }));
+                  setGovKey(e.target.value);
+                  if (submitAttempted) setErrors((prev) => ({ ...prev, govKey: undefined }));
                 }}
-                placeholder="مثال: صنعاء"
-              />
-              {errors.city && <div className="form-error">{errors.city}</div>}
+                disabled={govsLoading}
+              >
+                <option value="">{govsLoading ? 'جاري تحميل المحافظات...' : 'اختر المحافظة'}</option>
+                {(govs || []).map((g) => (
+                  <option key={g.key} value={g.key}>
+                    {g.nameAr}
+                  </option>
+                ))}
+              </select>
+              {errors.govKey && <div className="form-error">{errors.govKey}</div>}
             </div>
 
             <div className="form-group">
@@ -1006,32 +1082,20 @@ export default function AddPage() {
             <div className="form-group">
               <label className="form-label">ماركة الدراجة</label>
               <select
-                className={`form-select ${errors.motorcycleBrand ? 'error' : ''}`}
+                className="form-select"
                 value={motorcycleBrand}
                 onChange={(e) => {
-                  const v = e.target.value;
-                  setMotorcycleBrand(v);
-                  // reset model عند تغيير الماركة
-                  setMotorcycleModel('');
-                  setMotorcycleModelText('');
-                  if (submitAttempted)
-                    setErrors((prev) => ({
-                      ...prev,
-                      motorcycleBrand: undefined,
-                      motorcycleBrandText: undefined,
-                      motorcycleModel: undefined,
-                      motorcycleModelText: undefined,
-                    }));
+                  setMotorcycleBrand(e.target.value);
+                  if (submitAttempted) setErrors((prev) => ({ ...prev, motorcycleBrandText: undefined }));
                 }}
               >
-                <option value="">اختر الماركة</option>
+                <option value="">اختر الماركة (اختياري)</option>
                 {MOTORCYCLE_BRANDS.map((x) => (
                   <option key={x.key} value={x.key}>
                     {x.label}
                   </option>
                 ))}
               </select>
-              {errors.motorcycleBrand && <div className="form-error">{errors.motorcycleBrand}</div>}
 
               {motorcycleBrand === 'other' && (
                 <div style={{ marginTop: 10 }}>
@@ -1046,63 +1110,6 @@ export default function AddPage() {
                     maxLength={60}
                   />
                   {errors.motorcycleBrandText && <div className="form-error">{errors.motorcycleBrandText}</div>}
-                </div>
-              )}
-
-              <div style={{ marginTop: 12 }} />
-
-              <label className="form-label">موديل الدراجة</label>
-
-              {motorcycleBrand && motorcycleBrand !== 'other' ? (
-                <>
-                  <select
-                    className={`form-select ${errors.motorcycleModel ? 'error' : ''}`}
-                    value={motorcycleModel}
-                    onChange={(e) => {
-                      setMotorcycleModel(e.target.value);
-                      if (submitAttempted)
-                        setErrors((prev) => ({ ...prev, motorcycleModel: undefined, motorcycleModelText: undefined }));
-                    }}
-                  >
-                    <option value="">اختر الموديل</option>
-                    {motorcycleModelsForBrand.map((x) => (
-                      <option key={x.key} value={x.key}>
-                        {x.label}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.motorcycleModel && <div className="form-error">{errors.motorcycleModel}</div>}
-
-                  {motorcycleModel === 'other' && (
-                    <div style={{ marginTop: 10 }}>
-                      <input
-                        className={`form-input ${errors.motorcycleModelText ? 'error' : ''}`}
-                        value={motorcycleModelText}
-                        onChange={(e) => {
-                          setMotorcycleModelText(e.target.value);
-                          if (submitAttempted) setErrors((prev) => ({ ...prev, motorcycleModelText: undefined }));
-                        }}
-                        placeholder="اكتب الموديل"
-                        maxLength={60}
-                      />
-                      {errors.motorcycleModelText && <div className="form-error">{errors.motorcycleModelText}</div>}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.motorcycleModelText ? 'error' : ''}`}
-                    value={motorcycleModelText}
-                    onChange={(e) => {
-                      setMotorcycleModelText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, motorcycleModelText: undefined }));
-                    }}
-                    placeholder="اكتب موديل الدراجة"
-                    maxLength={60}
-                    disabled={!motorcycleBrand}
-                  />
-                  {errors.motorcycleModelText && <div className="form-error">{errors.motorcycleModelText}</div>}
                 </div>
               )}
             </div>
