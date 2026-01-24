@@ -71,31 +71,50 @@ function ListingRow({ listing }) {
       className="card"
       style={{
         display: 'flex',
-        gap: 10,
-        padding: 12,
-        alignItems: 'stretch',
+        gap: '16px',
+        padding: '16px',
+        alignItems: 'center',
+        borderRadius: '12px',
+        border: '1px solid #e2e8f0',
+        marginBottom: '10px',
+        background: 'white',
+        textDecoration: 'none',
+        color: 'inherit',
+        transition: 'all 0.2s ease',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+        e.currentTarget.style.borderColor = '#3b82f6';
+        e.currentTarget.style.transform = 'translateY(-2px)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+        e.currentTarget.style.borderColor = '#e2e8f0';
+        e.currentTarget.style.transform = 'translateY(0)';
       }}
     >
+      {/* حاوية الصورة */}
       <div
         style={{
-          width: 120,
-          height: 120,
-          borderRadius: 12,
+          width: 140,
+          height: 140,
+          borderRadius: '10px',
           overflow: 'hidden',
-          background: '#f1f5f9', // ✅ تصحيح اللون
+          background: '#f8fafc',
           flexShrink: 0,
+          position: 'relative',
         }}
       >
         {img ? (
           <Image
             src={img}
             alt={listing.title || 'صورة الإعلان'}
-            width={150}
-            height={150}
+            fill
             placeholder="blur"
             blurDataURL={BLUR_DATA_URL}
-            sizes="150px"
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            sizes="140px"
+            style={{ objectFit: 'cover' }}
           />
         ) : (
           <div
@@ -105,8 +124,9 @@ function ListingRow({ listing }) {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: 26,
-              opacity: 0.6,
+              fontSize: '28px',
+              color: '#94a3b8',
+              background: '#f1f5f9',
             }}
           >
             🖼️
@@ -114,52 +134,119 @@ function ListingRow({ listing }) {
         )}
       </div>
 
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div
+      {/* محتوى البطاقة */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {/* العنوان والسعر في سطر واحد */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
+          <h3
             style={{
-              fontWeight: 900,
-              color: '#0f172a',
-              lineHeight: 1.35,
-              overflow: 'hidden',
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
+              margin: 0,
+              fontSize: '16px',
+              fontWeight: 'bold',
+              color: '#1e293b',
+              lineHeight: 1.3,
+              flex: 1,
             }}
           >
             {listing.title || 'بدون عنوان'}
-          </div>
-
-          <div style={{ flexShrink: 0, fontWeight: 900 }}>
-            <Price
-              priceYER={listing.currentBidYER || listing.priceYER || 0}
-              originalPrice={listing.originalPrice}
-              originalCurrency={listing.originalCurrency}
-              showCurrency={true}
-            />
+          </h3>
+          
+          <div style={{ flexShrink: 0 }}>
+            <Price listing={listing} variant="compact" maxConversions={2} />
           </div>
         </div>
 
-        <div className="row muted" style={{ flexWrap: 'wrap', gap: 10, fontSize: 13 }}>
-          <span>📍 {listing.city || listing.locationLabel || 'غير محدد'}</span>
-          <span>⏱️ {formatRelative(listing.createdAt)}</span>
-          <span>👁️ {Number(listing.views || 0).toLocaleString('ar-YE')}</span>
-          {listing.auctionEnabled ? <span className="badge">⚡ مزاد</span> : null}
+        {/* معلومات الموقع والتاريخ */}
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: '#64748b' }}>
+            <span>📍</span>
+            <span>{listing.city || listing.locationLabel || 'غير محدد'}</span>
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: '#64748b' }}>
+            <span>⏱️</span>
+            <span>{formatRelative(listing.createdAt)}</span>
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: '#64748b' }}>
+            <span>👁️</span>
+            <span>{Number(listing.views || 0).toLocaleString('ar-YE')}</span>
+          </div>
+          
+          {listing.auctionEnabled && (
+            <span 
+              style={{
+                padding: '4px 10px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                color: 'white',
+                fontSize: '12px',
+                fontWeight: '600',
+              }}
+            >
+              ⚡ مزاد نشط
+            </span>
+          )}
         </div>
 
-        <div className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>
+        {/* الوصف المختصر */}
+        <p style={{ 
+          fontSize: '14px', 
+          color: '#475569', 
+          lineHeight: 1.5,
+          margin: 0,
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden'
+        }}>
           {shortDesc}
+        </p>
+        
+        {/* فئة الإعلان */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+          <span style={{
+            padding: '4px 12px',
+            borderRadius: '16px',
+            background: '#f1f5f9',
+            color: '#475569',
+            fontSize: '13px',
+            fontWeight: '600',
+          }}>
+            {listing.categoryName || listing.category || 'قسم'}
+          </span>
+          
+          <div style={{ fontSize: '13px', color: '#64748b', fontWeight: '500' }}>
+            اضغط للتفاصيل →
+          </div>
         </div>
       </div>
 
       <style jsx>{`
-        @media (max-width: 640px) {
-          a.card {
+        @media (max-width: 768px) {
+          .card {
             flex-direction: column;
+            align-items: stretch;
+            gap: 12px;
           }
-          a.card > div:first-child {
+          
+          .card > div:first-child {
             width: 100% !important;
             height: 180px !important;
+          }
+          
+          .card h3 {
+            font-size: 15px;
+          }
+        }
+        
+        @media (max-width: 480px) {
+          .card {
+            padding: 12px;
+          }
+          
+          .card > div:first-child {
+            height: 150px !important;
           }
         }
       `}</style>
@@ -167,16 +254,27 @@ function ListingRow({ listing }) {
   );
 }
 
-export default function ListingsPageClient({ initialListings = [] }) {
-  const PAGE_SIZE = 24; // نفس رقم SSR
+// خيارات الترتيب المحسنة
+const SORT_OPTIONS = [
+  { key: 'newest', label: 'الأحدث', icon: '🕒', field: 'createdAt', order: 'desc' },
+  { key: 'price_low', label: 'الأقل سعراً', icon: '💰', field: 'priceYER', order: 'asc' },
+  { key: 'price_high', label: 'الأعلى سعراً', icon: '💰', field: 'priceYER', order: 'desc' },
+  { key: 'most_viewed', label: 'الأكثر مشاهدة', icon: '👁️', field: 'views', order: 'desc' },
+  { key: 'featured', label: 'المميز أولاً', icon: '⭐', field: 'featured', order: 'desc' },
+];
 
-  const [view, setView] = useState('grid'); // grid | list | map
+export default function ListingsPageClient({ initialListings = [] }) {
+  const PAGE_SIZE = 24;
+
+  const [view, setView] = useState('grid');
   const [listings, setListings] = useState(initialListings);
   const [loading, setLoading] = useState(initialListings.length === 0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [err, setErr] = useState('');
   const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
   const [hasMore, setHasMore] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
 
   const searchParams = useSearchParams();
 
@@ -185,6 +283,11 @@ export default function ListingsPageClient({ initialListings = [] }) {
     const v = String(searchParams?.get('view') || '').toLowerCase();
     if (v === 'map' || v === 'list' || v === 'grid') {
       setView((prev) => (prev === v ? prev : v));
+    }
+    
+    const s = searchParams?.get('sort');
+    if (s && SORT_OPTIONS.some(opt => opt.key === s)) {
+      setSortBy(s);
     }
   }, [searchParams]);
 
@@ -201,17 +304,11 @@ export default function ListingsPageClient({ initialListings = [] }) {
 
   // ✅ تحميل أول صفحة من Firestore فقط لو SSR فاضي
   useEffect(() => {
-    // إذا عندنا SSR، ما نعمل سحب كبير ولا realtime.
     if (initialListings && initialListings.length > 0) {
       setListings(initialListings);
       setLoading(false);
       setErr('');
-
-      // نفترض وجود المزيد إذا استلمنا PAGE_SIZE كاملة
       setHasMore(initialListings.length === PAGE_SIZE);
-
-      // SSR يعطينا Objects (ليس DocumentSnapshot)
-      // لذلك نحدد cursor لاحقًا عند أول تحميل إضافي
       lastDocRef.current = null;
       return;
     }
@@ -258,18 +355,45 @@ export default function ListingsPageClient({ initialListings = [] }) {
     };
   }, [initialListings, PAGE_SIZE]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return listings;
+  // ✅ فلترة وترتيب الإعلانات
+  const filteredAndSorted = useMemo(() => {
+    // فلترة حسب البحث
+    const filtered = search.trim() 
+      ? listings.filter((l) => {
+          const q = search.toLowerCase();
+          const title = safeText(l.title).toLowerCase();
+          const city = safeText(l.city).toLowerCase();
+          const desc = safeText(l.description).toLowerCase();
+          const loc = safeText(l.locationLabel).toLowerCase();
+          return title.includes(q) || city.includes(q) || desc.includes(q) || loc.includes(q);
+        })
+      : [...listings];
 
-    return listings.filter((l) => {
-      const title = safeText(l.title).toLowerCase();
-      const city = safeText(l.city).toLowerCase();
-      const desc = safeText(l.description).toLowerCase();
-      const loc = safeText(l.locationLabel).toLowerCase();
-      return title.includes(q) || city.includes(q) || desc.includes(q) || loc.includes(q);
+    // الترتيب
+    const sortOption = SORT_OPTIONS.find(opt => opt.key === sortBy) || SORT_OPTIONS[0];
+    
+    return filtered.sort((a, b) => {
+      let valA = a[sortOption.field];
+      let valB = b[sortOption.field];
+      
+      // معالجة القيم الخاصة
+      if (sortOption.field === 'featured') {
+        valA = a.featured ? 1 : 0;
+        valB = b.featured ? 1 : 0;
+      }
+      
+      if (sortOption.field === 'priceYER') {
+        valA = a.currentBidYER || a.priceYER || 0;
+        valB = b.currentBidYER || b.priceYER || 0;
+      }
+      
+      if (sortOption.order === 'desc') {
+        return (valB || 0) - (valA || 0);
+      } else {
+        return (valA || 0) - (valB || 0);
+      }
     });
-  }, [listings, search]);
+  }, [listings, search, sortBy]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
@@ -280,8 +404,6 @@ export default function ListingsPageClient({ initialListings = [] }) {
     try {
       const { db } = await import('@/lib/firebaseClient');
 
-      // ✅ إذا كانت lastDocRef null (غالبًا لأننا بدأنا بـ SSR)
-      // نجلب الصفحة الأولى من Firestore مرة واحدة فقط لتحديد cursor الصحيح
       if (!lastDocRef.current) {
         const snap0 = await db
           .collection('listings')
@@ -312,7 +434,6 @@ export default function ListingsPageClient({ initialListings = [] }) {
 
       if (!aliveRef.current) return;
 
-      // دمج بدون تكرار (احتياط)
       setListings((prev) => {
         const existing = new Set(prev.map((x) => x.id));
         return [...prev, ...items.filter((x) => !existing.has(x.id))];
@@ -331,7 +452,6 @@ export default function ListingsPageClient({ initialListings = [] }) {
 
   // ✅ Infinite Scroll: تحميل تلقائي عند الوصول لنهاية القائمة
   useEffect(() => {
-    // اختياري: لا تحمل تلقائي أثناء عرض الخريطة
     if (view === 'map') return;
 
     const el = loadMoreRef.current;
@@ -343,7 +463,6 @@ export default function ListingsPageClient({ initialListings = [] }) {
       (entries) => {
         const first = entries[0];
         if (!first?.isIntersecting) return;
-        // حماية إضافية
         if (loadingMore || !hasMore) return;
         loadMore();
       },
@@ -365,134 +484,630 @@ export default function ListingsPageClient({ initialListings = [] }) {
 
   return (
     <div dir="rtl">
-      <div className="container" style={{ paddingTop: 14, paddingBottom: 24 }}>
-        {/* العنوان */}
-        <div className="card" style={{ padding: 16, marginBottom: 12 }}>
-          <div style={{ fontWeight: 900, fontSize: 20 }}>جميع الإعلانات</div>
-          <div className="muted" style={{ marginTop: 6 }}>
-            تصفّح كل الإعلانات مع بحث وعرض شبكة/قائمة/خريطة
+      <div className="container" style={{ paddingTop: '20px', paddingBottom: '30px' }}>
+        {/* العنوان الرئيسي */}
+        <div 
+          className="card" 
+          style={{ 
+            padding: '20px', 
+            marginBottom: '16px',
+            background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+            color: 'white',
+            borderRadius: '16px',
+            border: 'none',
+          }}
+        >
+          <div style={{ fontWeight: '900', fontSize: '24px', marginBottom: '6px' }}>
+            جميع الإعلانات
+          </div>
+          <div style={{ fontSize: '15px', opacity: 0.9 }}>
+            تصفّح {listings.length.toLocaleString('ar-YE')} إعلان مع بحث وعرض شبكة/قائمة/خريطة
           </div>
         </div>
 
-        {/* شريط الأدوات */}
-        <div className="card" style={{ padding: 12, marginBottom: 12 }}>
-          <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <div className="row" style={{ gap: 8 }}>
-              <button className={`btn ${view === 'grid' ? 'btnPrimary' : ''}`} onClick={() => setView('grid')}>
-                ◼️ شبكة
-              </button>
-              <button className={`btn ${view === 'list' ? 'btnPrimary' : ''}`} onClick={() => setView('list')}>
-                ☰ قائمة
-              </button>
-              <button className={`btn ${view === 'map' ? 'btnPrimary' : ''}`} onClick={() => setView('map')}>
-                🗺️ خريطة
+        {/* شريط الأدوات المتقدم */}
+        <div 
+          className="card" 
+          style={{ 
+            padding: '16px', 
+            marginBottom: '20px',
+            borderRadius: '14px',
+            border: '1px solid #e2e8f0',
+            background: 'white',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* الصف الأول: خيارات العرض والبحث */}
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+              {/* أزرار العرض */}
+              <div 
+                style={{ 
+                  display: 'flex', 
+                  gap: '8px', 
+                  background: '#f8fafc',
+                  padding: '6px',
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0',
+                }}
+              >
+                <button 
+                  className={`view-btn ${view === 'grid' ? 'active' : ''}`}
+                  onClick={() => setView('grid')}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: view === 'grid' ? '#3b82f6' : 'transparent',
+                    color: view === 'grid' ? 'white' : '#475569',
+                    fontWeight: '600',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  ◼️ شبكة
+                </button>
+                <button 
+                  className={`view-btn ${view === 'list' ? 'active' : ''}`}
+                  onClick={() => setView('list')}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: view === 'list' ? '#3b82f6' : 'transparent',
+                    color: view === 'list' ? 'white' : '#475569',
+                    fontWeight: '600',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  ☰ قائمة
+                </button>
+                <button 
+                  className={`view-btn ${view === 'map' ? 'active' : ''}`}
+                  onClick={() => setView('map')}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: view === 'map' ? '#3b82f6' : 'transparent',
+                    color: view === 'map' ? 'white' : '#475569',
+                    fontWeight: '600',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  🗺️ خريطة
+                </button>
+              </div>
+
+              {/* شريط البحث */}
+              <div style={{ flex: 1, minWidth: '250px', position: 'relative' }}>
+                <input
+                  className="search-input"
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px 12px 44px',
+                    borderRadius: '10px',
+                    border: '1px solid #e2e8f0',
+                    fontSize: '15px',
+                    background: '#f8fafc',
+                    transition: 'all 0.2s ease',
+                  }}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="🔍 ابحث في العناوين، الوصف، أو المدينة..."
+                />
+                <div style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  fontSize: '18px',
+                  opacity: 0.6,
+                }}>
+                  🔍
+                </div>
+              </div>
+
+              {/* زر الفلاتر */}
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0',
+                  background: showFilters ? '#3b82f6' : 'white',
+                  color: showFilters ? 'white' : '#475569',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                ⚙️ {showFilters ? 'إخفاء الفلاتر' : 'الفلاتر'}
               </button>
             </div>
 
-            <input
-              className="input"
-              style={{ flex: 1, minWidth: 180 }}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="ابحث في الإعلانات…"
-            />
-
-            {/* ✅ تم حذف عدّاد {filtered.length} إعلان */}
+            {/* الصف الثاني: الفلاتر (تظهر عند الضغط) */}
+            {showFilters && (
+              <div style={{
+                padding: '16px',
+                background: '#f8fafc',
+                borderRadius: '10px',
+                border: '1px solid #e2e8f0',
+              }}>
+                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '180px' }}>
+                    <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>
+                      ترتيب حسب:
+                    </label>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value)}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0',
+                        fontSize: '14px',
+                        background: 'white',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {SORT_OPTIONS.map((opt) => (
+                        <option key={opt.key} value={opt.key}>
+                          {opt.icon} {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => {
+                        setSearch('');
+                        setSortBy('newest');
+                      }}
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0',
+                        background: 'white',
+                        color: '#475569',
+                        fontWeight: '600',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      🗑️ مسح الكل
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* عدّاد النتائج */}
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              paddingTop: '12px',
+              borderTop: '1px solid #f1f5f9'
+            }}>
+              <div style={{ fontSize: '14px', color: '#64748b' }}>
+                <span style={{ fontWeight: '700', color: '#3b82f6' }}>
+                  {filteredAndSorted.length.toLocaleString('ar-YE')}
+                </span> إعلان متاح
+              </div>
+              
+              <div style={{ fontSize: '13px', color: '#64748b' }}>
+                {search && (
+                  <span>نتائج البحث عن: "<strong>{search}</strong>"</span>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* المحتوى */}
+        {/* المحتوى الرئيسي */}
         {loading ? (
-          <div className="card" style={{ padding: 16 }}>
-            <div className="muted">جاري التحميل…</div>
+          // مؤشر التحميل المحسّن
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            padding: '60px 20px',
+            background: 'white',
+            borderRadius: '12px',
+            border: '1px solid #e2e8f0',
+          }}>
+            <div style={{ 
+              width: '48px', 
+              height: '48px', 
+              border: '4px solid #f1f5f9',
+              borderTopColor: '#3b82f6',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+              marginBottom: '16px'
+            }}></div>
+            <div style={{ fontWeight: '700', fontSize: '16px', marginBottom: '8px', color: '#1e293b' }}>
+              جاري تحميل الإعلانات...
+            </div>
+            <div style={{ fontSize: '14px', color: '#64748b' }}>
+              {initialListings.length > 0 ? 'جاري تحديث القائمة' : 'جاري تحميل الإعلانات'}
+            </div>
+            
+            <style jsx>{`
+              @keyframes spin {
+                to { transform: rotate(360deg); }
+              }
+            `}</style>
           </div>
         ) : err && listings.length === 0 ? (
-          <div className="card" style={{ padding: 16, border: '1px solid rgba(220,38,38,.25)' }}>
-            <div style={{ fontWeight: 900, color: '#991b1b' }}>⚠️ {err}</div>
+          <div 
+            className="card" 
+            style={{ 
+              padding: '24px', 
+              border: '1px solid rgba(220,38,38,0.2)',
+              background: '#fef2f2',
+              borderRadius: '12px',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+            <div style={{ fontWeight: '900', fontSize: '18px', color: '#991b1b', marginBottom: '8px' }}>
+              حدث خطأ
+            </div>
+            <div style={{ fontSize: '15px', color: '#64748b', marginBottom: '16px' }}>
+              {err}
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                padding: '10px 20px',
+                borderRadius: '8px',
+                border: 'none',
+                background: '#3b82f6',
+                color: 'white',
+                fontWeight: '600',
+                fontSize: '14px',
+                cursor: 'pointer',
+              }}
+            >
+              🔄 إعادة المحاولة
+            </button>
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="card" style={{ padding: 16, textAlign: 'center' }}>
-            <div style={{ fontWeight: 900 }}>لا توجد نتائج مطابقة</div>
-            <div className="muted" style={{ marginTop: 6 }}>
-              جرّب كلمة بحث أخرى أو أضف إعلان جديد.
+        ) : filteredAndSorted.length === 0 ? (
+          <div 
+            className="card" 
+            style={{ 
+              padding: '40px 20px', 
+              textAlign: 'center',
+              background: 'white',
+              borderRadius: '12px',
+              border: '1px solid #e2e8f0',
+            }}
+          >
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
+            <div style={{ fontWeight: '900', fontSize: '18px', marginBottom: '8px' }}>
+              لا توجد نتائج مطابقة
+            </div>
+            <div style={{ fontSize: '15px', color: '#64748b', marginBottom: '24px', maxWidth: '400px', margin: '0 auto 24px' }}>
+              {search ? `لم نعثر على إعلانات تطابق "${search}"` : 'لا توجد إعلانات متاحة حالياً'}
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setSearch('')}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0',
+                  background: 'white',
+                  color: '#475569',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                }}
+              >
+                🗑️ مسح البحث
+              </button>
+              <Link 
+                href="/add"
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: '#3b82f6',
+                  color: 'white',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  textDecoration: 'none',
+                  display: 'inline-block',
+                }}
+              >
+                ➕ أضف إعلان جديد
+              </Link>
             </div>
           </div>
         ) : view === 'map' ? (
-          <HomeMapView listings={filtered} />
+          <HomeMapView listings={filteredAndSorted} />
         ) : view === 'list' ? (
           <>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {filtered.map((l) => (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {filteredAndSorted.map((l) => (
                 <ListingRow key={l.id} listing={l} />
               ))}
             </div>
 
             {/* ✅ نقطة التحميل التلقائي */}
-            <div ref={loadMoreRef} style={{ height: 1 }} />
+            <div ref={loadMoreRef} style={{ height: '1px', margin: '20px 0' }} />
 
-            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center' }}>
+            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
               {loadingMore ? (
-                <div className="muted" style={{ padding: 10 }}>
-                  ...جاري تحميل المزيد
+                <div style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center',
+                  padding: '20px',
+                  color: '#64748b'
+                }}>
+                  <div style={{ 
+                    width: '32px', 
+                    height: '32px', 
+                    border: '3px solid #f1f5f9',
+                    borderTopColor: '#3b82f6',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite',
+                    marginBottom: '12px'
+                  }}></div>
+                  <div style={{ fontSize: '14px' }}>جاري تحميل المزيد...</div>
                 </div>
               ) : hasMore ? (
-                <div className="muted" style={{ padding: 10 }}>
-                  انزل لأسفل لتحميل المزيد
+                <div style={{ 
+                  padding: '16px', 
+                  textAlign: 'center',
+                  color: '#64748b',
+                  fontSize: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <div>⬇️</div>
+                  <div>انزل لأسفل لتحميل المزيد من الإعلانات</div>
                 </div>
-              ) : (
-                <div className="muted" style={{ padding: 10 }}>
-                  لا يوجد المزيد
+              ) : filteredAndSorted.length > 5 ? (
+                <div style={{ 
+                  padding: '16px', 
+                  textAlign: 'center',
+                  color: '#059669',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  background: '#f0fdf4',
+                  borderRadius: '10px',
+                  border: '1px solid #bbf7d0',
+                  width: '100%',
+                  maxWidth: '400px',
+                }}>
+                  🎉 لقد وصلت إلى نهاية القائمة ({filteredAndSorted.length} إعلان)
                 </div>
-              )}
+              ) : null}
             </div>
 
             {err && listings.length > 0 ? (
-              <div className="card" style={{ padding: 12, marginTop: 12, border: '1px solid rgba(220,38,38,.25)' }}>
-                <div style={{ fontWeight: 900, color: '#991b1b' }}>⚠️ {err}</div>
+              <div 
+                className="card" 
+                style={{ 
+                  padding: '16px', 
+                  marginTop: '16px', 
+                  border: '1px solid rgba(220,38,38,0.2)',
+                  background: '#fef2f2',
+                  borderRadius: '10px',
+                }}
+              >
+                <div style={{ fontWeight: '900', color: '#991b1b', marginBottom: '4px' }}>⚠️ ملاحظة</div>
+                <div style={{ fontSize: '14px', color: '#64748b' }}>{err}</div>
               </div>
             ) : null}
           </>
         ) : (
+          // عرض الشبكة (Grid)
           <>
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
-                gap: 10,
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: '16px',
               }}
             >
-              {filtered.map((l) => (
-                <ListingCard key={l.id} listing={l} />
+              {filteredAndSorted.map((l) => (
+                <ListingCard key={l.id} listing={l} variant="grid" />
               ))}
             </div>
 
             {/* ✅ نقطة التحميل التلقائي */}
-            <div ref={loadMoreRef} style={{ height: 1 }} />
+            <div ref={loadMoreRef} style={{ height: '1px', margin: '20px 0' }} />
 
-            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center' }}>
+            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
               {loadingMore ? (
-                <div className="muted" style={{ padding: 10 }}>
-                  ...جاري تحميل المزيد
+                <div style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center',
+                  padding: '20px',
+                  color: '#64748b'
+                }}>
+                  <div style={{ 
+                    width: '32px', 
+                    height: '32px', 
+                    border: '3px solid #f1f5f9',
+                    borderTopColor: '#3b82f6',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite',
+                    marginBottom: '12px'
+                  }}></div>
+                  <div style={{ fontSize: '14px' }}>جاري تحميل المزيد...</div>
                 </div>
               ) : hasMore ? (
-                <div className="muted" style={{ padding: 10 }}>
-                  انزل لأسفل لتحميل المزيد
+                <div style={{ 
+                  padding: '16px', 
+                  textAlign: 'center',
+                  color: '#64748b',
+                  fontSize: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <div>⬇️</div>
+                  <div>انزل لأسفل لتحميل المزيد من الإعلانات</div>
                 </div>
-              ) : (
-                <div className="muted" style={{ padding: 10 }}>
-                  لا يوجد المزيد
+              ) : filteredAndSorted.length > 5 ? (
+                <div style={{ 
+                  padding: '16px', 
+                  textAlign: 'center',
+                  color: '#059669',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  background: '#f0fdf4',
+                  borderRadius: '10px',
+                  border: '1px solid #bbf7d0',
+                  width: '100%',
+                  maxWidth: '400px',
+                }}>
+                  🎉 لقد وصلت إلى نهاية القائمة ({filteredAndSorted.length} إعلان)
                 </div>
-              )}
+              ) : null}
             </div>
 
             {err && listings.length > 0 ? (
-              <div className="card" style={{ padding: 12, marginTop: 12, border: '1px solid rgba(220,38,38,.25)' }}>
-                <div style={{ fontWeight: 900, color: '#991b1b' }}>⚠️ {err}</div>
+              <div 
+                className="card" 
+                style={{ 
+                  padding: '16px', 
+                  marginTop: '16px', 
+                  border: '1px solid rgba(220,38,38,0.2)',
+                  background: '#fef2f2',
+                  borderRadius: '10px',
+                }}
+              >
+                <div style={{ fontWeight: '900', color: '#991b1b', marginBottom: '4px' }}>⚠️ ملاحظة</div>
+                <div style={{ fontSize: '14px', color: '#64748b' }}>{err}</div>
               </div>
             ) : null}
           </>
         )}
+
+        {/* دعوة لإضافة إعلان */}
+        {!loading && filteredAndSorted.length > 0 && (
+          <div 
+            style={{ 
+              marginTop: '30px',
+              padding: '20px',
+              background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+              borderRadius: '14px',
+              color: 'white',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: '20px', fontWeight: '900', marginBottom: '8px' }}>
+              لديك شيء للبيع؟
+            </div>
+            <div style={{ fontSize: '15px', opacity: 0.9, marginBottom: '20px', maxWidth: '500px', margin: '0 auto' }}>
+              أضف إعلانك مجاناً ووصل إلى الآلاف من المشترين في اليمن خلال دقائق
+            </div>
+            <Link
+              href="/add"
+              style={{
+                display: 'inline-block',
+                padding: '12px 28px',
+                background: 'white',
+                color: '#8b5cf6',
+                fontWeight: '700',
+                fontSize: '15px',
+                borderRadius: '10px',
+                textDecoration: 'none',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+              }}
+            >
+              ➕ أضف إعلان مجاناً
+            </Link>
+          </div>
+        )}
       </div>
+
+      {/* الأنماط العامة */}
+      <style jsx global>{`
+        .view-btn:hover:not(.active) {
+          background: #f1f5f9 !important;
+        }
+        
+        .search-input:focus {
+          outline: none;
+          border-color: #3b82f6 !important;
+          background: white !important;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        
+        select:focus {
+          outline: none;
+          border-color: #3b82f6 !important;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        
+        @media (max-width: 768px) {
+          .container {
+            padding-left: 12px;
+            padding-right: 12px;
+          }
+          
+          .card {
+            border-radius: 12px !important;
+          }
+        }
+        
+        @media (max-width: 640px) {
+          .view-btn {
+            padding: 6px 12px !important;
+            font-size: 13px !important;
+          }
+          
+          .search-input {
+            min-width: 100% !important;
+          }
+        }
+        
+        @media (max-width: 480px) {
+          .container {
+            padding-top: 12px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
