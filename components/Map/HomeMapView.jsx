@@ -746,19 +746,19 @@ export default function HomeMapView({ listings = [] }) {
         else if (category === 'furniture') {
           arr = arr.filter((p) => p._tax?.furnitureType === sub1Key);
         }
-        else if (category === 'home_tools') {
+        else if (cat === 'home_tools') {
           arr = arr.filter((p) => p._tax?.homeToolsType === sub1Key);
         }
-        else if (category === 'clothes') {
+        else if (cat === 'clothes') {
           arr = arr.filter((p) => p._tax?.clothesType === sub1Key);
         }
-        else if (category === 'animals') {
+        else if (cat === 'animals') {
           arr = arr.filter((p) => p._tax?.animalType === sub1Key);
         }
-        else if (category === 'jobs') {
+        else if (cat === 'jobs') {
           arr = arr.filter((p) => p._tax?.jobType === sub1Key);
         }
-        else if (category === 'services') {
+        else if (cat === 'services') {
           arr = arr.filter((p) => p._tax?.serviceType === sub1Key);
         }
       }
@@ -988,7 +988,11 @@ export default function HomeMapView({ listings = [] }) {
           <div className="sooq-breadcrumb" onClick={stop} onPointerDown={stop} onTouchStart={stop}>
             <span className="sooq-breadcrumb-text">
               المسار: 
-              <button type="button" onClick={() => setFilterPath([])} className="sooq-breadcrumb-item">
+              <button 
+                type="button" 
+                onClick={() => setFilterPath([])} 
+                className="sooq-breadcrumb-item"
+              >
                 الرئيسية
               </button>
               {filterPath.map((key, index) => {
@@ -1003,14 +1007,16 @@ export default function HomeMapView({ listings = [] }) {
                 }
                 
                 return (
-                  <span key={index} className="sooq-breadcrumb-separator"> › </span>
-                  <button 
-                    type="button" 
-                    onClick={() => setFilterPath(filterPath.slice(0, index + 1))}
-                    className="sooq-breadcrumb-item"
-                  >
-                    {label}
-                  </button>
+                  <React.Fragment key={index}>
+                    <span className="sooq-breadcrumb-separator"> › </span>
+                    <button 
+                      type="button" 
+                      onClick={() => setFilterPath(filterPath.slice(0, index + 1))}
+                      className="sooq-breadcrumb-item"
+                    >
+                      {label}
+                    </button>
+                  </React.Fragment>
                 );
               })}
               {selectedSub2 && (
