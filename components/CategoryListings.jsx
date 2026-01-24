@@ -94,7 +94,6 @@ import {
 
 const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), { ssr: false });
 
-
 // ✅ تطبيع أن keys الأقسام يتم حصراً عبر lib/categories.js
 function safeStr(v) {
   return String(v || '').trim();
@@ -200,11 +199,10 @@ function pickTaxonomy(listing, categoryKey) {
   if (root === 'cars') {
     out.carMake = out.carMake || 'other';
     if (out.carMake && out.carMake !== 'other') {
-      // normalize model to make-based key if possible
       const mk = out.carMake;
       const rawModel = safeStr(listing?.carModel || inferred.carModel || listing?.model || '');
       out.carModel = safeStr(rawModel) || '';
-      // keep empty if unknown; filtering logic handles 'other' when missing
+      void mk;
     } else {
       out.carModel = '';
     }
@@ -221,97 +219,66 @@ function pickTaxonomy(listing, categoryKey) {
       listing?.electronicType ??
       listing?.type ??
       '';
-    out.electronicsType = normalizeElectronicsType(v) || detectElectronicsTypeFromText(text) || 'other';
+    out.electronicsType =
+      normalizeElectronicsType(v) || detectElectronicsTypeFromText(text) || 'other';
   }
 
   if (root === 'motorcycles') {
-    const v =
-      listing?.motorcycleBrand ??
-      listing?.bikeBrand ??
-      listing?.brand ??
-      '';
-    out.motorcycleBrand = normalizeMotorcycleBrand(v) || detectMotorcycleBrandFromText(text) || 'other';
+    const v = listing?.motorcycleBrand ?? listing?.bikeBrand ?? listing?.brand ?? '';
+    out.motorcycleBrand =
+      normalizeMotorcycleBrand(v) || detectMotorcycleBrandFromText(text) || 'other';
   }
 
   if (root === 'heavy_equipment') {
-    const v =
-      listing?.heavyEquipmentType ??
-      listing?.equipmentType ??
-      listing?.type ??
-      '';
-    out.heavyEquipmentType = normalizeHeavyEquipmentType(v) || detectHeavyEquipmentTypeFromText(text) || 'other';
+    const v = listing?.heavyEquipmentType ?? listing?.equipmentType ?? listing?.type ?? '';
+    out.heavyEquipmentType =
+      normalizeHeavyEquipmentType(v) || detectHeavyEquipmentTypeFromText(text) || 'other';
   }
 
   if (root === 'solar') {
-    const v =
-      listing?.solarType ??
-      listing?.type ??
-      '';
+    const v = listing?.solarType ?? listing?.type ?? '';
     out.solarType = normalizeSolarType(v) || detectSolarTypeFromText(text) || 'other';
   }
 
   if (root === 'networks') {
-    const v =
-      listing?.networkType ??
-      listing?.type ??
-      '';
+    const v = listing?.networkType ?? listing?.type ?? '';
     out.networkType = normalizeNetworkType(v) || detectNetworkTypeFromText(text) || 'other';
   }
 
   if (root === 'maintenance') {
-    const v =
-      listing?.maintenanceType ??
-      listing?.type ??
-      '';
-    out.maintenanceType = normalizeMaintenanceType(v) || detectMaintenanceTypeFromText(text) || 'other';
+    const v = listing?.maintenanceType ?? listing?.type ?? '';
+    out.maintenanceType =
+      normalizeMaintenanceType(v) || detectMaintenanceTypeFromText(text) || 'other';
   }
 
   if (root === 'furniture') {
-    const v =
-      listing?.furnitureType ??
-      listing?.type ??
-      '';
+    const v = listing?.furnitureType ?? listing?.type ?? '';
     out.furnitureType = normalizeFurnitureType(v) || detectFurnitureTypeFromText(text) || 'other';
   }
 
   if (root === 'home_tools') {
-    const v =
-      listing?.homeToolsType ??
-      listing?.home_tools_type ??
-      listing?.type ??
-      '';
-    out.homeToolsType = normalizeHomeToolsType(v) || detectHomeToolsTypeFromText(text) || 'other';
+    const v = listing?.homeToolsType ?? listing?.home_tools_type ?? listing?.type ?? '';
+    out.homeToolsType =
+      normalizeHomeToolsType(v) || detectHomeToolsTypeFromText(text) || 'other';
   }
 
   if (root === 'clothes') {
-    const v =
-      listing?.clothesType ??
-      listing?.type ??
-      '';
+    const v = listing?.clothesType ?? listing?.type ?? '';
     out.clothesType = normalizeClothesType(v) || detectClothesTypeFromText(text) || 'other';
   }
 
   if (root === 'animals') {
-    const v =
-      listing?.animalType ??
-      listing?.type ??
-      '';
+    const v = listing?.animalType ?? listing?.type ?? '';
     out.animalType = normalizeAnimalType(v) || detectAnimalTypeFromText(text) || 'other';
   }
 
   if (root === 'jobs') {
-    const v =
-      listing?.jobType ??
-      listing?.type ??
-      '';
+    const v = listing?.jobType ?? listing?.type ?? '';
     out.jobType = normalizeJobType(v) || detectJobTypeFromText(text) || 'other';
   }
 
   if (root === 'services') {
-    const v =
-      listing?.serviceType ??
-      listing?.type ??
-      '';
+    const v = listing?.serviceType ?? listing?.type ?? '';
     out.serviceType = normalizeServiceType(v) || detectServiceTypeFromText(text) || 'other';
   }
 
@@ -352,37 +319,6 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const [err, setErr] = useState('');
   const [hasMore, setHasMore] = useState(true);
 
-  const lastDocRef = useRef(null);
-  const cursorReadyRef = useRef(false);
-  const loadMoreRef = useRef(null);
-  const aliveRef = useRef(true);
-  const usedInitialRef = useRef(false);
-
-  useEffect(() => {
-    aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-    };
-  }, []);
-
-  // ✅ sync search query from URL (?q=...) — used by clickable hashtags from details page
-  useEffect(() => {
-    const qp = safeStr(searchParams?.get('q'));
-    if (!qp) return;
-    setQ((prev) => (safeStr(prev) === qp ? prev : qp));
-  }, [searchParams]);
-
-// ✅ sync governorate from URL (?gov=aden) optional
-useEffect(() => {
-  const g = safeStr(searchParams?.get('gov') || searchParams?.get('g'));
-  if (!g) return;
-  setGovKey((prev) => (safeStr(prev) === g ? prev : g));
-}, [searchParams]);
-
-  const catsRaw = Array.isArray(category) ? category : [category];
-  const cats = catsRaw.map(normalizeCategoryKey).filter(Boolean);
-  const single = cats.length === 1 ? cats[0] : '';
-
   // ✅ States للفروع الهرمية
   const [carMake, setCarMake] = useState('');
   const [carModel, setCarModel] = useState('');
@@ -403,11 +339,43 @@ useEffect(() => {
   const [animalType, setAnimalType] = useState('');
   const [jobType, setJobType] = useState('');
   const [serviceType, setServiceType] = useState('');
-// ✅ فلتر المحافظة (Governorate)
-const [govKey, setGovKey] = useState('');
-const [govOptions, setGovOptions] = useState([]);
-const [govLoading, setGovLoading] = useState(false);
 
+  // ✅ فلتر المحافظة (Governorate)
+  const [govKey, setGovKey] = useState('');
+  const [govOptions, setGovOptions] = useState([]);
+  const [govLoading, setGovLoading] = useState(false);
+
+  const lastDocRef = useRef(null);
+  const cursorReadyRef = useRef(false);
+  const loadMoreRef = useRef(null);
+  const aliveRef = useRef(true);
+  const usedInitialRef = useRef(false);
+
+  // ✅ alive guard
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
+
+  // ✅ sync search query from URL (?q=...)
+  useEffect(() => {
+    const qp = safeStr(searchParams?.get('q'));
+    if (!qp) return;
+    setQ((prev) => (safeStr(prev) === qp ? prev : qp));
+  }, [searchParams]);
+
+  // ✅ sync governorate from URL (?gov=aden) optional
+  useEffect(() => {
+    const g = safeStr(searchParams?.get('gov') || searchParams?.get('g'));
+    if (!g) return;
+    setGovKey((prev) => (safeStr(prev) === g ? prev : g));
+  }, [searchParams]);
+
+  const catsRaw = Array.isArray(category) ? category : [category];
+  const cats = catsRaw.map(normalizeCategoryKey).filter(Boolean);
+  const single = cats.length === 1 ? cats[0] : '';
 
   // ✅ Map nameAr -> key (علشان الفلتر يشتغل حتى لو الإعلان القديم ما فيه govKey)
   const govNameToKey = useMemo(() => {
@@ -439,8 +407,6 @@ const [govLoading, setGovLoading] = useState(false);
     return '';
   };
 
-
-
   // ✅ reset when category changes
   useEffect(() => {
     setCarMake('');
@@ -462,95 +428,92 @@ const [govLoading, setGovLoading] = useState(false);
     setJobType('');
     setServiceType('');
     setGovKey('');
+
     usedInitialRef.current = false;
   }, [single]);
 
-// ✅ Load governorates from Firestore (taxonomy_governorates) for filtering
-useEffect(() => {
-  let cancelled = false;
+  // ✅ Load governorates from Firestore (taxonomy_governorates) for filtering
+  useEffect(() => {
+    let cancelled = false;
 
-  async function loadGovs() {
-    setGovLoading(true);
-    try {
-      const snap = await db.collection('taxonomy_governorates').orderBy('order', 'asc').get();
-      const rows = snap.docs
-        .map((d) => ({ key: d.id, ...(d.data() || {}) }))
-        .map((g) => ({
-          key: safeStr(g.key),
-          nameAr: safeStr(g.nameAr || g.name || g.title || g.label),
-          order: typeof g.order === 'number' ? g.order : Number(g.order || 0),
-          enabled: g.enabled !== false,
-        }))
-        .filter((g) => g.key && g.nameAr && g.enabled);
+    async function loadGovs() {
+      setGovLoading(true);
+      try {
+        const snap = await db.collection('taxonomy_governorates').orderBy('order', 'asc').get();
+        const rows = snap.docs
+          .map((d) => ({ key: d.id, ...(d.data() || {}) }))
+          .map((g) => ({
+            key: safeStr(g.key),
+            nameAr: safeStr(g.nameAr || g.name || g.title || g.label),
+            order: typeof g.order === 'number' ? g.order : Number(g.order || 0),
+            enabled: g.enabled !== false,
+          }))
+          .filter((g) => g.key && g.nameAr && g.enabled);
 
-      // fallback if empty
-      const finalRows = rows.length
-        ? rows
-        : [
-    { key: 'amanat_al_asimah', nameAr: 'أمانة العاصمة', order: 1 },
-    { key: 'sanaa', nameAr: 'صنعاء', order: 2 },
-    { key: 'aden', nameAr: 'عدن', order: 3 },
-    { key: 'taiz', nameAr: 'تعز', order: 4 },
-    { key: 'ibb', nameAr: 'إب', order: 5 },
-    { key: 'al_hudaydah', nameAr: 'الحديدة', order: 6 },
-    { key: 'hadramaut', nameAr: 'حضرموت', order: 7 },
-    { key: 'dhamar', nameAr: 'ذمار', order: 8 },
-    { key: 'hajjah', nameAr: 'حجة', order: 9 },
-    { key: 'amran', nameAr: 'عمران', order: 10 },
-    { key: 'marib', nameAr: 'مأرب', order: 11 },
-    { key: 'shabwah', nameAr: 'شبوة', order: 12 },
-    { key: 'abyan', nameAr: 'أبين', order: 13 },
-    { key: 'lahij', nameAr: 'لحج', order: 14 },
-    { key: 'al_dhale', nameAr: 'الضالع', order: 15 },
-    { key: 'al_bayda', nameAr: 'البيضاء', order: 16 },
-    { key: 'al_jawf', nameAr: 'الجوف', order: 17 },
-    { key: 'saada', nameAr: 'صعدة', order: 18 },
-    { key: 'al_mahwit', nameAr: 'المحويت', order: 19 },
-    { key: 'raymah', nameAr: 'ريمة', order: 20 },
-    { key: 'al_mahrah', nameAr: 'المهرة', order: 21 },
-    { key: 'socotra', nameAr: 'أرخبيل سقطرى', order: 22 }
-  ];
+        const fallback = [
+          { key: 'amanat_al_asimah', nameAr: 'أمانة العاصمة', order: 1 },
+          { key: 'sanaa', nameAr: 'صنعاء', order: 2 },
+          { key: 'aden', nameAr: 'عدن', order: 3 },
+          { key: 'taiz', nameAr: 'تعز', order: 4 },
+          { key: 'ibb', nameAr: 'إب', order: 5 },
+          { key: 'al_hudaydah', nameAr: 'الحديدة', order: 6 },
+          { key: 'hadramaut', nameAr: 'حضرموت', order: 7 },
+          { key: 'dhamar', nameAr: 'ذمار', order: 8 },
+          { key: 'hajjah', nameAr: 'حجة', order: 9 },
+          { key: 'amran', nameAr: 'عمران', order: 10 },
+          { key: 'marib', nameAr: 'مأرب', order: 11 },
+          { key: 'shabwah', nameAr: 'شبوة', order: 12 },
+          { key: 'abyan', nameAr: 'أبين', order: 13 },
+          { key: 'lahij', nameAr: 'لحج', order: 14 },
+          { key: 'al_dhale', nameAr: 'الضالع', order: 15 },
+          { key: 'al_bayda', nameAr: 'البيضاء', order: 16 },
+          { key: 'al_jawf', nameAr: 'الجوف', order: 17 },
+          { key: 'saada', nameAr: 'صعدة', order: 18 },
+          { key: 'al_mahwit', nameAr: 'المحويت', order: 19 },
+          { key: 'raymah', nameAr: 'ريمة', order: 20 },
+          { key: 'al_mahrah', nameAr: 'المهرة', order: 21 },
+          { key: 'socotra', nameAr: 'أرخبيل سقطرى', order: 22 },
+        ];
 
-      if (!cancelled) setGovOptions(finalRows);
-    } catch (e) {
-      console.error(e);
-      if (!cancelled) {
-        setGovOptions([
-    { key: 'amanat_al_asimah', nameAr: 'أمانة العاصمة', order: 1 },
-    { key: 'sanaa', nameAr: 'صنعاء', order: 2 },
-    { key: 'aden', nameAr: 'عدن', order: 3 },
-    { key: 'taiz', nameAr: 'تعز', order: 4 },
-    { key: 'ibb', nameAr: 'إب', order: 5 },
-    { key: 'al_hudaydah', nameAr: 'الحديدة', order: 6 },
-    { key: 'hadramaut', nameAr: 'حضرموت', order: 7 },
-    { key: 'dhamar', nameAr: 'ذمار', order: 8 },
-    { key: 'hajjah', nameAr: 'حجة', order: 9 },
-    { key: 'amran', nameAr: 'عمران', order: 10 },
-    { key: 'marib', nameAr: 'مأرب', order: 11 },
-    { key: 'shabwah', nameAr: 'شبوة', order: 12 },
-    { key: 'abyan', nameAr: 'أبين', order: 13 },
-    { key: 'lahij', nameAr: 'لحج', order: 14 },
-    { key: 'al_dhale', nameAr: 'الضالع', order: 15 },
-    { key: 'al_bayda', nameAr: 'البيضاء', order: 16 },
-    { key: 'al_jawf', nameAr: 'الجوف', order: 17 },
-    { key: 'saada', nameAr: 'صعدة', order: 18 },
-    { key: 'al_mahwit', nameAr: 'المحويت', order: 19 },
-    { key: 'raymah', nameAr: 'ريمة', order: 20 },
-    { key: 'al_mahrah', nameAr: 'المهرة', order: 21 },
-    { key: 'socotra', nameAr: 'أرخبيل سقطرى', order: 22 }
-  ]);
+        if (!cancelled) setGovOptions(rows.length ? rows : fallback);
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) {
+          setGovOptions([
+            { key: 'amanat_al_asimah', nameAr: 'أمانة العاصمة', order: 1 },
+            { key: 'sanaa', nameAr: 'صنعاء', order: 2 },
+            { key: 'aden', nameAr: 'عدن', order: 3 },
+            { key: 'taiz', nameAr: 'تعز', order: 4 },
+            { key: 'ibb', nameAr: 'إب', order: 5 },
+            { key: 'al_hudaydah', nameAr: 'الحديدة', order: 6 },
+            { key: 'hadramaut', nameAr: 'حضرموت', order: 7 },
+            { key: 'dhamar', nameAr: 'ذمار', order: 8 },
+            { key: 'hajjah', nameAr: 'حجة', order: 9 },
+            { key: 'amran', nameAr: 'عمران', order: 10 },
+            { key: 'marib', nameAr: 'مأرب', order: 11 },
+            { key: 'shabwah', nameAr: 'شبوة', order: 12 },
+            { key: 'abyan', nameAr: 'أبين', order: 13 },
+            { key: 'lahij', nameAr: 'لحج', order: 14 },
+            { key: 'al_dhale', nameAr: 'الضالع', order: 15 },
+            { key: 'al_bayda', nameAr: 'البيضاء', order: 16 },
+            { key: 'al_jawf', nameAr: 'الجوف', order: 17 },
+            { key: 'saada', nameAr: 'صعدة', order: 18 },
+            { key: 'al_mahwit', nameAr: 'المحويت', order: 19 },
+            { key: 'raymah', nameAr: 'ريمة', order: 20 },
+            { key: 'al_mahrah', nameAr: 'المهرة', order: 21 },
+            { key: 'socotra', nameAr: 'أرخبيل سقطرى', order: 22 },
+          ]);
+        }
+      } finally {
+        if (!cancelled) setGovLoading(false);
       }
-    } finally {
-      if (!cancelled) setGovLoading(false);
     }
-  }
 
-  loadGovs();
-  return () => {
-    cancelled = true;
-  };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+    loadGovs();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const CAT_COLOR = useMemo(() => getCategoryBaseColor(single), [single]);
 
@@ -580,9 +543,7 @@ useEffect(() => {
     }
 
     try {
-      let ref = db
-        .collection('listings')
-        .where('category', '==', single);
+      let ref = db.collection('listings').where('category', '==', single);
       ref = ref.orderBy('createdAt', 'desc').limit(PAGE_SIZE);
 
       const snap = await ref.get();
@@ -593,7 +554,6 @@ useEffect(() => {
       if (!aliveRef.current) return;
 
       setItems(data);
-
       lastDocRef.current = snap.docs[snap.docs.length - 1] || null;
       cursorReadyRef.current = true;
 
@@ -603,8 +563,12 @@ useEffect(() => {
       console.error(e);
       if (!aliveRef.current) return;
       const msg = e?.message || 'فشل تحميل إعلانات القسم';
-      const isIndex = (e?.code === 'failed-precondition') || /index/i.test(msg);
-      setErr(isIndex ? '⚠️ الاستعلام يحتاج إنشاء Index في Firestore. افتح Firestore > Indexes أو اضغط رابط Create index الذي يظهر في Console ثم أعد المحاولة.' : msg);
+      const isIndex = e?.code === 'failed-precondition' || /index/i.test(msg);
+      setErr(
+        isIndex
+          ? '⚠️ الاستعلام يحتاج إنشاء Index في Firestore. افتح Firestore > Indexes أو اضغط رابط Create index الذي يظهر في Console ثم أعد المحاولة.'
+          : msg
+      );
       setLoading(false);
       setHasMore(false);
     }
@@ -615,9 +579,7 @@ useEffect(() => {
     if (!single) return;
 
     try {
-      let ref = db
-        .collection('listings')
-        .where('category', '==', single);
+      let ref = db.collection('listings').where('category', '==', single);
       ref = ref.orderBy('createdAt', 'desc').limit(PAGE_SIZE);
 
       const snap = await ref.get();
@@ -655,9 +617,7 @@ useEffect(() => {
         return;
       }
 
-      let ref = db
-        .collection('listings')
-        .where('category', '==', single);
+      let ref = db.collection('listings').where('category', '==', single);
       ref = ref.orderBy('createdAt', 'desc').startAfter(lastDoc).limit(PAGE_SIZE);
 
       const snap = await ref.get();
@@ -677,8 +637,12 @@ useEffect(() => {
       console.error(e);
       if (!aliveRef.current) return;
       const msg = e?.message || 'فشل تحميل المزيد';
-      const isIndex = (e?.code === 'failed-precondition') || /index/i.test(msg);
-      setErr(isIndex ? '⚠️ الاستعلام يحتاج إنشاء Index في Firestore. افتح Firestore > Indexes أو اضغط رابط Create index الذي يظهر في Console ثم أعد المحاولة.' : msg);
+      const isIndex = e?.code === 'failed-precondition' || /index/i.test(msg);
+      setErr(
+        isIndex
+          ? '⚠️ الاستعلام يحتاج إنشاء Index في Firestore. افتح Firestore > Indexes أو اضغط رابط Create index الذي يظهر في Console ثم أعد المحاولة.'
+          : msg
+      );
       setLoadingMore(false);
     }
   }
@@ -816,12 +780,12 @@ useEffect(() => {
     const catKey = single || '';
     const query = safeStr(q).toLowerCase();
     let arr = itemsWithTax;
-// ✅ governorate filter (يدعم الإعلانات القديمة اللي ما فيها govKey)
-const selGov = safeStr(govKey).toLowerCase();
-if (selGov) {
-  arr = arr.filter((l) => getListingGovKey(l) === selGov);
-}
 
+    // ✅ governorate filter (يدعم الإعلانات القديمة اللي ما فيها govKey)
+    const selGov = safeStr(govKey).toLowerCase();
+    if (selGov) {
+      arr = arr.filter((l) => getListingGovKey(l) === selGov);
+    }
 
     // cars
     if (catKey === 'cars') {
@@ -829,7 +793,8 @@ if (selGov) {
       const selModel = safeStr(carModel);
 
       if (selMake) arr = arr.filter((l) => safeStr(l?._tax?.carMake || 'other') === selMake);
-      if (selMake && selModel) arr = arr.filter((l) => safeStr(l?._tax?.carModel || 'other') === selModel);
+      if (selMake && selModel)
+        arr = arr.filter((l) => safeStr(l?._tax?.carModel || 'other') === selModel);
     }
 
     // phones
@@ -926,11 +891,11 @@ if (selGov) {
     jobType,
     serviceType,
     govKey,
+    govNameToKey,
   ]);
 
   // ====== options for chips ======
   const carMakeOptions = useMemo(() => {
-    // use CAR_MAKES as canonical preset order (and include any extras found in data)
     return presetMergeWithCounts(CAR_MAKES, taxonomyCounts.carMakes).slice(0, 40);
   }, [taxonomyCounts.carMakes]);
 
@@ -946,9 +911,7 @@ if (selGov) {
   }, [taxonomyCounts.phoneBrands]);
 
   const dealTypeOptions = useMemo(() => {
-    // keep stable order of DEAL_TYPES
     const merged = presetMergeWithCounts(DEAL_TYPES, taxonomyCounts.dealTypes);
-    // only sale/rent
     return merged.filter(([k]) => k === 'sale' || k === 'rent');
   }, [taxonomyCounts.dealTypes]);
 
@@ -1015,21 +978,17 @@ if (selGov) {
       title={title || text}
     >
       <span className="sooq-chipDot" style={{ background: dotColor || CAT_COLOR }} />
-      {icon ? <span className="sooq-chipIcon" aria-hidden="true">{icon}</span> : null}
+      {icon ? (
+        <span className="sooq-chipIcon" aria-hidden="true">
+          {icon}
+        </span>
+      ) : null}
       <span className="sooq-chipText">{text}</span>
       {typeof count === 'number' ? <span className="sooq-chipCount">{count}</span> : null}
     </button>
   );
 
-  const renderSingleFacet = ({
-    title,
-    icon,
-    selected,
-    setSelected,
-    options,
-    labelOf,
-    prefix,
-  }) => (
+  const renderSingleFacet = ({ title, icon, selected, setSelected, options, labelOf, prefix }) => (
     <div className="sooq-taxSection" aria-label={title}>
       <div className="sooq-taxTitle">{title}</div>
       <div className="sooq-chips" role="tablist" aria-label={title}>
@@ -1100,7 +1059,10 @@ if (selGov) {
         );
       }
 
-      const modelsTotal = Array.from(taxonomyCounts.carModels.values()).reduce((a, b) => a + Number(b || 0), 0);
+      const modelsTotal = Array.from(taxonomyCounts.carModels.values()).reduce(
+        (a, b) => a + Number(b || 0),
+        0
+      );
 
       return (
         <div className="sooq-taxSection" aria-label="فلترة موديلات السيارات">
@@ -1130,7 +1092,7 @@ if (selGov) {
                 key={k}
                 active={md === k}
                 onClick={() => setCarModel(k)}
-                text={k === 'other' ? 'أخرى' : (carModelLabel(mk, k) || k)}
+                text={k === 'other' ? 'أخرى' : carModelLabel(mk, k) || k}
                 count={c}
                 dotColor={colorForKey(`model:${mk}:${k}`)}
               />
@@ -1148,7 +1110,7 @@ if (selGov) {
         selected: phoneBrand,
         setSelected: setPhoneBrand,
         options: phoneBrandOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (phoneBrandLabel(k) || k)),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : phoneBrandLabel(k) || k),
         prefix: 'phone',
       });
     }
@@ -1210,7 +1172,7 @@ if (selGov) {
                     key={k}
                     active={propertyType === k}
                     onClick={() => setPropertyType(k)}
-                    text={k === 'other' ? 'أخرى' : (propertyTypeLabel(k) || k)}
+                    text={k === 'other' ? 'أخرى' : propertyTypeLabel(k) || k}
                     count={c}
                     icon="🏡"
                     dotColor={colorForKey(`property:${k}`)}
@@ -1231,7 +1193,7 @@ if (selGov) {
         selected: electronicsType,
         setSelected: setElectronicsType,
         options: electronicsTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (electronicsTypeLabel(k) || k)),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : electronicsTypeLabel(k) || k),
         prefix: 'electronics',
       });
     }
@@ -1244,7 +1206,7 @@ if (selGov) {
         selected: motorcycleBrand,
         setSelected: setMotorcycleBrand,
         options: motorcycleBrandOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (motorcycleBrandLabel(k) || k)),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : motorcycleBrandLabel(k) || k),
         prefix: 'moto',
       });
     }
@@ -1257,7 +1219,7 @@ if (selGov) {
         selected: heavyEquipmentType,
         setSelected: setHeavyEquipmentType,
         options: heavyEquipmentTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (heavyEquipmentTypeLabel(k) || k)),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : heavyEquipmentTypeLabel(k) || k),
         prefix: 'heavy',
       });
     }
@@ -1270,7 +1232,7 @@ if (selGov) {
         selected: solarType,
         setSelected: setSolarType,
         options: solarTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (solarTypeLabel(k) || k)),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : solarTypeLabel(k) || k),
         prefix: 'solar',
       });
     }
@@ -1283,7 +1245,7 @@ if (selGov) {
         selected: networkType,
         setSelected: setNetworkType,
         options: networkTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (networkTypeLabel(k) || k)),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : networkTypeLabel(k) || k),
         prefix: 'net',
       });
     }
@@ -1296,7 +1258,7 @@ if (selGov) {
         selected: maintenanceType,
         setSelected: setMaintenanceType,
         options: maintenanceTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (maintenanceTypeLabel(k) || k)),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : maintenanceTypeLabel(k) || k),
         prefix: 'maint',
       });
     }
@@ -1309,7 +1271,7 @@ if (selGov) {
         selected: furnitureType,
         setSelected: setFurnitureType,
         options: furnitureTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (furnitureTypeLabel(k) || k)),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : furnitureTypeLabel(k) || k),
         prefix: 'furn',
       });
     }
@@ -1322,7 +1284,7 @@ if (selGov) {
         selected: homeToolsType,
         setSelected: setHomeToolsType,
         options: homeToolsTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (homeToolsTypeLabel(k) || k)),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : homeToolsTypeLabel(k) || k),
         prefix: 'home',
       });
     }
@@ -1335,7 +1297,7 @@ if (selGov) {
         selected: clothesType,
         setSelected: setClothesType,
         options: clothesTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (clothesTypeLabel(k) || k)),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : clothesTypeLabel(k) || k),
         prefix: 'clothes',
       });
     }
@@ -1348,7 +1310,7 @@ if (selGov) {
         selected: animalType,
         setSelected: setAnimalType,
         options: animalTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (animalTypeLabel(k) || k)),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : animalTypeLabel(k) || k),
         prefix: 'animal',
       });
     }
@@ -1361,7 +1323,7 @@ if (selGov) {
         selected: jobType,
         setSelected: setJobType,
         options: jobTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (jobTypeLabel(k) || k)),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : jobTypeLabel(k) || k),
         prefix: 'job',
       });
     }
@@ -1374,7 +1336,7 @@ if (selGov) {
         selected: serviceType,
         setSelected: setServiceType,
         options: serviceTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (serviceTypeLabel(k) || k)),
+        labelOf: (k) => (k === 'other' ? 'أخرى' : serviceTypeLabel(k) || k),
         prefix: 'service',
       });
     }
@@ -1415,7 +1377,7 @@ if (selGov) {
 
     const hasCounts = cleaned.some((o) => o.count > 0);
     const sorted = hasCounts
-      ? [...cleaned].sort((a, b) => (b.count - a.count) || String(a.label).localeCompare(String(b.label), 'ar'))
+      ? [...cleaned].sort((a, b) => b.count - a.count || String(a.label).localeCompare(String(b.label), 'ar'))
       : cleaned;
 
     return sorted.slice(0, max);
@@ -1440,10 +1402,13 @@ if (selGov) {
 
   const popularListings = useMemo(() => {
     const list = Array.isArray(items) ? items : [];
-    // ضمن الإعلانات المحمّلة (تقدير سريع بدون استعلام إضافي)
     return [...list]
       .filter(Boolean)
-      .sort((a, b) => (Number(b.views || 0) - Number(a.views || 0)) || (Number(b.likes || 0) - Number(a.likes || 0)))
+      .sort(
+        (a, b) =>
+          Number(b.views || 0) - Number(a.views || 0) ||
+          Number(b.likes || 0) - Number(a.likes || 0)
+      )
       .slice(0, 8);
   }, [items]);
 
@@ -1451,7 +1416,6 @@ if (selGov) {
     const k = safeStr(key);
     if (!single || !k) return;
 
-    // reset search text for clarity
     setQ('');
 
     if (single === 'cars') {
@@ -1460,7 +1424,6 @@ if (selGov) {
       return;
     }
     if (single === 'realestate') {
-      // فلترة على نوع العقار مباشرة
       setPropertyType(k === 'all' ? '' : k);
       return;
     }
@@ -1494,13 +1457,12 @@ if (selGov) {
     return (
       <div className="card" style={{ padding: 16, border: '1px solid #fecaca' }}>
         <div style={{ fontWeight: 900, color: '#b91c1c' }}>⚠️ حدث خطأ</div>
-        <div className="muted" style={{ marginTop: 6 }}>{err}</div>
+        <div className="muted" style={{ marginTop: 6 }}>
+          {err}
+        </div>
       </div>
     );
   }
-
-
-
 
   return (
     <div>
@@ -1522,7 +1484,9 @@ if (selGov) {
             </div>
 
             <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-              <span className="muted" style={{ fontWeight: 900 }}>المحافظة:</span>
+              <span className="muted" style={{ fontWeight: 900 }}>
+                المحافظة:
+              </span>
               <select
                 className="input"
                 value={govKey}
@@ -1531,7 +1495,9 @@ if (selGov) {
               >
                 <option value="">{govLoading ? 'جاري التحميل...' : 'الكل'}</option>
                 {govOptions.map((g) => (
-                  <option key={g.key} value={g.key}>{g.nameAr}</option>
+                  <option key={g.key} value={g.key}>
+                    {g.nameAr}
+                  </option>
                 ))}
               </select>
             </div>
@@ -1549,9 +1515,13 @@ if (selGov) {
       {filtered.length === 0 ? (
         <div className="card" style={{ padding: 16, textAlign: 'center' }}>
           <div style={{ fontWeight: 900 }}>لا توجد إعلانات مطابقة</div>
-          <div className="muted" style={{ marginTop: 6 }}>جرّب تغيير الفلاتر أو البحث.</div>
+          <div className="muted" style={{ marginTop: 6 }}>
+            جرّب تغيير الفلاتر أو البحث.
+          </div>
           <div style={{ marginTop: 12 }}>
-            <Link className="btn btnPrimary" href="/add">➕ أضف إعلان</Link>
+            <Link className="btn btnPrimary" href="/add">
+              ➕ أضف إعلان
+            </Link>
           </div>
         </div>
       ) : view === 'map' ? (
@@ -1574,11 +1544,17 @@ if (selGov) {
 
           <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center' }}>
             {loadingMore ? (
-              <div className="muted" style={{ padding: 10 }}>...جاري تحميل المزيد</div>
+              <div className="muted" style={{ padding: 10 }}>
+                ...جاري تحميل المزيد
+              </div>
             ) : hasMore ? (
-              <div className="muted" style={{ padding: 10 }}>انزل لأسفل لتحميل المزيد</div>
+              <div className="muted" style={{ padding: 10 }}>
+                انزل لأسفل لتحميل المزيد
+              </div>
             ) : (
-              <div className="muted" style={{ padding: 10 }}>لا يوجد المزيد</div>
+              <div className="muted" style={{ padding: 10 }}>
+                لا يوجد المزيد
+              </div>
             )}
           </div>
 
@@ -1619,11 +1595,12 @@ if (selGov) {
             </div>
           ) : null}
 
-
           {err && items.length > 0 ? (
             <div className="card" style={{ padding: 12, marginTop: 12, border: '1px solid #fecaca' }}>
               <div style={{ fontWeight: 900, color: '#b91c1c' }}>⚠️</div>
-              <div className="muted" style={{ marginTop: 6 }}>{err}</div>
+              <div className="muted" style={{ marginTop: 6 }}>
+                {err}
+              </div>
             </div>
           ) : null}
         </>
@@ -1638,7 +1615,7 @@ if (selGov) {
           background: rgba(255, 255, 255, 0.9);
           backdrop-filter: blur(10px);
           border: 1px solid #e2e8f0;
-          box-shadow: 0 12px 22px rgba(0, 0, 0, 0.10);
+          box-shadow: 0 12px 22px rgba(0, 0, 0, 0.1);
         }
         .sooq-taxSection {
           margin-bottom: 10px;
@@ -1682,7 +1659,7 @@ if (selGov) {
           gap: 8px;
           padding: 8px 10px;
           border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.10);
+          border: 1px solid rgba(0, 0, 0, 0.1);
           background: #fff;
           font-size: 13px;
           line-height: 1;
@@ -1702,8 +1679,8 @@ if (selGov) {
         }
 
         .sooq-chip.isActive {
-          border-color: rgba(0, 0, 0, 0.20);
-          box-shadow: 0 8px 14px rgba(0, 0, 0, 0.10);
+          border-color: rgba(0, 0, 0, 0.2);
+          box-shadow: 0 8px 14px rgba(0, 0, 0, 0.1);
         }
 
         .sooq-chipDot {
@@ -1733,44 +1710,48 @@ if (selGov) {
         }
 
         @media (max-width: 520px) {
-          .sooq-chips { padding: 6px; }
-          .sooq-chip { padding: 8px 9px; font-size: 12px; }
+          .sooq-chips {
+            padding: 6px;
+          }
+          .sooq-chip {
+            padding: 8px 9px;
+            font-size: 12px;
+          }
         }
-      
-        .sooq-hashtags{
-          display:flex;
-          flex-wrap:wrap;
-          gap:8px;
+
+        .sooq-hashtags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
         }
-        .sooq-tag{
-          display:inline-flex;
-          align-items:center;
-          gap:8px;
-          border:1px solid var(--border);
+        .sooq-tag {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          border: 1px solid var(--border);
           background: #fff;
           border-radius: 999px;
           padding: 8px 10px;
-          cursor:pointer;
-          transition: transform .12s ease, box-shadow .12s ease;
+          cursor: pointer;
+          transition: transform 0.12s ease, box-shadow 0.12s ease;
           font-weight: 800;
           font-size: 13px;
         }
-        .sooq-tag:hover{
+        .sooq-tag:hover {
           transform: translateY(-1px);
-          box-shadow: 0 6px 14px rgba(0,0,0,0.06);
+          box-shadow: 0 6px 14px rgba(0, 0, 0, 0.06);
         }
-        .sooq-tagCount{
-          color:#64748b;
+        .sooq-tagCount {
+          color: #64748b;
           font-weight: 900;
           font-size: 12px;
           border-left: 1px solid #e2e8f0;
           padding-left: 8px;
         }
-        .sooq-tagText{
+        .sooq-tagText {
           white-space: nowrap;
         }
-
-`}</style>
+      `}</style>
     </div>
   );
 }
