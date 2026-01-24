@@ -71,7 +71,6 @@ function toYERLocal(amount, cur) {
   return n;
 }
 
-
 function normalizeCatKey(v) {
   const raw = String(v || '').trim();
   if (!raw) return '';
@@ -295,6 +294,13 @@ export default function EditListingPage() {
     const arr = CAR_MODELS_BY_MAKE?.[mk];
     return Array.isArray(arr) ? arr : [];
   }, [carMake]);
+
+  // ✅ حساب موديلات الدراجات النارية
+  const motorcycleModelsForBrand = useMemo(() => {
+    const brand = String(motorcycleBrand || '').trim();
+    if (!brand || brand === 'other') return [];
+    return getMotorcycleModelsByBrand(brand);
+  }, [motorcycleBrand]);
 
   // ====== Load doc ======
   useEffect(() => {
