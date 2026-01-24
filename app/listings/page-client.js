@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import Image from 'next/image';
 
 import Price from '@/components/Price';
 import ListingCard from '@/components/ListingCard';
@@ -32,12 +31,38 @@ const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
   ),
 });
 
-// ✅ Blur placeholder لتحسين تجربة تحميل الصور
-const BLUR_DATA_URL =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
-
 function safeText(v) {
   return typeof v === 'string' ? v : '';
+}
+
+function toNumber(v) {
+  if (v == null) return 0;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  if (typeof v === 'string') {
+    // إزالة الفواصل/الرموز (مثلاً "100,000" أو "1000 ريال")
+    const cleaned = v.replace(/[^\d.-]/g, '');
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
+function toMillis(v) {
+  if (!v) return 0;
+  if (typeof v === 'number') return v;
+  if (v instanceof Date) return v.getTime();
+  if (typeof v.toDate === 'function') {
+    const d = v.toDate();
+    return d instanceof Date ? d.getTime() : 0;
+  }
+  // Firestore Timestamp-like: { seconds, nanoseconds }
+  if (typeof v.seconds === 'number') {
+    const ms = v.seconds * 1000 + Math.floor((v.nanoseconds || 0) / 1e6);
+    return Number.isFinite(ms) ? ms : 0;
+  }
+  // string/date
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
 }
 
 function formatRelative(ts) {
@@ -61,7 +86,12 @@ function formatRelative(ts) {
 }
 
 function ListingRow({ listing }) {
-  const img = (Array.isArray(listing.images) && listing.images[0]) || listing.image || null;
+  const rawImg = (Array.isArray(listing.images) && listing.images[0]) || listing.image || null;
+  const [imgFailed, setImgFailed] = useState(false);
+
+  const img = rawImg && typeof rawImg === 'string' && rawImg.trim() ? rawImg.trim() : null;
+  const showImg = !!img && !imgFailed;
+
   const desc = safeText(listing.description).trim();
   const shortDesc = desc.length > 120 ? `${desc.slice(0, 120)}...` : desc || '—';
 
@@ -106,15 +136,20 @@ function ListingRow({ listing }) {
           position: 'relative',
         }}
       >
-        {img ? (
-          <Image
+        {showImg ? (
+          <img
             src={img}
             alt={listing.title || 'صورة الإعلان'}
-            fill
-            placeholder="blur"
-            blurDataURL={BLUR_DATA_URL}
-            sizes="140px"
-            style={{ objectFit: 'cover' }}
+            loading="lazy"
+            decoding="async"
+            referrerPolicy="no-referrer"
+            onError={() => setImgFailed(true)}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              display: 'block',
+            }}
           />
         ) : (
           <div
@@ -150,7 +185,7 @@ function ListingRow({ listing }) {
           >
             {listing.title || 'بدون عنوان'}
           </h3>
-          
+
           <div style={{ flexShrink: 0 }}>
             <Price listing={listing} variant="compact" maxConversions={2} />
           </div>
@@ -162,19 +197,19 @@ function ListingRow({ listing }) {
             <span>📍</span>
             <span>{listing.city || listing.locationLabel || 'غير محدد'}</span>
           </div>
-          
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: '#64748b' }}>
             <span>⏱️</span>
             <span>{formatRelative(listing.createdAt)}</span>
           </div>
-          
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: '#64748b' }}>
             <span>👁️</span>
-            <span>{Number(listing.views || 0).toLocaleString('ar-YE')}</span>
+            <span>{toNumber(listing.views || 0).toLocaleString('ar-YE')}</span>
           </div>
-          
+
           {listing.auctionEnabled && (
-            <span 
+            <span
               style={{
                 padding: '4px 10px',
                 borderRadius: '12px',
@@ -190,62 +225,63 @@ function ListingRow({ listing }) {
         </div>
 
         {/* الوصف المختصر */}
-        <p style={{ 
-          fontSize: '14px', 
-          color: '#475569', 
-          lineHeight: 1.5,
-          margin: 0,
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden'
-        }}>
+        <p
+          style={{
+            fontSize: '14px',
+            color: '#475569',
+            lineHeight: 1.5,
+            margin: 0,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}
+        >
           {shortDesc}
         </p>
-        
+
         {/* فئة الإعلان */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
-          <span style={{
-            padding: '4px 12px',
-            borderRadius: '16px',
-            background: '#f1f5f9',
-            color: '#475569',
-            fontSize: '13px',
-            fontWeight: '600',
-          }}>
+          <span
+            style={{
+              padding: '4px 12px',
+              borderRadius: '16px',
+              background: '#f1f5f9',
+              color: '#475569',
+              fontSize: '13px',
+              fontWeight: '600',
+            }}
+          >
             {listing.categoryName || listing.category || 'قسم'}
           </span>
-          
-          <div style={{ fontSize: '13px', color: '#64748b', fontWeight: '500' }}>
-            اضغط للتفاصيل →
-          </div>
+
+          <div style={{ fontSize: '13px', color: '#64748b', fontWeight: '500' }}>اضغط للتفاصيل →</div>
         </div>
       </div>
 
-      {/* استخدام style عادي بدلاً من styled-jsx */}
-      <style>{`
+      <style jsx>{`
         @media (max-width: 768px) {
           .card {
             flex-direction: column;
             align-items: stretch;
             gap: 12px;
           }
-          
+
           .card > div:first-child {
             width: 100% !important;
             height: 180px !important;
           }
-          
+
           .card h3 {
             font-size: 15px;
           }
         }
-        
+
         @media (max-width: 480px) {
           .card {
             padding: 12px;
           }
-          
+
           .card > div:first-child {
             height: 150px !important;
           }
@@ -264,54 +300,6 @@ const SORT_OPTIONS = [
   { key: 'featured', label: 'المميز أولاً', icon: '⭐', field: 'featured', order: 'desc' },
 ];
 
-// ✅ إضافة أنماط CSS كسلسلة نصية
-const globalStyles = `
-  .listings-page .view-btn:hover:not(.active) {
-    background: #f1f5f9 !important;
-  }
-  
-  .listings-page .search-input:focus {
-    outline: none;
-    border-color: #3b82f6 !important;
-    background: white !important;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-  }
-  
-  .listings-page select:focus {
-    outline: none;
-    border-color: #3b82f6 !important;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-  }
-  
-  @media (max-width: 768px) {
-    .listings-page .container {
-      padding-left: 12px;
-      padding-right: 12px;
-    }
-    
-    .listings-page .card {
-      border-radius: 12px !important;
-    }
-  }
-  
-  @media (max-width: 640px) {
-    .listings-page .view-btn {
-      padding: 6px 12px !important;
-      font-size: 13px !important;
-    }
-    
-    .listings-page .search-input {
-      min-width: 100% !important;
-    }
-  }
-  
-  @media (max-width: 480px) {
-    .listings-page .container {
-      padding-top: 12px !important;
-    }
-  }
-`;
-
 export default function ListingsPageClient({ initialListings = [] }) {
   const PAGE_SIZE = 24;
 
@@ -321,7 +309,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [err, setErr] = useState('');
   const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] useState('newest');
+  const [sortBy, setSortBy] = useState('newest');
   const [hasMore, setHasMore] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -333,9 +321,9 @@ export default function ListingsPageClient({ initialListings = [] }) {
     if (v === 'map' || v === 'list' || v === 'grid') {
       setView((prev) => (prev === v ? prev : v));
     }
-    
+
     const s = searchParams?.get('sort');
-    if (s && SORT_OPTIONS.some(opt => opt.key === s)) {
+    if (s && SORT_OPTIONS.some((opt) => opt.key === s)) {
       setSortBy(s);
     }
   }, [searchParams]);
@@ -372,11 +360,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
         const { db } = await import('@/lib/firebaseClient');
         if (cancelled) return;
 
-        const snap = await db
-          .collection('listings')
-          .orderBy('createdAt', 'desc')
-          .limit(PAGE_SIZE)
-          .get();
+        const snap = await db.collection('listings').orderBy('createdAt', 'desc').limit(PAGE_SIZE).get();
 
         const items = snap.docs
           .map((doc) => ({ id: doc.id, ...doc.data() }))
@@ -406,10 +390,11 @@ export default function ListingsPageClient({ initialListings = [] }) {
 
   // ✅ فلترة وترتيب الإعلانات
   const filteredAndSorted = useMemo(() => {
+    const q = search.trim().toLowerCase();
+
     // فلترة حسب البحث
-    const filtered = search.trim() 
+    const filtered = q
       ? listings.filter((l) => {
-          const q = search.toLowerCase();
           const title = safeText(l.title).toLowerCase();
           const city = safeText(l.city).toLowerCase();
           const desc = safeText(l.description).toLowerCase();
@@ -419,23 +404,36 @@ export default function ListingsPageClient({ initialListings = [] }) {
       : [...listings];
 
     // الترتيب
-    const sortOption = SORT_OPTIONS.find(opt => opt.key === sortBy) || SORT_OPTIONS[0];
-    
+    const sortOption = SORT_OPTIONS.find((opt) => opt.key === sortBy) || SORT_OPTIONS[0];
+
     return filtered.sort((a, b) => {
-      let valA = a[sortOption.field];
-      let valB = b[sortOption.field];
-      
-      // معالجة القيم الخاصة
+      let valA = a?.[sortOption.field];
+      let valB = b?.[sortOption.field];
+
+      // featured: boolean -> number
       if (sortOption.field === 'featured') {
-        valA = a.featured ? 1 : 0;
-        valB = b.featured ? 1 : 0;
+        valA = a?.featured ? 1 : 0;
+        valB = b?.featured ? 1 : 0;
       }
-      
+
+      // createdAt: Timestamp/Date -> millis
+      if (sortOption.field === 'createdAt') {
+        valA = toMillis(a?.createdAt);
+        valB = toMillis(b?.createdAt);
+      }
+
+      // views: numeric
+      if (sortOption.field === 'views') {
+        valA = toNumber(a?.views);
+        valB = toNumber(b?.views);
+      }
+
+      // priceYER: currentBidYER first then priceYER
       if (sortOption.field === 'priceYER') {
-        valA = a.currentBidYER || a.priceYER || 0;
-        valB = b.currentBidYER || b.priceYER || 0;
+        valA = toNumber(a?.currentBidYER ?? a?.priceYER ?? 0);
+        valB = toNumber(b?.currentBidYER ?? b?.priceYER ?? 0);
       }
-      
+
       if (sortOption.order === 'desc') {
         return (valB || 0) - (valA || 0);
       } else {
@@ -454,11 +452,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
       const { db } = await import('@/lib/firebaseClient');
 
       if (!lastDocRef.current) {
-        const snap0 = await db
-          .collection('listings')
-          .orderBy('createdAt', 'desc')
-          .limit(PAGE_SIZE)
-          .get();
+        const snap0 = await db.collection('listings').orderBy('createdAt', 'desc').limit(PAGE_SIZE).get();
 
         lastDocRef.current = snap0.docs[snap0.docs.length - 1] || null;
 
@@ -531,27 +525,14 @@ export default function ListingsPageClient({ initialListings = [] }) {
     };
   }, [view, hasMore, loading, loadingMore, loadMore]);
 
-  // ✅ إضافة الأنماط العالمية إلى head
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-
-    const styleElement = document.createElement('style');
-    styleElement.textContent = globalStyles;
-    document.head.appendChild(styleElement);
-
-    return () => {
-      document.head.removeChild(styleElement);
-    };
-  }, []);
-
   return (
-    <div dir="rtl" className="listings-page">
+    <div dir="rtl">
       <div className="container" style={{ paddingTop: '20px', paddingBottom: '30px' }}>
         {/* العنوان الرئيسي */}
-        <div 
-          className="card" 
-          style={{ 
-            padding: '20px', 
+        <div
+          className="card"
+          style={{
+            padding: '20px',
             marginBottom: '16px',
             background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
             color: 'white',
@@ -559,19 +540,17 @@ export default function ListingsPageClient({ initialListings = [] }) {
             border: 'none',
           }}
         >
-          <div style={{ fontWeight: '900', fontSize: '24px', marginBottom: '6px' }}>
-            جميع الإعلانات
-          </div>
+          <div style={{ fontWeight: '900', fontSize: '24px', marginBottom: '6px' }}>جميع الإعلانات</div>
           <div style={{ fontSize: '15px', opacity: 0.9 }}>
             تصفّح {listings.length.toLocaleString('ar-YE')} إعلان مع بحث وعرض شبكة/قائمة/خريطة
           </div>
         </div>
 
         {/* شريط الأدوات المتقدم */}
-        <div 
-          className="card" 
-          style={{ 
-            padding: '16px', 
+        <div
+          className="card"
+          style={{
+            padding: '16px',
             marginBottom: '20px',
             borderRadius: '14px',
             border: '1px solid #e2e8f0',
@@ -582,17 +561,17 @@ export default function ListingsPageClient({ initialListings = [] }) {
             {/* الصف الأول: خيارات العرض والبحث */}
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
               {/* أزرار العرض */}
-              <div 
-                style={{ 
-                  display: 'flex', 
-                  gap: '8px', 
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '8px',
                   background: '#f8fafc',
                   padding: '6px',
                   borderRadius: '10px',
                   border: '1px solid #e2e8f0',
                 }}
               >
-                <button 
+                <button
                   className={`view-btn ${view === 'grid' ? 'active' : ''}`}
                   onClick={() => setView('grid')}
                   style={{
@@ -612,7 +591,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
                 >
                   ◼️ شبكة
                 </button>
-                <button 
+                <button
                   className={`view-btn ${view === 'list' ? 'active' : ''}`}
                   onClick={() => setView('list')}
                   style={{
@@ -632,7 +611,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
                 >
                   ☰ قائمة
                 </button>
-                <button 
+                <button
                   className={`view-btn ${view === 'map' ? 'active' : ''}`}
                   onClick={() => setView('map')}
                   style={{
@@ -671,14 +650,16 @@ export default function ListingsPageClient({ initialListings = [] }) {
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="🔍 ابحث في العناوين، الوصف، أو المدينة..."
                 />
-                <div style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  fontSize: '18px',
-                  opacity: 0.6,
-                }}>
+                <div
+                  style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    fontSize: '18px',
+                    opacity: 0.6,
+                  }}
+                >
                   🔍
                 </div>
               </div>
@@ -707,17 +688,17 @@ export default function ListingsPageClient({ initialListings = [] }) {
 
             {/* الصف الثاني: الفلاتر (تظهر عند الضغط) */}
             {showFilters && (
-              <div style={{
-                padding: '16px',
-                background: '#f8fafc',
-                borderRadius: '10px',
-                border: '1px solid #e2e8f0',
-              }}>
+              <div
+                style={{
+                  padding: '16px',
+                  background: '#f8fafc',
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0',
+                }}
+              >
                 <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '180px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>
-                      ترتيب حسب:
-                    </label>
+                    <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>ترتيب حسب:</label>
                     <select
                       value={sortBy}
                       onChange={(e) => setSortBy(e.target.value)}
@@ -737,7 +718,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
                       ))}
                     </select>
                   </div>
-                  
+
                   <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
                     <button
                       onClick={() => {
@@ -761,24 +742,29 @@ export default function ListingsPageClient({ initialListings = [] }) {
                 </div>
               </div>
             )}
-            
+
             {/* عدّاد النتائج */}
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center',
-              paddingTop: '12px',
-              borderTop: '1px solid #f1f5f9'
-            }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                paddingTop: '12px',
+                borderTop: '1px solid #f1f5f9',
+              }}
+            >
               <div style={{ fontSize: '14px', color: '#64748b' }}>
                 <span style={{ fontWeight: '700', color: '#3b82f6' }}>
                   {filteredAndSorted.length.toLocaleString('ar-YE')}
-                </span> إعلان متاح
+                </span>{' '}
+                إعلان متاح
               </div>
-              
+
               <div style={{ fontSize: '13px', color: '#64748b' }}>
                 {search && (
-                  <span>نتائج البحث عن: "<strong>{search}</strong>"</span>
+                  <span>
+                    نتائج البحث عن: "<strong>{search}</strong>"
+                  </span>
                 )}
               </div>
             </div>
@@ -788,43 +774,49 @@ export default function ListingsPageClient({ initialListings = [] }) {
         {/* المحتوى الرئيسي */}
         {loading ? (
           // مؤشر التحميل المحسّن
-          <div style={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            padding: '60px 20px',
-            background: 'white',
-            borderRadius: '12px',
-            border: '1px solid #e2e8f0',
-          }}>
-            <div style={{ 
-              width: '48px', 
-              height: '48px', 
-              border: '4px solid #f1f5f9',
-              borderTopColor: '#3b82f6',
-              borderRadius: '50%',
-              animation: 'spin 1s linear infinite',
-              marginBottom: '16px'
-            }}></div>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '60px 20px',
+              background: 'white',
+              borderRadius: '12px',
+              border: '1px solid #e2e8f0',
+            }}
+          >
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                border: '4px solid #f1f5f9',
+                borderTopColor: '#3b82f6',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+                marginBottom: '16px',
+              }}
+            ></div>
             <div style={{ fontWeight: '700', fontSize: '16px', marginBottom: '8px', color: '#1e293b' }}>
               جاري تحميل الإعلانات...
             </div>
             <div style={{ fontSize: '14px', color: '#64748b' }}>
               {initialListings.length > 0 ? 'جاري تحديث القائمة' : 'جاري تحميل الإعلانات'}
             </div>
-            
-            <style>{`
+
+            <style jsx>{`
               @keyframes spin {
-                to { transform: rotate(360deg); }
+                to {
+                  transform: rotate(360deg);
+                }
               }
             `}</style>
           </div>
         ) : err && listings.length === 0 ? (
-          <div 
-            className="card" 
-            style={{ 
-              padding: '24px', 
+          <div
+            className="card"
+            style={{
+              padding: '24px',
               border: '1px solid rgba(220,38,38,0.2)',
               background: '#fef2f2',
               borderRadius: '12px',
@@ -832,12 +824,8 @@ export default function ListingsPageClient({ initialListings = [] }) {
             }}
           >
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
-            <div style={{ fontWeight: '900', fontSize: '18px', color: '#991b1b', marginBottom: '8px' }}>
-              حدث خطأ
-            </div>
-            <div style={{ fontSize: '15px', color: '#64748b', marginBottom: '16px' }}>
-              {err}
-            </div>
+            <div style={{ fontWeight: '900', fontSize: '18px', color: '#991b1b', marginBottom: '8px' }}>حدث خطأ</div>
+            <div style={{ fontSize: '15px', color: '#64748b', marginBottom: '16px' }}>{err}</div>
             <button
               onClick={() => window.location.reload()}
               style={{
@@ -855,10 +843,10 @@ export default function ListingsPageClient({ initialListings = [] }) {
             </button>
           </div>
         ) : filteredAndSorted.length === 0 ? (
-          <div 
-            className="card" 
-            style={{ 
-              padding: '40px 20px', 
+          <div
+            className="card"
+            style={{
+              padding: '40px 20px',
               textAlign: 'center',
               background: 'white',
               borderRadius: '12px',
@@ -866,10 +854,16 @@ export default function ListingsPageClient({ initialListings = [] }) {
             }}
           >
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
-            <div style={{ fontWeight: '900', fontSize: '18px', marginBottom: '8px' }}>
-              لا توجد نتائج مطابقة
-            </div>
-            <div style={{ fontSize: '15px', color: '#64748b', marginBottom: '24px', maxWidth: '400px', margin: '0 auto 24px' }}>
+            <div style={{ fontWeight: '900', fontSize: '18px', marginBottom: '8px' }}>لا توجد نتائج مطابقة</div>
+            <div
+              style={{
+                fontSize: '15px',
+                color: '#64748b',
+                marginBottom: '24px',
+                maxWidth: '400px',
+                margin: '0 auto 24px',
+              }}
+            >
               {search ? `لم نعثر على إعلانات تطابق "${search}"` : 'لا توجد إعلانات متاحة حالياً'}
             </div>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -888,7 +882,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
               >
                 🗑️ مسح البحث
               </button>
-              <Link 
+              <Link
                 href="/add"
                 style={{
                   padding: '10px 20px',
@@ -922,62 +916,62 @@ export default function ListingsPageClient({ initialListings = [] }) {
 
             <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
               {loadingMore ? (
-                <div style={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  alignItems: 'center',
-                  padding: '20px',
-                  color: '#64748b'
-                }}>
-                  <div style={{ 
-                    width: '32px', 
-                    height: '32px', 
-                    border: '3px solid #f1f5f9',
-                    borderTopColor: '#3b82f6',
-                    borderRadius: '50%',
-                    animation: 'spin 1s linear infinite',
-                    marginBottom: '12px'
-                  }}></div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', color: '#64748b' }}>
+                  <div
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      border: '3px solid #f1f5f9',
+                      borderTopColor: '#3b82f6',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite',
+                      marginBottom: '12px',
+                    }}
+                  ></div>
                   <div style={{ fontSize: '14px' }}>جاري تحميل المزيد...</div>
                 </div>
               ) : hasMore ? (
-                <div style={{ 
-                  padding: '16px', 
-                  textAlign: 'center',
-                  color: '#64748b',
-                  fontSize: '14px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}>
+                <div
+                  style={{
+                    padding: '16px',
+                    textAlign: 'center',
+                    color: '#64748b',
+                    fontSize: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
                   <div>⬇️</div>
                   <div>انزل لأسفل لتحميل المزيد من الإعلانات</div>
                 </div>
               ) : filteredAndSorted.length > 5 ? (
-                <div style={{ 
-                  padding: '16px', 
-                  textAlign: 'center',
-                  color: '#059669',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  background: '#f0fdf4',
-                  borderRadius: '10px',
-                  border: '1px solid #bbf7d0',
-                  width: '100%',
-                  maxWidth: '400px',
-                }}>
+                <div
+                  style={{
+                    padding: '16px',
+                    textAlign: 'center',
+                    color: '#059669',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    background: '#f0fdf4',
+                    borderRadius: '10px',
+                    border: '1px solid #bbf7d0',
+                    width: '100%',
+                    maxWidth: '400px',
+                  }}
+                >
                   🎉 لقد وصلت إلى نهاية القائمة ({filteredAndSorted.length} إعلان)
                 </div>
               ) : null}
             </div>
 
             {err && listings.length > 0 ? (
-              <div 
-                className="card" 
-                style={{ 
-                  padding: '16px', 
-                  marginTop: '16px', 
+              <div
+                className="card"
+                style={{
+                  padding: '16px',
+                  marginTop: '16px',
                   border: '1px solid rgba(220,38,38,0.2)',
                   background: '#fef2f2',
                   borderRadius: '10px',
@@ -1008,62 +1002,62 @@ export default function ListingsPageClient({ initialListings = [] }) {
 
             <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
               {loadingMore ? (
-                <div style={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  alignItems: 'center',
-                  padding: '20px',
-                  color: '#64748b'
-                }}>
-                  <div style={{ 
-                    width: '32px', 
-                    height: '32px', 
-                    border: '3px solid #f1f5f9',
-                    borderTopColor: '#3b82f6',
-                    borderRadius: '50%',
-                    animation: 'spin 1s linear infinite',
-                    marginBottom: '12px'
-                  }}></div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', color: '#64748b' }}>
+                  <div
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      border: '3px solid #f1f5f9',
+                      borderTopColor: '#3b82f6',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite',
+                      marginBottom: '12px',
+                    }}
+                  ></div>
                   <div style={{ fontSize: '14px' }}>جاري تحميل المزيد...</div>
                 </div>
               ) : hasMore ? (
-                <div style={{ 
-                  padding: '16px', 
-                  textAlign: 'center',
-                  color: '#64748b',
-                  fontSize: '14px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}>
+                <div
+                  style={{
+                    padding: '16px',
+                    textAlign: 'center',
+                    color: '#64748b',
+                    fontSize: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
                   <div>⬇️</div>
                   <div>انزل لأسفل لتحميل المزيد من الإعلانات</div>
                 </div>
               ) : filteredAndSorted.length > 5 ? (
-                <div style={{ 
-                  padding: '16px', 
-                  textAlign: 'center',
-                  color: '#059669',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  background: '#f0fdf4',
-                  borderRadius: '10px',
-                  border: '1px solid #bbf7d0',
-                  width: '100%',
-                  maxWidth: '400px',
-                }}>
+                <div
+                  style={{
+                    padding: '16px',
+                    textAlign: 'center',
+                    color: '#059669',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    background: '#f0fdf4',
+                    borderRadius: '10px',
+                    border: '1px solid #bbf7d0',
+                    width: '100%',
+                    maxWidth: '400px',
+                  }}
+                >
                   🎉 لقد وصلت إلى نهاية القائمة ({filteredAndSorted.length} إعلان)
                 </div>
               ) : null}
             </div>
 
             {err && listings.length > 0 ? (
-              <div 
-                className="card" 
-                style={{ 
-                  padding: '16px', 
-                  marginTop: '16px', 
+              <div
+                className="card"
+                style={{
+                  padding: '16px',
+                  marginTop: '16px',
                   border: '1px solid rgba(220,38,38,0.2)',
                   background: '#fef2f2',
                   borderRadius: '10px',
@@ -1078,8 +1072,8 @@ export default function ListingsPageClient({ initialListings = [] }) {
 
         {/* دعوة لإضافة إعلان */}
         {!loading && filteredAndSorted.length > 0 && (
-          <div 
-            style={{ 
+          <div
+            style={{
               marginTop: '30px',
               padding: '20px',
               background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
@@ -1088,9 +1082,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
               textAlign: 'center',
             }}
           >
-            <div style={{ fontSize: '20px', fontWeight: '900', marginBottom: '8px' }}>
-              لديك شيء للبيع؟
-            </div>
+            <div style={{ fontSize: '20px', fontWeight: '900', marginBottom: '8px' }}>لديك شيء للبيع؟</div>
             <div style={{ fontSize: '15px', opacity: 0.9, marginBottom: '20px', maxWidth: '500px', margin: '0 auto' }}>
               أضف إعلانك مجاناً ووصل إلى الآلاف من المشترين في اليمن خلال دقائق
             </div>
@@ -1122,6 +1114,54 @@ export default function ListingsPageClient({ initialListings = [] }) {
           </div>
         )}
       </div>
+
+      {/* الأنماط العامة */}
+      <style jsx global>{`
+        .view-btn:hover:not(.active) {
+          background: #f1f5f9 !important;
+        }
+
+        .search-input:focus {
+          outline: none;
+          border-color: #3b82f6 !important;
+          background: white !important;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        select:focus {
+          outline: none;
+          border-color: #3b82f6 !important;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        @media (max-width: 768px) {
+          .container {
+            padding-left: 12px;
+            padding-right: 12px;
+          }
+
+          .card {
+            border-radius: 12px !important;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .view-btn {
+            padding: 6px 12px !important;
+            font-size: 13px !important;
+          }
+
+          .search-input {
+            min-width: 100% !important;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .container {
+            padding-top: 12px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
