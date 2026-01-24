@@ -244,7 +244,7 @@ export default function MyListingsPage() {
               onClick={() => setFilter(f.key)}
             >
               <span className="chipIcon">{f.icon}</span>
-              <span>{f.label}</span>
+              <span className="chipLabel">{f.label}</span>
               {f.key === 'all' && <span className="count">{computed.stats.total}</span>}
               {f.key === 'active' && <span className="count">{computed.stats.active}</span>}
               {f.key === 'sold' && <span className="count">{computed.stats.sold}</span>}
@@ -258,7 +258,7 @@ export default function MyListingsPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="ابحث في عناوين/وصف/مدينة/قسم…"
+            placeholder="ابحث في إعلاناتك..."
           />
           {q ? (
             <button type="button" className="clear" onClick={() => setQ('')} aria-label="مسح البحث">
@@ -313,8 +313,8 @@ export default function MyListingsPage() {
 
               {item.description ? (
                 <div className="desc">
-                  {String(item.description).length > 160
-                    ? `${String(item.description).slice(0, 160)}...`
+                  {String(item.description).length > 100
+                    ? `${String(item.description).slice(0, 100)}...`
                     : String(item.description)}
                 </div>
               ) : (
@@ -331,7 +331,7 @@ export default function MyListingsPage() {
               </div>
 
               <div className="actions">
-                <Link href={`/listing/${item.id}`} className="btnSm">
+                <Link href={`/listing/${item.id}`} className="btnSm view">
                   👁️ عرض
                 </Link>
 
@@ -345,15 +345,14 @@ export default function MyListingsPage() {
                   onClick={() => toggleSold(item)}
                   disabled={isBusy}
                 >
-                  {isBusy ? '...' : isSold ? '↩️ إلغاء البيع' : '✅ تم البيع'}
+                  {isBusy ? '...' : isSold ? '↩️ إلغاء' : '✅ بيع'}
                 </button>
 
                 <button
                   type="button"
-                  className="btnSm ghost"
+                  className="btnSm ghost hide"
                   onClick={() => toggleActive(item)}
                   disabled={isBusy}
-                  title={isInactive ? 'إظهار الإعلان' : 'إخفاء الإعلان'}
                 >
                   {isBusy ? '...' : isInactive ? '👁️ إظهار' : '🙈 إخفاء'}
                 </button>
@@ -363,7 +362,6 @@ export default function MyListingsPage() {
                   className="btnSm danger"
                   onClick={() => deleteListing(item)}
                   disabled={isBusy}
-                  title="حذف نهائي"
                 >
                   {isBusy ? '...' : '🗑️ حذف'}
                 </button>
@@ -396,11 +394,11 @@ const styles = `
 .wrap{
   max-width: 1200px;
   margin: 0 auto;
-  padding: 18px 14px 60px;
+  padding: 16px 12px 40px;
 }
 .muted{color:#64748b}
 .center{
-  min-height: 55vh;
+  min-height: 60vh;
   display:flex;
   flex-direction:column;
   align-items:center;
@@ -416,19 +414,21 @@ const styles = `
 }
 @keyframes spin{to{transform:rotate(360deg)}}
 
+/* Hero Section */
 .hero{
   display:flex;
-  gap:16px;
-  align-items:stretch;
-  justify-content:space-between;
-  border-radius:18px;
+  flex-direction: column;
+  gap: 16px;
+  border-radius:16px;
   border:1px solid rgba(0,0,0,.08);
-  padding:18px;
+  padding:16px;
   background: linear-gradient(135deg, rgba(15,52,96,.08), rgba(59,130,246,.08));
+  margin-bottom: 16px;
 }
+
 .heroLeft h1{
   margin:0 0 6px;
-  font-size: 1.8rem;
+  font-size: 1.6rem;
   font-weight: 900;
   color:#0f172a;
 }
@@ -436,56 +436,69 @@ const styles = `
   margin:0 0 12px;
   color:#475569;
   line-height:1.6;
+  font-size: 0.95rem;
 }
-.heroActions{display:flex; gap:10px; flex-wrap:wrap;}
+.heroActions{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
 .btn{
   display:inline-flex;
   align-items:center;
   justify-content:center;
   gap:8px;
-  padding:10px 14px;
+  padding:12px 16px;
   border-radius:12px;
   border:1px solid rgba(0,0,0,.10);
   background:#fff;
   color:#0f172a;
-  font-weight:800;
+  font-weight:700;
+  font-size: 0.95rem;
   text-decoration:none;
+  flex: 1;
+  min-width: 140px;
 }
 .btn.primary{
   background:#3b82f6;
   color:#fff;
+  border-color: #3b82f6;
 }
 .btn:hover{transform: translateY(-1px); box-shadow: 0 10px 22px rgba(0,0,0,.06);}
 .btn.primary:hover{box-shadow:0 10px 22px rgba(59,130,246,.25);}
 
-.heroRight{flex:1; display:flex; align-items:center; justify-content:flex-end;}
+.heroRight{
+  width: 100%;
+}
 .statsGrid{
-  width: 520px;
-  max-width: 100%;
+  width: 100%;
   display:grid;
-  grid-template-columns: repeat(4, minmax(0,1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap:10px;
 }
 .stat{
   background:#fff;
   border:1px solid rgba(0,0,0,.08);
-  border-radius:16px;
+  border-radius:14px;
   padding:12px;
-  box-shadow: 0 8px 22px rgba(0,0,0,.04);
+  box-shadow: 0 4px 12px rgba(0,0,0,.04);
 }
 .sTop{display:flex; gap:10px; align-items:center;}
 .sIcon{
   width:42px;height:42px;
-  border-radius:14px;
+  border-radius:12px;
   display:flex;align-items:center;justify-content:center;
   background: rgba(59,130,246,.12);
   border:1px solid rgba(59,130,246,.18);
+  font-size: 1.2rem;
 }
-.sLabel{font-weight:800; color:#64748b; font-size:.82rem;}
-.sValue{font-weight:950; color:#0f172a; font-size:1.25rem; line-height:1.2;}
+.sLabel{font-weight:700; color:#64748b; font-size:.8rem;}
+.sValue{font-weight:900; color:#0f172a; font-size:1.2rem; line-height:1.2;}
 
+/* Alert */
 .alert{
-  margin-top:12px;
+  margin: 16px 0;
   padding:12px 14px;
   border-radius:12px;
   border:1px solid rgba(220,38,38,.25);
@@ -497,34 +510,44 @@ const styles = `
 }
 .alertIcon{font-size:1.1rem; margin-top:2px;}
 
+/* Toolbar */
 .toolbar{
-  margin-top:14px;
+  margin: 16px 0;
   display:flex;
-  gap:12px;
-  align-items:center;
-  justify-content:space-between;
-  flex-wrap:wrap;
+  flex-direction: column;
+  gap: 12px;
 }
-.filters{display:flex; gap:10px; flex-wrap:wrap;}
-.chip{
-  display:inline-flex;
-  align-items:center;
+.filters{
+  display:grid;
+  grid-template-columns: repeat(2, 1fr);
   gap:8px;
-  padding:8px 12px;
-  border-radius:999px;
+}
+.chip{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  padding:10px 12px;
+  border-radius:12px;
   border:1px solid rgba(0,0,0,.10);
   background:#fff;
   color:#0f172a;
-  font-weight:800;
+  font-weight:700;
   cursor:pointer;
+  font-size: 0.9rem;
+  text-align: center;
 }
-.chipIcon{opacity:.9}
+.chipLabel {
+  flex: 1;
+  text-align: center;
+}
+.chipIcon{opacity:.9; font-size: 1rem;}
 .chip .count{
   padding:2px 8px;
   border-radius:999px;
   background: rgba(15,52,96,.08);
   border:1px solid rgba(0,0,0,.06);
-  font-size:.8rem;
+  font-size:.75rem;
   font-weight:900;
 }
 .chip.active{
@@ -538,13 +561,11 @@ const styles = `
 }
 
 .search{
-  flex: 1;
-  min-width: 260px;
-  max-width: 520px;
+  width: 100%;
   display:flex;
   align-items:center;
   gap:8px;
-  padding:10px 12px;
+  padding:12px 14px;
   border-radius:14px;
   border:1px solid rgba(0,0,0,.10);
   background:#fff;
@@ -554,7 +575,7 @@ const styles = `
   border:none;
   outline:none;
   background:transparent;
-  font-size:.95rem;
+  font-size:0.95rem;
 }
 .search .clear{
   border:none;
@@ -564,50 +585,53 @@ const styles = `
   cursor:pointer;
 }
 
+/* Empty State */
 .empty{
-  margin-top:14px;
-  padding:22px;
-  border-radius:18px;
+  margin: 24px 0;
+  padding:20px;
+  border-radius:16px;
   border:1px solid rgba(0,0,0,.08);
   background:#fff;
   text-align:center;
   box-shadow: 0 10px 26px rgba(0,0,0,.05);
 }
 .iconBig{font-size:2.4rem; margin-bottom:10px;}
-.empty h3{margin:0 0 6px; font-weight:950; color:#0f172a;}
-.empty p{margin:0 0 14px; color:#64748b;}
+.empty h3{margin:0 0 6px; font-weight:900; color:#0f172a; font-size: 1.3rem;}
+.empty p{margin:0 0 16px; color:#64748b; font-size: 0.95rem;}
 
+/* Cards Grid */
 .grid{
-  margin-top:14px;
-  display:grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display:flex;
+  flex-direction: column;
   gap:12px;
 }
 .card{
   background:#fff;
   border:1px solid rgba(0,0,0,.08);
-  border-radius:18px;
-  padding:14px;
-  box-shadow: 0 10px 26px rgba(0,0,0,.05);
-  transition: transform .15s ease, box-shadow .15s ease;
+  border-radius:16px;
+  padding:16px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.05);
 }
-.card:hover{transform: translateY(-2px); box-shadow: 0 14px 34px rgba(0,0,0,.08);}
 
-.titleRow{display:flex; gap:10px; align-items:flex-start; justify-content:space-between;}
+.titleRow{
+  display:flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
 .title{
-  font-weight:950;
+  font-weight:900;
   color:#0f172a;
-  font-size:1.05rem;
+  font-size:1.1rem;
   line-height:1.4;
-  max-width: 100%;
   word-break: break-word;
 }
 .badge{
-  flex-shrink:0;
-  padding:6px 10px;
+  align-self: flex-start;
+  padding:6px 12px;
   border-radius:999px;
   font-weight:900;
-  font-size:.78rem;
+  font-size:.8rem;
   border:1px solid rgba(0,0,0,.08);
 }
 .badge.active{background:#dcfce7;color:#166534;border-color:#bbf7d0;}
@@ -616,98 +640,233 @@ const styles = `
 .badge.sold{background:#fef3c7;color:#92400e;border-color:#fde68a;}
 
 .meta{
-  margin-top:8px;
   color:#64748b;
-  font-weight:700;
+  font-weight:600;
   font-size:.85rem;
   display:flex;
   flex-wrap:wrap;
-  gap:8px;
+  gap:6px;
   align-items:center;
+  margin-bottom: 12px;
 }
 .dot{opacity:.5}
 
 .desc{
-  margin-top:10px;
   color:#334155;
-  font-size:.92rem;
+  font-size:.9rem;
   line-height:1.6;
   background: rgba(15,52,96,.04);
   border:1px solid rgba(0,0,0,.06);
-  border-radius:14px;
-  padding:10px;
-  min-height: 64px;
+  border-radius:12px;
+  padding:12px;
+  margin-bottom: 12px;
+  min-height: 60px;
 }
 .priceRow{
-  margin-top:10px;
   display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:10px;
-  flex-wrap:wrap;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
 }
 .price{
-  font-weight:950;
+  font-weight:900;
   color:#0f172a;
   font-size:1rem;
 }
 .loc{
   color:#64748b;
-  font-weight:800;
+  font-weight:700;
   font-size:.85rem;
 }
 
+/* Actions */
 .actions{
-  margin-top:12px;
-  display:flex;
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
   gap:8px;
-  flex-wrap:wrap;
 }
 .btnSm{
-  display:inline-flex;
+  display:flex;
   align-items:center;
   justify-content:center;
-  gap:8px;
-  padding:9px 10px;
-  border-radius:12px;
+  gap:6px;
+  padding:10px 8px;
+  border-radius:10px;
   border:1px solid rgba(0,0,0,.10);
   background:#3b82f6;
   color:#fff;
-  font-weight:900;
+  font-weight:700;
+  font-size: 0.85rem;
   cursor:pointer;
   text-decoration:none;
-  transition: transform .12s ease, box-shadow .12s ease;
+  transition: all .2s ease;
+  min-height: 44px;
 }
-.btnSm:hover{transform: translateY(-1px); box-shadow: 0 10px 18px rgba(0,0,0,.06);}
+.btnSm:hover{transform: translateY(-1px); box-shadow: 0 6px 12px rgba(0,0,0,.08);}
 .btnSm.ghost{
   background:#fff;
   color:#0f172a;
 }
+.btnSm.view{background:#3b82f6;}
 .btnSm.ok{background:#10b981;border-color:#10b981;}
 .btnSm.warn{background:#f59e0b;border-color:#f59e0b;}
 .btnSm.danger{background:#dc2626;border-color:#dc2626;}
+.btnSm.hide{background:#6b7280;border-color:#6b7280;color:#fff;}
 
+/* Panel */
 .panel{
-  margin-top:60px;
+  margin: 40px auto;
+  max-width: 400px;
   background:#fff;
   border:1px solid rgba(0,0,0,.08);
-  border-radius:18px;
-  padding:22px;
+  border-radius:16px;
+  padding:24px;
   text-align:center;
   box-shadow: 0 10px 26px rgba(0,0,0,.06);
 }
-.panel h1{margin:0 0 6px; font-weight:950; color:#0f172a;}
-.panel p{margin:0 0 14px; color:#64748b;}
+.panel h1{margin:0 0 8px; font-weight:900; color:#0f172a; font-size: 1.4rem;}
+.panel p{margin:0 0 16px; color:#64748b; font-size: 0.95rem;}
 .row{display:flex; gap:10px; justify-content:center; flex-wrap:wrap;}
 
-@media (max-width: 1100px){
-  .grid{ grid-template-columns: repeat(2, minmax(0,1fr)); }
-  .hero{ flex-direction:column; }
-  .heroRight{justify-content:flex-start;}
-  .statsGrid{ grid-template-columns: repeat(2, minmax(0,1fr)); width: 100%; }
+/* ========== RESPONSIVE DESIGN ========== */
+
+/* Tablets and larger phones */
+@media (min-width: 640px) {
+  .wrap{
+    padding: 20px 16px 60px;
+  }
+  
+  .hero{
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 20px;
+  }
+  
+  .heroLeft{
+    flex: 1;
+  }
+  
+  .heroRight{
+    width: auto;
+    flex: 1;
+    max-width: 400px;
+  }
+  
+  .statsGrid{
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .filters{
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  .grid{
+    display:grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap:16px;
+  }
+  
+  .titleRow{
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+  
+  .priceRow{
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  
+  .actions{
+    grid-template-columns: repeat(5, 1fr);
+  }
 }
-@media (max-width: 560px){
-  .grid{ grid-template-columns: 1fr; }
-  .search{ min-width: 100%; }
+
+/* Desktop */
+@media (min-width: 1024px) {
+  .heroLeft h1{
+    font-size: 1.8rem;
+  }
+  
+  .statsGrid{
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  .toolbar{
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  
+  .filters{
+    display:flex;
+    gap:10px;
+  }
+  
+  .chip{
+    padding: 8px 16px;
+  }
+  
+  .search{
+    max-width: 400px;
+  }
+  
+  .grid{
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Large Desktop */
+@media (min-width: 1200px) {
+  .grid{
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+  
+  .card{
+    padding: 20px;
+  }
+}
+
+/* Small phones */
+@media (max-width: 380px) {
+  .heroActions{
+    flex-direction: column;
+  }
+  
+  .btn{
+    min-width: 100%;
+  }
+  
+  .filters{
+    grid-template-columns: 1fr;
+  }
+  
+  .statsGrid{
+    grid-template-columns: 1fr;
+  }
+  
+  .actions{
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .btnSm{
+    font-size: 0.8rem;
+    padding: 10px 6px;
+  }
+}
+
+/* Fix for very small screens */
+@media (max-width: 320px) {
+  .actions{
+    grid-template-columns: 1fr;
+  }
+  
+  .chip{
+    padding: 10px 8px;
+    font-size: 0.85rem;
+  }
 }
 `;
