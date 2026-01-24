@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { normalizeCategoryKey } from '@/lib/categories';
 
 // ✅ Taxonomy (تصنيف هرمي للفروع)
 import {
@@ -12,6 +13,9 @@ import {
   PHONE_BRANDS,
   DEAL_TYPES,
   PROPERTY_TYPES,
+} from '@/lib/taxonomy';
+
+import {
   ELECTRONICS_TYPES,
   HEAVY_EQUIPMENT_TYPES,
   SOLAR_TYPES,
@@ -24,8 +28,7 @@ import {
   JOB_TYPES,
   SERVICE_TYPES,
   MOTORCYCLE_BRANDS,
-  getMotorcycleModelsByBrand,
-} from '@/lib/taxonomy';
+} from '@/lib/taxonomy/others';
 
 import { db, firebase, storage } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
@@ -56,6 +59,33 @@ const DEFAULT_CATEGORIES = [
   { slug: 'other', name: 'أخرى' },
 ];
 
+const DEFAULT_GOVERNORATES = [
+  { key: 'amanat_al_asimah', nameAr: 'أمانة العاصمة', order: 1 },
+  { key: 'sanaa', nameAr: 'صنعاء', order: 2 },
+  { key: 'aden', nameAr: 'عدن', order: 3 },
+  { key: 'taiz', nameAr: 'تعز', order: 4 },
+  { key: 'ibb', nameAr: 'إب', order: 5 },
+  { key: 'al_hudaydah', nameAr: 'الحديدة', order: 6 },
+  { key: 'hadramaut', nameAr: 'حضرموت', order: 7 },
+  { key: 'dhamar', nameAr: 'ذمار', order: 8 },
+  { key: 'hajjah', nameAr: 'حجة', order: 9 },
+  { key: 'amran', nameAr: 'عمران', order: 10 },
+  { key: 'marib', nameAr: 'مأرب', order: 11 },
+  { key: 'shabwah', nameAr: 'شبوة', order: 12 },
+  { key: 'abyan', nameAr: 'أبين', order: 13 },
+  { key: 'lahij', nameAr: 'لحج', order: 14 },
+  { key: 'al_dhale', nameAr: 'الضالع', order: 15 },
+  { key: 'al_bayda', nameAr: 'البيضاء', order: 16 },
+  { key: 'al_jawf', nameAr: 'الجوف', order: 17 },
+  { key: 'saada', nameAr: 'صعدة', order: 18 },
+  { key: 'al_mahwit', nameAr: 'المحويت', order: 19 },
+  { key: 'raymah', nameAr: 'ريمة', order: 20 },
+  { key: 'al_mahrah', nameAr: 'المهرة', order: 21 },
+  { key: 'socotra', nameAr: 'أرخبيل سقطرى', order: 22 },
+];
+
+
+
 const DEFAULT_EXCHANGE = {
   // تقدر تغيّرها من .env.local (قيم تقريبية افتراضية)
   SAR_TO_YER: Number(process.env.NEXT_PUBLIC_SAR_TO_YER || process.env.NEXT_PUBLIC_RATE_SAR_TO_YER || 600),
@@ -71,35 +101,8 @@ function toYERLocal(amount, cur) {
   return n;
 }
 
-function normalizeCatKey(v) {
-  const raw = String(v || '').trim();
-  if (!raw) return '';
-  const lowered = raw.toLowerCase();
-  const norm = lowered.replace(/\s+/g, '_').replace(/-+/g, '_').replace(/__+/g, '_');
 
-  const map = {
-    real_estate: 'realestate',
-    'real estate': 'realestate',
-    realestate: 'realestate',
-    cars: 'cars',
-    car: 'cars',
-    phones: 'phones',
-    phone: 'phones',
-    mobiles: 'phones',
-    mobile: 'phones',
 
-    // عربي
-    عقارات: 'realestate',
-    العقارات: 'realestate',
-    سيارات: 'cars',
-    السيارات: 'cars',
-    جوالات: 'phones',
-    الجوالات: 'phones',
-    موبايلات: 'phones',
-  };
-
-  return map[norm] || map[raw] || norm;
-}
 
 const slugKey = (v) =>
   String(v || '')
@@ -131,6 +134,10 @@ export default function EditListingPage() {
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [city, setCity] = useState('');
+  const [govKey, setGovKey] = useState('');
+  const [govs, setGovs] = useState(DEFAULT_GOVERNORATES);
+  const [govsLoading, setGovsLoading] = useState(true);
+  const [govsSource, setGovsSource] = useState('loading');
   const [category, setCategory] = useState('solar');
 
   // ✅ أقسام (من Firestore إن وجدت) + Fallback
@@ -157,8 +164,6 @@ export default function EditListingPage() {
 
   const [motorcycleBrand, setMotorcycleBrand] = useState('');
   const [motorcycleBrandText, setMotorcycleBrandText] = useState('');
-  const [motorcycleModel, setMotorcycleModel] = useState('');
-  const [motorcycleModelText, setMotorcycleModelText] = useState('');
 
   const [heavyEquipmentType, setHeavyEquipmentType] = useState('');
   const [heavyEquipmentTypeText, setHeavyEquipmentTypeText] = useState('');
@@ -224,7 +229,7 @@ export default function EditListingPage() {
           const arr = snap.docs
             .map((doc) => {
               const d = doc.data() || {};
-              const slug = normalizeCatKey(d.slug || d.key || d.id || doc.id);
+              const slug = normalizeCategoryKey(d.slug || d.key || d.id || doc.id);
               const name = String(d.name || d.label || slug || '').trim();
               const active = d.active !== false;
               if (!slug || !name || !active) return null;
@@ -270,11 +275,82 @@ export default function EditListingPage() {
     };
   }, []);
 
+// Load governorates from Firestore (taxonomy_governorates)
+useEffect(() => {
+  let unsub = null;
+  try {
+    setGovsLoading(true);
+    unsub = db.collection('taxonomy_governorates').onSnapshot(
+      (snap) => {
+        const arr = [];
+        snap.forEach((doc) => {
+          const d = doc.data() || {};
+          const key = String(doc.id || d.key || '').trim();
+          const nameAr = String(d.nameAr || d.name || d.label || '').trim();
+          const order = typeof d.order === 'number' ? d.order : Number(d.order || 9999);
+          const enabled = d.enabled !== false;
+
+          if (!enabled) return;
+          if (!key || !nameAr) return;
+
+          arr.push({ key, nameAr, order });
+        });
+
+        arr.sort((a, b) => (a.order - b.order) || a.nameAr.localeCompare(b.nameAr, 'ar'));
+
+        if (arr.length) {
+          setGovs(arr);
+          setGovsSource('firestore');
+        } else {
+          setGovs(DEFAULT_GOVERNORATES);
+          setGovsSource('fallback');
+        }
+        setGovsLoading(false);
+      },
+      (err) => {
+        console.warn('Governorates snapshot failed:', err);
+        setGovs(DEFAULT_GOVERNORATES);
+        setGovsSource('fallback');
+        setGovsLoading(false);
+      }
+    );
+  } catch (e) {
+    console.warn('Governorates load failed:', e);
+    setGovs(DEFAULT_GOVERNORATES);
+    setGovsSource('fallback');
+    setGovsLoading(false);
+  }
+
+  return () => {
+    try {
+      if (unsub) unsub();
+    } catch {}
+  };
+}, []);
+
+// Keep city in sync with selected governorate
+useEffect(() => {
+  if (!govKey) return;
+  const found = govs.find((g) => g.key === govKey);
+  if (found) setCity(found.nameAr);
+}, [govKey, govs]);
+
+// If the listing has city but no govKey, try to infer it once governorates are loaded (helps old listings)
+useEffect(() => {
+  if (govsLoading) return;
+  if (govKey) return;
+  const c = String(city || '').trim();
+  if (!c) return;
+  const found = govs.find((g) => g.nameAr === c);
+  if (found) setGovKey(found.key);
+}, [govsLoading, govs, govKey, city]);
+
+
   // ✅ تأكد أن قيمة القسم مطابقة للقائمة (تطبيع + Fallback)
   useEffect(() => {
     if (catsLoading) return;
 
-    const norm = normalizeCatKey(category);
+    const norm = normalizeCategoryKey(category);
     if (!norm) return;
 
     const exists = cats.some((x) => x.slug === norm);
@@ -286,7 +362,7 @@ export default function EditListingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catsLoading, cats, category]);
 
-  const catKey = useMemo(() => normalizeCatKey(category), [category]);
+  const catKey = useMemo(() => normalizeCategoryKey(category), [category]);
 
   const carModelsForMake = useMemo(() => {
     const mk = String(carMake || '').trim();
@@ -294,13 +370,6 @@ export default function EditListingPage() {
     const arr = CAR_MODELS_BY_MAKE?.[mk];
     return Array.isArray(arr) ? arr : [];
   }, [carMake]);
-
-  // ✅ حساب موديلات الدراجات النارية
-  const motorcycleModelsForBrand = useMemo(() => {
-    const brand = String(motorcycleBrand || '').trim();
-    if (!brand || brand === 'other') return [];
-    return getMotorcycleModelsByBrand(brand);
-  }, [motorcycleBrand]);
 
   // ====== Load doc ======
   useEffect(() => {
@@ -327,7 +396,7 @@ export default function EditListingPage() {
         setTitle(String(d.title || ''));
         setDesc(String(d.description || ''));
         setCity(String(d.city || ''));
-        setCategory(normalizeCatKey(d.category || 'solar') || 'other');
+        setCategory(normalizeCategoryKey(d.category || 'solar') || 'other');
 
         // ✅ فروع الأقسام (Taxonomy)
         setCarMake(String(d.carMake || ''));
@@ -348,8 +417,6 @@ export default function EditListingPage() {
 
         setMotorcycleBrand(String(d.motorcycleBrand || ''));
         setMotorcycleBrandText(String(d.motorcycleBrandText || ''));
-        setMotorcycleModel(String(d.motorcycleModel || ''));
-        setMotorcycleModelText(String(d.motorcycleModelText || ''));
 
         setHeavyEquipmentType(String(d.heavyEquipmentType || ''));
         setHeavyEquipmentTypeText(String(d.heavyEquipmentTypeText || ''));
@@ -443,8 +510,6 @@ export default function EditListingPage() {
 
     setMotorcycleBrand('');
     setMotorcycleBrandText('');
-    setMotorcycleModel('');
-    setMotorcycleModelText('');
 
     setHeavyEquipmentType('');
     setHeavyEquipmentTypeText('');
@@ -504,9 +569,9 @@ export default function EditListingPage() {
     if (!desc.trim()) e.desc = 'الرجاء إدخال وصف للإعلان';
     else if (desc.trim().length < 10) e.desc = 'الوصف يجب أن يكون 10 أحرف على الأقل';
 
-    if (!city.trim()) e.city = 'الرجاء إدخال المدينة';
+    if (!govKey.trim()) e.govKey = 'الرجاء اختيار المحافظة';
 
-    const cKey = normalizeCatKey(category);
+    const cKey = normalizeCategoryKey(category);
     if (!cKey) e.category = 'الرجاء اختيار القسم';
 
     if (!price || isNaN(price) || Number(price) <= 0) e.price = 'الرجاء إدخال سعر صحيح';
@@ -542,15 +607,7 @@ export default function EditListingPage() {
     }
 
     if (cKey === 'motorcycles') {
-      if (!motorcycleBrand) e.motorcycleBrand = 'اختر ماركة الدراجة';
       if (motorcycleBrand === 'other' && !motorcycleBrandText.trim()) e.motorcycleBrandText = 'اكتب ماركة الدراجة';
-
-      if (motorcycleBrand === 'other') {
-        if (!motorcycleModelText.trim()) e.motorcycleModelText = 'اكتب موديل الدراجة';
-      } else {
-        if (!motorcycleModel) e.motorcycleModel = 'اختر موديل الدراجة';
-        if (motorcycleModel === 'other' && !motorcycleModelText.trim()) e.motorcycleModelText = 'اكتب موديل الدراجة';
-      }
     }
 
     if (cKey === 'heavy_equipment') {
@@ -666,19 +723,23 @@ export default function EditListingPage() {
 
     setSaving(true);
     try {
-      const cKey = normalizeCatKey(category);
+      const cKey = normalizeCategoryKey(category);
       const priceYER = toYERLocal(price, currency);
       const phoneDigits = String(phone || '').replace(/\D/g, '');
 
       const uploaded = await uploadNewImages();
       const finalImages = [...existingImages, ...uploaded].slice(0, MAX_IMAGES);
+      const selectedGov = govs.find((g) => g.key === govKey);
+      const cityToSave = selectedGov ? selectedGov.nameAr : String(city || '').trim();
+
 
       const payload = {
         title: title.trim(),
         description: desc.trim(),
-        city: city.trim(),
+        city: cityToSave,
+        govKey: String(govKey || '').trim(),
+        governorateKey: String(govKey || '').trim(),
         category: cKey || 'other',
-        categoryKey: cKey || 'other',
 
         // ✅ فروع الأقسام (Taxonomy)
         carMake: cKey === 'cars' ? (carMake || null) : null,
@@ -711,14 +772,6 @@ export default function EditListingPage() {
         motorcycleBrand: cKey === 'motorcycles' ? (motorcycleBrand || null) : null,
         motorcycleBrandText:
           cKey === 'motorcycles' && motorcycleBrand === 'other' ? (motorcycleBrandText.trim() || null) : null,
-        motorcycleModel: cKey === 'motorcycles'
-          ? (motorcycleBrand && motorcycleBrand !== 'other'
-              ? (motorcycleModel && motorcycleModel !== 'other'
-                  ? motorcycleModel
-                  : (motorcycleModelText.trim() ? slugKey(motorcycleModelText) : null))
-              : (motorcycleModelText.trim() ? slugKey(motorcycleModelText) : null))
-          : null,
-        motorcycleModelText: cKey === 'motorcycles' ? (motorcycleModelText.trim() || null) : null,
 
         heavyEquipmentType: cKey === 'heavy_equipment' ? (heavyEquipmentType || null) : null,
         heavyEquipmentTypeText:
@@ -954,19 +1007,31 @@ export default function EditListingPage() {
           </div>
 
           <div className="row2">
-            <div className="field">
-              <label className="label req">المدينة</label>
-              <input
-                className={`input ${errors.city ? 'err' : ''}`}
-                value={city}
-                onChange={(e) => {
-                  setCity(e.target.value);
-                  if (submitAttempted) setErrors((p) => ({ ...p, city: undefined }));
-                }}
-                placeholder="مثال: صنعاء"
-              />
-              {errors.city && <div className="errMsg">{errors.city}</div>}
-            </div>
+            <div className={`field ${errors.govKey ? 'hasError' : ''}`}>
+              <label className="label req">المحافظة</label>
+          <select
+            className="input"
+            value={govKey}
+            disabled={govsLoading}
+            onChange={(e) => {
+              setGovKey(e.target.value);
+              if (submitAttempted) setErrors((prev) => ({ ...prev, govKey: undefined }));
+            }}
+          >
+            <option value="">{govsLoading ? 'جاري تحميل المحافظات…' : 'اختر المحافظة'}</option>
+            {govs.map((g) => (
+              <option key={g.key} value={g.key}>
+                {g.nameAr}
+              </option>
+            ))}
+          </select>
+          {errors.govKey && <div className="errMsg">{errors.govKey}</div>}
+          <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+            {govsSource === 'firestore'
+              ? '✅ المحافظات تُقرأ من قاعدة البيانات'
+              : 'ℹ️ قائمة افتراضية (Fallback)'}
+          </div>
+        </div>
 
             <div className="field">
               <label className="label req">القسم</label>
@@ -1250,24 +1315,15 @@ export default function EditListingPage() {
               <div className="row2">
                 <div className="field">
                   <label className="label">الماركة</label>
-                  <select
-                    className={`input ${errors.motorcycleBrand ? 'err' : ''}`}
-                    value={motorcycleBrand}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setMotorcycleBrand(v);
-                      setMotorcycleModel('');
-                      setMotorcycleModelText('');
-                    }}
-                  >
-                    <option value="">— اختر الماركة —</option>
+                  <select className="input" value={motorcycleBrand} onChange={(e) => setMotorcycleBrand(e.target.value)}>
+                    <option value="">— غير محدد —</option>
                     {MOTORCYCLE_BRANDS.map((x) => (
                       <option key={x.key} value={x.key}>
                         {x.label}
                       </option>
                     ))}
+                    <option value="other">أخرى…</option>
                   </select>
-                  {errors.motorcycleBrand && <div className="errMsg">{errors.motorcycleBrand}</div>}
 
                   {motorcycleBrand === 'other' ? (
                     <>
@@ -1281,52 +1337,6 @@ export default function EditListingPage() {
                       {errors.motorcycleBrandText && <div className="errMsg">{errors.motorcycleBrandText}</div>}
                     </>
                   ) : null}
-                </div>
-
-                <div className="field">
-                  <label className="label">الموديل</label>
-
-                  {motorcycleBrand && motorcycleBrand !== 'other' ? (
-                    <>
-                      <select
-                        className={`input ${errors.motorcycleModel ? 'err' : ''}`}
-                        value={motorcycleModel}
-                        onChange={(e) => setMotorcycleModel(e.target.value)}
-                      >
-                        <option value="">— اختر الموديل —</option>
-                        {motorcycleModelsForBrand.map((x) => (
-                          <option key={x.key} value={x.key}>
-                            {x.label}
-                          </option>
-                        ))}
-                      </select>
-                      {errors.motorcycleModel && <div className="errMsg">{errors.motorcycleModel}</div>}
-
-                      {motorcycleModel === 'other' ? (
-                        <>
-                          <div style={{ height: 8 }} />
-                          <input
-                            className={`input ${errors.motorcycleModelText ? 'err' : ''}`}
-                            value={motorcycleModelText}
-                            onChange={(e) => setMotorcycleModelText(e.target.value)}
-                            placeholder="اكتب موديل الدراجة"
-                          />
-                          {errors.motorcycleModelText && <div className="errMsg">{errors.motorcycleModelText}</div>}
-                        </>
-                      ) : null}
-                    </>
-                  ) : (
-                    <>
-                      <input
-                        className={`input ${errors.motorcycleModelText ? 'err' : ''}`}
-                        value={motorcycleModelText}
-                        onChange={(e) => setMotorcycleModelText(e.target.value)}
-                        placeholder="اكتب موديل الدراجة"
-                        disabled={!motorcycleBrand}
-                      />
-                      {errors.motorcycleModelText && <div className="errMsg">{errors.motorcycleModelText}</div>}
-                    </>
-                  )}
                 </div>
               </div>
             </div>
