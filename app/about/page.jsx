@@ -2,12 +2,17 @@
 'use client';
 
 import Link from 'next/link';
+import { CATEGORY_MAP } from '@/lib/categories';
+
+// ✅ لو تغير مسار قسم الإلكترونيات لاحقاً في مكان واحد (lib/categories.js)
+// راح يتحدث هنا تلقائياً.
+const ELECTRONICS_HREF = CATEGORY_MAP?.electronics?.href || '/electronics';
 
 const CATEGORIES = [
   { key: 'cars', label: 'السيارات', icon: '🚗', href: '/cars' },
   { key: 'realestate', label: 'العقارات', icon: '🏡', href: '/realestate' },
   { key: 'phones', label: 'الجوالات', icon: '📱', href: '/phones' },
-  { key: 'electronics', label: 'الإلكترونيات', icon: '💻', href: '/electronics' },
+  { key: 'electronics', label: 'الإلكترونيات', icon: '💻', href: ELECTRONICS_HREF },
   { key: 'motorcycles', label: 'الدراجات', icon: '🏍️', href: '/motorcycles' },
   { key: 'heavy_equipment', label: 'المعدات الثقيلة', icon: '🚜', href: '/heavy_equipment' },
   { key: 'solar', label: 'الطاقة الشمسية', icon: '☀️', href: '/solar' },
