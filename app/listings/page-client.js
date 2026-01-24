@@ -222,7 +222,8 @@ function ListingRow({ listing }) {
         </div>
       </div>
 
-      <style jsx>{`
+      {/* استخدام style عادي بدلاً من styled-jsx */}
+      <style>{`
         @media (max-width: 768px) {
           .card {
             flex-direction: column;
@@ -263,6 +264,54 @@ const SORT_OPTIONS = [
   { key: 'featured', label: 'المميز أولاً', icon: '⭐', field: 'featured', order: 'desc' },
 ];
 
+// ✅ إضافة أنماط CSS كسلسلة نصية
+const globalStyles = `
+  .listings-page .view-btn:hover:not(.active) {
+    background: #f1f5f9 !important;
+  }
+  
+  .listings-page .search-input:focus {
+    outline: none;
+    border-color: #3b82f6 !important;
+    background: white !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+  
+  .listings-page select:focus {
+    outline: none;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+  
+  @media (max-width: 768px) {
+    .listings-page .container {
+      padding-left: 12px;
+      padding-right: 12px;
+    }
+    
+    .listings-page .card {
+      border-radius: 12px !important;
+    }
+  }
+  
+  @media (max-width: 640px) {
+    .listings-page .view-btn {
+      padding: 6px 12px !important;
+      font-size: 13px !important;
+    }
+    
+    .listings-page .search-input {
+      min-width: 100% !important;
+    }
+  }
+  
+  @media (max-width: 480px) {
+    .listings-page .container {
+      padding-top: 12px !important;
+    }
+  }
+`;
+
 export default function ListingsPageClient({ initialListings = [] }) {
   const PAGE_SIZE = 24;
 
@@ -272,7 +321,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [err, setErr] = useState('');
   const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState('newest');
+  const [sortBy, setSortBy] useState('newest');
   const [hasMore, setHasMore] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -482,8 +531,21 @@ export default function ListingsPageClient({ initialListings = [] }) {
     };
   }, [view, hasMore, loading, loadingMore, loadMore]);
 
+  // ✅ إضافة الأنماط العالمية إلى head
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const styleElement = document.createElement('style');
+    styleElement.textContent = globalStyles;
+    document.head.appendChild(styleElement);
+
+    return () => {
+      document.head.removeChild(styleElement);
+    };
+  }, []);
+
   return (
-    <div dir="rtl">
+    <div dir="rtl" className="listings-page">
       <div className="container" style={{ paddingTop: '20px', paddingBottom: '30px' }}>
         {/* العنوان الرئيسي */}
         <div 
@@ -752,7 +814,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
               {initialListings.length > 0 ? 'جاري تحديث القائمة' : 'جاري تحميل الإعلانات'}
             </div>
             
-            <style jsx>{`
+            <style>{`
               @keyframes spin {
                 to { transform: rotate(360deg); }
               }
@@ -1060,54 +1122,6 @@ export default function ListingsPageClient({ initialListings = [] }) {
           </div>
         )}
       </div>
-
-      {/* الأنماط العامة */}
-      <style jsx global>{`
-        .view-btn:hover:not(.active) {
-          background: #f1f5f9 !important;
-        }
-        
-        .search-input:focus {
-          outline: none;
-          border-color: #3b82f6 !important;
-          background: white !important;
-          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-        
-        select:focus {
-          outline: none;
-          border-color: #3b82f6 !important;
-          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-        
-        @media (max-width: 768px) {
-          .container {
-            padding-left: 12px;
-            padding-right: 12px;
-          }
-          
-          .card {
-            border-radius: 12px !important;
-          }
-        }
-        
-        @media (max-width: 640px) {
-          .view-btn {
-            padding: 6px 12px !important;
-            font-size: 13px !important;
-          }
-          
-          .search-input {
-            min-width: 100% !important;
-          }
-        }
-        
-        @media (max-width: 480px) {
-          .container {
-            padding-top: 12px !important;
-          }
-        }
-      `}</style>
     </div>
   );
 }
