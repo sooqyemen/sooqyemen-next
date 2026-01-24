@@ -7,14 +7,10 @@ import { useRates, toYER } from '@/lib/rates';
 /**
  * ✅ Price (مكوّن موحّد لعرض الأسعار في كل الصفحات)
  *
- * الفكرة:
- * - التخزين والفلترة والفرز: تعتمد على priceYER / currentBidYER (عملة معيارية واحدة)
- * - العرض: نُظهر العملة الأصلية (originalCurrency + originalPrice) كسعر أساسي إن كانت موجودة،
- *          ونُظهر التحويلات (YER/SAR/USD) حسب أسعار الصرف الحالية القادمة من Firestore (settings/rates).
- *
- * مهم:
- * - لتفادي اختلاف السعر بين "الكرت" و"صفحة التفاصيل": استخدم هذا المكوّن في الاثنين.
- * - يدعم المزايدات: إذا وجد currentBidYER يستخدمه للتحويلات (ولا يعيد حسابه من الأصل).
+ * التحسينات الجديدة:
+ * - إضافة maxConversions للتحكم بعدد التحويلات المعروضة
+ * - تحسين عرض التحويلات في وضع compact للبطاقات
+ * - عرض أنظف للأسعار بتنسيق مصغر
  */
 
 const FALLBACK_SAR_TO_YER = 425;   // 1 SAR = 425 YER
@@ -41,11 +37,11 @@ function parseMoney(val) {
   return isFinite(n) ? n : NaN;
 }
 
-function currencyLabel(cur) {
+function currencyLabel(cur, short = false) {
   const c = String(cur || 'YER').toUpperCase();
-  if (c === 'SAR') return 'ريال سعودي';
-  if (c === 'USD') return 'دولار';
-  return 'ريال يمني';
+  if (c === 'SAR') return short ? 'ر.س' : 'ريال سعودي';
+  if (c === 'USD') return short ? '$' : 'دولار';
+  return short ? 'ر.ي' : 'ريال يمني';
 }
 
 function getYerPerSAR(rates) {
@@ -60,19 +56,32 @@ function getYerPerUSD(rates) {
   return v > 0 ? v : FALLBACK_USD_TO_YER;
 }
 
-function formatAmount(cur, value) {
+function formatAmount(cur, value, short = false) {
   const c = String(cur || 'YER').toUpperCase();
   const n = Number(value);
   if (!isFinite(n) || n <= 0) return '—';
 
   if (c === 'YER') {
-    return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(n));
+    const rounded = Math.round(n);
+    if (short && rounded >= 1000000) {
+      return `${(rounded / 1000000).toFixed(1)}M`;
+    }
+    if (short && rounded >= 1000) {
+      return `${(rounded / 1000).toFixed(0)}K`;
+    }
+    return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(rounded);
   }
+  
   if (c === 'USD') {
-    return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+    const formatted = new Intl.NumberFormat('en-US', { 
+      minimumFractionDigits: 0, 
+      maximumFractionDigits: 0 
+    }).format(n);
+    return short ? formatted : formatted;
   }
+  
   // SAR وغيره
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(n);
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n);
 }
 
 /**
@@ -81,7 +90,8 @@ function formatAmount(cur, value) {
  * @param {any} props.originalPrice — fallback إذا ما مرّرت listing
  * @param {string} props.originalCurrency — fallback إذا ما مرّرت listing
  * @param {boolean} props.showConversions — إظهار التحويلات تحت السعر الأساسي
- * @param {'compact'|'hero'} props.variant — للتحكم في حجم العرض (كرت/تفاصيل)
+ * @param {number} props.maxConversions — عدد التحويلات المعروضة (افتراضي 2 للبطاقات)
+ * @param {'compact'|'grid'|'hero'} props.variant — للتحكم في حجم العرض
  */
 export default function Price({
   listing,
@@ -89,6 +99,7 @@ export default function Price({
   originalPrice,
   originalCurrency = 'YER',
   showConversions = true,
+  maxConversions = 2, // ⭐ جديد: تحديد عدد التحويلات (2 للبطاقات)
   variant = 'compact',
 }) {
   const rates = useRates();
@@ -115,8 +126,6 @@ export default function Price({
     const hasBid = Number(src.currentBidYER || 0) > 0;
 
     // ✅ YER "فعلي" للعرض والتحويل:
-    // - إن لم يكن مزادًا وكان الأصل متوفرًا: نحسبه من الأصل بأسعار الصرف الحالية
-    // - وإلا: نعتمد على المخزن
     let effectiveYER = storedYER;
     if (!hasBid && hasOrig) {
       const computed = Number(toYER(origNum, rawCur, rates));
@@ -131,9 +140,6 @@ export default function Price({
     const usd = yerPerUSD > 0 ? effectiveYER / yerPerUSD : null;
 
     // السعر الأساسي (Main):
-    // - إعلان عادي + لديه أصل: نعرض الأصل نفسه (مثلاً 1000 SAR)
-    // - مزاد: نعرض قيمة المزايدة بالعملة الأصلية إن كانت SAR/USD (محسوبة من YER)
-    // - بدون أصل: نعرض YER
     let mainCur = 'YER';
     let mainVal = effectiveYER;
 
@@ -148,34 +154,91 @@ export default function Price({
       }
     }
 
-    const main = { cur: mainCur, num: formatAmount(mainCur, mainVal), label: currencyLabel(mainCur) };
+    const main = { 
+      cur: mainCur, 
+      num: formatAmount(mainCur, mainVal), 
+      shortNum: formatAmount(mainCur, mainVal, true),
+      label: currencyLabel(mainCur),
+      shortLabel: currencyLabel(mainCur, true)
+    };
 
     const subs = [
-      { cur: 'YER', num: formatAmount('YER', effectiveYER), label: currencyLabel('YER') },
-      { cur: 'SAR', num: formatAmount('SAR', sar), label: currencyLabel('SAR') },
-      { cur: 'USD', num: formatAmount('USD', usd), label: currencyLabel('USD') },
+      { 
+        cur: 'YER', 
+        num: formatAmount('YER', effectiveYER), 
+        shortNum: formatAmount('YER', effectiveYER, true),
+        label: currencyLabel('YER'),
+        shortLabel: currencyLabel('YER', true)
+      },
+      { 
+        cur: 'SAR', 
+        num: formatAmount('SAR', sar), 
+        shortNum: formatAmount('SAR', sar, true),
+        label: currencyLabel('SAR'),
+        shortLabel: currencyLabel('SAR', true)
+      },
+      { 
+        cur: 'USD', 
+        num: formatAmount('USD', usd), 
+        shortNum: formatAmount('USD', usd, true),
+        label: currencyLabel('USD'),
+        shortLabel: currencyLabel('USD', true)
+      },
     ].filter((x) => x.cur !== mainCur);
 
     return { main, subs };
   }, [listing, priceYER, originalPrice, originalCurrency, rates]);
 
   const isHero = variant === 'hero';
+  const isGrid = variant === 'grid';
+
+  // عدد التحويلات المعروضة
+  const displayedSubs = showConversions ? view.subs.slice(0, maxConversions) : [];
 
   return (
-    <div className={`priceBox ${isHero ? 'hero' : 'compact'}`}>
+    <div className={`priceBox ${variant}`}>
+      {/* السعر الأساسي */}
       <div className="priceMain">
-        <span className="priceNum" dir="ltr">{view.main.num}</span>{' '}
-        <span className="priceLbl">{view.main.label}</span>
+        <span className="priceNum" dir="ltr">
+          {isGrid ? view.main.shortNum : view.main.num}
+        </span>{' '}
+        <span className="priceLbl">
+          {isGrid ? view.main.shortLabel : view.main.label}
+        </span>
       </div>
 
-      {showConversions && view.subs?.length ? (
+      {/* التحويلات */}
+      {displayedSubs.length > 0 ? (
         <div className="priceSub">
-          ≈ {view.subs.map((x) => `${x.num} ${x.label}`).join(' • ')}
+          {variant === 'hero' ? (
+            // عرض تفصيلي لصفحة التفاصيل
+            <div className="conversionsDetail">
+              {displayedSubs.map((x) => (
+                <div key={x.cur} className="conversionItem">
+                  <span className="approx">≈</span>
+                  <span className="conversionNum" dir="ltr">{x.num}</span>
+                  <span className="conversionLabel">{x.label}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            // عرض مضغوط للبطاقات
+            <div className="conversionsCompact">
+              <span className="approx">≈</span>
+              {displayedSubs.map((x, index) => (
+                <span key={x.cur}>
+                  <span className="conversionNum" dir="ltr">{x.shortNum}</span>
+                  <span className="conversionLabel">{x.shortLabel}</span>
+                  {index < displayedSubs.length - 1 && ' • '}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       ) : null}
 
       <style jsx>{`
-        .priceBox{
+        .priceBox {
           display: inline-flex;
           flex-direction: column;
           align-items: flex-end;
@@ -183,25 +246,116 @@ export default function Price({
           direction: rtl;
           text-align: right;
         }
-        .priceMain{
+        
+        .priceBox.compact {
+          gap: 1px;
+        }
+        
+        .priceBox.grid {
+          gap: 1px;
+        }
+        
+        .priceBox.hero {
+          gap: 4px;
+        }
+        
+        .priceMain {
           font-weight: 900;
           line-height: 1.15;
-          font-size: ${isHero ? '22px' : '14px'};
+          display: flex;
+          align-items: baseline;
+          gap: 2px;
         }
-        .priceNum{
+        
+        .priceBox.compact .priceMain {
+          font-size: 13px;
+        }
+        
+        .priceBox.grid .priceMain {
+          font-size: 14px;
+          color: #059669;
+        }
+        
+        .priceBox.hero .priceMain {
+          font-size: 22px;
+        }
+        
+        .priceNum {
           direction: ltr;
           unicode-bidi: isolate;
           font-variant-numeric: tabular-nums;
         }
-        .priceLbl{
-          font-weight: 500;
-          font-size: ${isHero ? '16px' : '12px'};
+        
+        .priceLbl {
+          font-weight: 600;
         }
-        .priceSub{
-          font-size: ${isHero ? '13px' : '11px'};
+        
+        .priceBox.compact .priceLbl {
+          font-size: 11px;
+        }
+        
+        .priceBox.grid .priceLbl {
+          font-size: 12px;
+        }
+        
+        .priceBox.hero .priceLbl {
+          font-size: 16px;
+        }
+        
+        .priceSub {
+          font-size: 11px;
           color: #64748b;
-          line-height: 1.25;
+          line-height: 1.2;
+        }
+        
+        .priceBox.compact .priceSub {
+          font-size: 10px;
+        }
+        
+        .priceBox.hero .priceSub {
+          font-size: 13px;
+        }
+        
+        .conversionsDetail {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+        }
+        
+        .conversionsCompact {
           white-space: nowrap;
+        }
+        
+        .conversionItem {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+        
+        .conversionNum {
+          direction: ltr;
+          unicode-bidi: isolate;
+          font-variant-numeric: tabular-nums;
+          font-weight: 600;
+        }
+        
+        .conversionLabel {
+          font-weight: 500;
+        }
+        
+        .priceBox.compact .conversionLabel,
+        .priceBox.grid .conversionLabel {
+          font-size: 9px;
+        }
+        
+        .approx {
+          margin-left: 2px;
+          margin-right: 3px;
+        }
+        
+        .priceBox.compact .approx,
+        .priceBox.grid .approx {
+          font-size: 9px;
         }
       `}</style>
     </div>
