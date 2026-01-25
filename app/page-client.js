@@ -1,83 +1,36 @@
+// app/listings/page-client.js
 'use client';
 
-import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import Image from 'next/image';
-import Price from '@/components/Price';
-import WebsiteJsonLd from '@/components/StructuredData/WebsiteJsonLd';
-import SkeletonLoader from '@/components/SkeletonLoader';
-import EmptyState from '@/components/EmptyState';
-import './home.css';
-import { loadFirebaseClient, scheduleIdleCallback } from '@/lib/firebaseLoader';
-import { normalizeCategoryKey } from '@/lib/categories';
 
-// تحميل ديناميكي للخريطة (تجنب SSR لمشاكل Leaflet)
+import Price from '@/components/Price';
+import ListingCard from '@/components/ListingCard';
+
+// Dynamically import the map component with SSR disabled
 const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
   ssr: false,
   loading: () => (
-    <div className="loading-card">
-      <div className="spinner"></div>
-      <p>جاري تحميل الخريطة...</p>
+    <div
+      style={{
+        padding: '40px 20px',
+        textAlign: 'center',
+        background: '#f8f9fa',
+        borderRadius: '12px',
+        border: '2px dashed #dee2e6',
+      }}
+    >
+      <div style={{ fontSize: '48px', marginBottom: '16px' }}>🗺️</div>
+      <div style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>
+        جاري تحميل الخريطة...
+      </div>
+      <div style={{ fontSize: '14px', color: '#6c757d' }}>يرجى الانتظار</div>
     </div>
   ),
 });
-
-// ==============================
-// ✅ Referral (Tracking)
-// ==============================
-const STORAGE_CODE = 'sooq_ref_code';
-const STORAGE_SEEN_AT = 'sooq_ref_seenAt';
-
-function normalizeRefCode(v) {
-  return String(v || '')
-    .trim()
-    .replace(/[^a-zA-Z0-9_-]/g, '')
-    .slice(0, 64);
-}
-
-// ✅ مفاتيح الأقسام الموحّدة
-const CATEGORY_CONFIG = [
-  { key: 'all', label: 'الكل', icon: '📋', href: '/' },
-  { key: 'cars', label: 'سيارات', icon: '🚗', href: '/cars' },
-  { key: 'realestate', label: 'عقارات', icon: '🏡', href: '/realestate' },
-  { key: 'phones', label: 'جوالات', icon: '📱', href: '/phones' },
-  { key: 'electronics', label: 'إلكترونيات', icon: '💻', href: '/electronics' },
-  { key: 'motorcycles', label: 'دراجات نارية', icon: '🏍️', href: '/motorcycles' },
-  { key: 'heavy_equipment', label: 'معدات ثقيلة', icon: '🚜', href: '/heavy_equipment' },
-  { key: 'solar', label: 'طاقة شمسية', icon: '☀️', href: '/solar' },
-  { key: 'networks', label: 'نت وشبكات', icon: '📡', href: '/networks' },
-  { key: 'maintenance', label: 'صيانة', icon: '🛠️', href: '/maintenance' },
-  { key: 'furniture', label: 'أثاث', icon: '🛋️', href: '/furniture' },
-  { key: 'home_tools', label: 'أدوات منزلية', icon: '🧹', href: '/home_tools' },
-  { key: 'clothes', label: 'ملابس', icon: '👕', href: '/clothes' },
-  { key: 'animals', label: 'حيوانات وطيور', icon: '🐑', href: '/animals' },
-  { key: 'jobs', label: 'وظائف', icon: '💼', href: '/jobs' },
-  { key: 'services', label: 'خدمات', icon: '🧰', href: '/services' },
-  { key: 'other', label: 'أخرى', icon: '📦', href: '/other' },
-];
-
-// ✅ ألوان الأقسام (تذييل الصفحة)
-const CATEGORY_STYLES = {
-  cars: { color: '#2563eb', bg: 'rgba(37,99,235,0.12)' },
-  realestate: { color: '#059669', bg: 'rgba(5,150,105,0.12)' },
-  phones: { color: '#7c3aed', bg: 'rgba(124,58,237,0.12)' },
-  electronics: { color: '#0ea5e9', bg: 'rgba(14,165,233,0.12)' },
-  motorcycles: { color: '#f97316', bg: 'rgba(249,115,22,0.12)' },
-  heavy_equipment: { color: '#92400e', bg: 'rgba(146,64,14,0.12)' },
-  solar: { color: '#eab308', bg: 'rgba(234,179,8,0.14)' },
-  networks: { color: '#06b6d4', bg: 'rgba(6,182,212,0.12)' },
-  maintenance: { color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
-  furniture: { color: '#a855f7', bg: 'rgba(168,85,247,0.12)' },
-  home_tools: { color: '#22c55e', bg: 'rgba(34,197,94,0.12)' },
-  clothes: { color: '#ec4899', bg: 'rgba(236,72,153,0.12)' },
-  animals: { color: '#84cc16', bg: 'rgba(132,204,22,0.12)' },
-  jobs: { color: '#3b82f6', bg: 'rgba(59,130,246,0.12)' },
-  services: { color: '#14b8a6', bg: 'rgba(20,184,166,0.12)' },
-  other: { color: '#64748b', bg: 'rgba(100,116,139,0.12)' },
-  all: { color: '#64748b', bg: 'rgba(100,116,139,0.10)' },
-};
 
 // ✅ Blur placeholder لتحسين تجربة تحميل الصور
 const BLUR_DATA_URL =
@@ -96,7 +49,6 @@ function formatRelative(ts) {
     const mins = Math.floor(diff / 60000);
     const hrs = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
-
     if (mins <= 1) return 'الآن';
     if (mins < 60) return `قبل ${mins} دقيقة`;
     if (hrs < 24) return `قبل ${hrs} ساعة`;
@@ -108,258 +60,232 @@ function formatRelative(ts) {
   }
 }
 
-// ✅ بطاقة شبكة (تم تحسين الصور)
-function GridListingCard({ listing, priority = false }) {
-  const img = (Array.isArray(listing.images) && listing.images[0]) || null;
-  const catKey = normalizeCategoryKey(listing.category);
-  const catObj = CATEGORY_CONFIG.find((c) => c.key === catKey);
-  const desc = safeText(listing.description).trim();
-  const shortDesc = desc.length > 60 ? `${desc.slice(0, 60)}...` : desc || '—';
-
-  return (
-    <Link href={`/listing/${listing.id}`} className="card-link focus-ring">
-      <div className="listing-card grid-card compact-card">
-        <div className="image-container compact-img">
-          {img ? (
-            <Image
-              src={img}
-              alt={listing.title || 'صورة الإعلان'}
-              className="listing-img"
-              width={420}
-              height={280}
-              priority={priority}
-              fetchPriority={priority ? 'high' : 'auto'}
-              placeholder="blur"
-              blurDataURL={BLUR_DATA_URL}
-              sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
-              style={{ objectFit: 'cover', width: '100%', height: '100%' }}
-              onError={(e) => {
-                e.target.style.display = 'none';
-                const container = e.currentTarget.closest('.image-container');
-                const fb = container?.querySelector('.img-fallback');
-                if (fb) fb.style.display = 'flex';
-              }}
-            />
-          ) : null}
-
-          <div className={`img-fallback ${img ? 'hidden' : ''}`}>{catObj?.icon || '🖼️'}</div>
-          {listing.auctionEnabled && <div className="auction-badge compact-badge">⚡ مزاد</div>}
-        </div>
-
-        <div className="card-content compact-content">
-          <div className="card-header compact-header">
-            <h3 className="listing-title compact-title" title={listing.title || ''}>
-              {listing.title || 'بدون عنوان'}
-            </h3>
-            {catObj && (
-              <span className="category-badge compact-cat">
-                <span className="category-icon">{catObj.icon}</span>
-              </span>
-            )}
-          </div>
-
-          <div className="listing-location compact-loc">
-            <span className="location-icon">📍</span>
-            <span className="loc-text">{listing.city || listing.locationLabel || 'غير محدد'}</span>
-          </div>
-
-          <p className="listing-description compact-desc">{shortDesc}</p>
-
-          <div className="price-section compact-price">
-            <Price
-              priceYER={listing.currentBidYER || listing.priceYER || 0}
-              originalPrice={listing.originalPrice}
-              originalCurrency={listing.originalCurrency}
-              showCurrency={true}
-            />
-          </div>
-
-          <div className="listing-footer compact-footer">
-            <span className="views-count">👁️ {Number(listing.views || 0).toLocaleString('ar-YE')}</span>
-            <span className="time-ago">⏱️ {formatRelative(listing.createdAt)}</span>
-          </div>
-        </div>
-      </div>
-    </Link>
-  );
-}
-
-// ✅ بطاقة قائمة (تم تحسين الصور)
-function ListListingCard({ listing, priority = false }) {
-  const img = (Array.isArray(listing.images) && listing.images[0]) || null;
-  const catKey = normalizeCategoryKey(listing.category);
-  const catObj = CATEGORY_CONFIG.find((c) => c.key === catKey);
+function ListingRow({ listing }) {
+  const img = (Array.isArray(listing.images) && listing.images[0]) || listing.image || null;
   const desc = safeText(listing.description).trim();
   const shortDesc = desc.length > 120 ? `${desc.slice(0, 120)}...` : desc || '—';
 
   return (
-    <Link href={`/listing/${listing.id}`} className="card-link focus-ring">
-      <div className="listing-card list-card compact-list">
-        <div className="list-image-container compact-list-img">
-          {img ? (
-            <Image
-              src={img}
-              alt={listing.title || 'صورة الإعلان'}
-              className="list-img"
-              width={140}
-              height={140}
-              priority={priority}
-              fetchPriority={priority ? 'high' : 'auto'}
-              placeholder="blur"
-              blurDataURL={BLUR_DATA_URL}
-              sizes="(max-width: 768px) 120px, 140px"
-              style={{ objectFit: 'cover', width: '100%', height: '100%' }}
-              onError={(e) => {
-                e.target.style.display = 'none';
-                const fb = e.target.parentElement?.querySelector('.list-img-fallback');
-                if (fb) fb.style.display = 'flex';
-              }}
-            />
-          ) : null}
+    <Link
+      href={`/listing/${listing.id}`}
+      className="card"
+      style={{
+        display: 'flex',
+        gap: '16px',
+        padding: '16px',
+        alignItems: 'center',
+        borderRadius: '12px',
+        border: '1px solid #e2e8f0',
+        marginBottom: '10px',
+        background: 'white',
+        textDecoration: 'none',
+        color: 'inherit',
+        transition: 'all 0.2s ease',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+        e.currentTarget.style.borderColor = '#3b82f6';
+        e.currentTarget.style.transform = 'translateY(-2px)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+        e.currentTarget.style.borderColor = '#e2e8f0';
+        e.currentTarget.style.transform = 'translateY(0)';
+      }}
+    >
+      {/* حاوية الصورة */}
+      <div
+        style={{
+          width: 140,
+          height: 140,
+          borderRadius: '10px',
+          overflow: 'hidden',
+          background: '#f8fafc',
+          flexShrink: 0,
+          position: 'relative',
+        }}
+      >
+        {img ? (
+          <Image
+            src={img}
+            alt={listing.title || 'صورة الإعلان'}
+            fill
+            placeholder="blur"
+            blurDataURL={BLUR_DATA_URL}
+            sizes="140px"
+            style={{ objectFit: 'cover' }}
+          />
+        ) : (
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '28px',
+              color: '#94a3b8',
+              background: '#f1f5f9',
+            }}
+          >
+            🖼️
+          </div>
+        )}
+      </div>
 
-          <div className={`list-img-fallback ${img ? 'hidden' : ''}`}>{catObj?.icon || '🖼️'}</div>
+      {/* محتوى البطاقة */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {/* العنوان والسعر في سطر واحد */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
+          <h3
+            style={{
+              margin: 0,
+              fontSize: '16px',
+              fontWeight: 'bold',
+              color: '#1e293b',
+              lineHeight: 1.3,
+              flex: 1,
+            }}
+          >
+            {listing.title || 'بدون عنوان'}
+          </h3>
+
+          <div style={{ flexShrink: 0 }}>
+            <Price listing={listing} variant="compact" maxConversions={2} />
+          </div>
         </div>
 
-        <div className="list-content compact-list-content">
-          <div className="list-header compact-list-header">
-            <div className="list-title-section">
-              <h3 className="list-title compact-title" title={listing.title || ''}>
-                {listing.title || 'بدون عنوان'}
-              </h3>
-              {catObj && (
-                <span className="list-category compact-list-cat">
-                  <span className="list-category-icon">{catObj.icon}</span>
-                  <span className="list-category-label">{catObj.label}</span>
-                </span>
-              )}
-            </div>
-
-            <div className="list-price-section compact-price">
-              <Price
-                priceYER={listing.currentBidYER || listing.priceYER || 0}
-                originalPrice={listing.originalPrice}
-                originalCurrency={listing.originalCurrency}
-                showCurrency={true}
-              />
-            </div>
+        {/* معلومات الموقع والتاريخ */}
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: '#64748b' }}>
+            <span>📍</span>
+            <span>{listing.city || listing.locationLabel || 'غير محدد'}</span>
           </div>
 
-          <div className="list-location compact-loc">
-            <span className="location-icon">📍</span>
-            <span className="loc-text">{listing.city || listing.locationLabel || 'غير محدد'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: '#64748b' }}>
+            <span>⏱️</span>
+            <span>{formatRelative(listing.createdAt)}</span>
           </div>
 
-          <p className="list-description compact-desc">{shortDesc}</p>
-
-          <div className="list-footer compact-footer">
-            <span className="list-views">👁️ {Number(listing.views || 0).toLocaleString('ar-YE')} مشاهدة</span>
-            <span className="list-time">⏱️ {formatRelative(listing.createdAt)}</span>
-            {listing.auctionEnabled && <span className="list-auction">⚡ مزاد نشط</span>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: '#64748b' }}>
+            <span>👁️</span>
+            <span>{Number(listing.views || 0).toLocaleString('ar-YE')}</span>
           </div>
+
+          {listing.auctionEnabled && (
+            <span
+              style={{
+                padding: '4px 10px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                color: 'white',
+                fontSize: '12px',
+                fontWeight: '600',
+              }}
+            >
+              ⚡ مزاد نشط
+            </span>
+          )}
+        </div>
+
+        {/* الوصف المختصر */}
+        <p
+          style={{
+            fontSize: '14px',
+            color: '#475569',
+            lineHeight: 1.5,
+            margin: 0,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}
+        >
+          {shortDesc}
+        </p>
+
+        {/* فئة الإعلان */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+          <span
+            style={{
+              padding: '4px 12px',
+              borderRadius: '16px',
+              background: '#f1f5f9',
+              color: '#475569',
+              fontSize: '13px',
+              fontWeight: '600',
+            }}
+          >
+            {listing.categoryName || listing.category || 'قسم'}
+          </span>
+
+          <div style={{ fontSize: '13px', color: '#64748b', fontWeight: '500' }}>اضغط للتفاصيل →</div>
         </div>
       </div>
     </Link>
   );
 }
 
-// ✅ شريط البحث
-function SearchBar({ search, setSearch, suggestions }) {
-  const [open, setOpen] = useState(false);
-  const searchRef = useRef(null);
-  const inputRef = useRef(null);
+// خيارات الترتيب
+const SORT_OPTIONS = [
+  { key: 'newest', label: 'الأحدث', icon: '🕒', field: 'createdAt', order: 'desc' },
+  { key: 'price_low', label: 'الأقل سعراً', icon: '💰', field: 'priceYER', order: 'asc' },
+  { key: 'price_high', label: 'الأعلى سعراً', icon: '💰', field: 'priceYER', order: 'desc' },
+  { key: 'most_viewed', label: 'الأكثر مشاهدة', icon: '👁️', field: 'views', order: 'desc' },
+  { key: 'featured', label: 'المميز أولاً', icon: '⭐', field: 'featured', order: 'desc' },
+];
 
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (searchRef.current && !searchRef.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleSearch = () => {
-    if (search.trim()) setOpen(false);
-  };
-
-  const handleSuggestionClick = (suggestion) => {
-    setSearch(suggestion);
-    setOpen(false);
-    inputRef.current?.focus();
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') handleSearch();
-    else if (e.key === 'Escape') setOpen(false);
-  };
-
-  return (
-    <div className="search-wrapper" ref={searchRef}>
-      <div className="search-container">
-        <div className="search-input-wrapper">
-          <span className="search-icon" aria-hidden="true">
-            🔍
-          </span>
-          <input
-            ref={inputRef}
-            className="search-input focus-ring"
-            type="search"
-            value={search}
-            onChange={(e) => {
-              const v = e.target.value;
-              setSearch(v);
-              setOpen(!!v.trim());
-            }}
-            onKeyDown={handleKeyDown}
-            onFocus={() => setOpen(!!search.trim())}
-            placeholder="ابحث عن سيارات، عقارات، جوالات..."
-            aria-label="بحث في الإعلانات"
-          />
-        </div>
-        <button className="search-button focus-ring" type="button" onClick={handleSearch} aria-label="بحث">
-          بحث
-        </button>
-      </div>
-
-      {open && suggestions.length > 0 && (
-        <div className="suggestions-dropdown" role="listbox">
-          {suggestions.map((s, i) => (
-            <button
-              key={i}
-              className="suggestion-item focus-ring"
-              type="button"
-              onClick={() => handleSuggestionClick(s)}
-              role="option"
-              aria-selected={search === s}
-            >
-              <span className="suggestion-icon" aria-hidden="true">
-                🔍
-              </span>
-              <span className="suggestion-text">{s}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function HomePageClient({ initialListings = [] }) {
-  const router = useRouter();
-
-  // ✅ Pagination
+export default function ListingsPageClient({ initialListings = [] }) {
   const PAGE_SIZE = 24;
-  const lastDocRef = useRef(null);
-  const loadMoreSentinelRef = useRef(null);
-  const aliveRef = useRef(true);
 
+  const [view, setView] = useState('grid');
   const [listings, setListings] = useState(initialListings);
   const [loading, setLoading] = useState(initialListings.length === 0);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [err, setErr] = useState('');
+  const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
   const [hasMore, setHasMore] = useState(true);
 
-  const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [viewMode, setViewMode] = useState('grid');
+  // ✅ الفلاتر: في الجوال BottomSheet - في الديسكتوب Panel
+  const [showFilters, setShowFilters] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  const searchParams = useSearchParams();
+  const lastDocRef = useRef(null);
+  const loadMoreRef = useRef(null);
+  const aliveRef = useRef(true);
+
+  // Detect mobile
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 640px)');
+
+    const update = () => setIsMobile(!!mq.matches);
+    update();
+
+    // Safari/old
+    if (mq.addEventListener) mq.addEventListener('change', update);
+    else mq.addListener(update);
+
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener('change', update);
+      else mq.removeListener(update);
+    };
+  }, []);
+
+  // Lock body scroll when bottom sheet open
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (isMobile && showFilters) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prev || '';
+      };
+    }
+  }, [isMobile, showFilters]);
 
   useEffect(() => {
     aliveRef.current = true;
@@ -368,104 +294,117 @@ export default function HomePageClient({ initialListings = [] }) {
     };
   }, []);
 
+  // ✅ افتح الخريطة مباشرة عبر: /listings?view=map (أو list/grid)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    let fromUrl = '';
-    try {
-      const params = new URLSearchParams(window.location.search);
-      fromUrl = normalizeRefCode(params.get('ref'));
-    } catch {
-      fromUrl = '';
+    const v = String(searchParams?.get('view') || '').toLowerCase();
+    if (v === 'map' || v === 'list' || v === 'grid') {
+      setView((prev) => (prev === v ? prev : v));
     }
 
-    let stored = '';
-    try {
-      stored = window.localStorage.getItem(STORAGE_CODE) || '';
-    } catch {}
-
-    const code = fromUrl || normalizeRefCode(stored);
-    if (code) {
-      try {
-        window.localStorage.setItem(STORAGE_CODE, code);
-        if (fromUrl) window.localStorage.setItem(STORAGE_SEEN_AT, String(Date.now()));
-      } catch {}
+    const s = searchParams?.get('sort');
+    if (s && SORT_OPTIONS.some((opt) => opt.key === s)) {
+      setSortBy(s);
     }
-    if (fromUrl) {
-      try {
-        const u = new URL(window.location.href);
-        u.searchParams.delete('ref');
-        window.history.replaceState({}, '', u.pathname + u.search + u.hash);
-      } catch {}
+  }, [searchParams]);
+
+  // ✅ تحميل أول صفحة من Firestore فقط لو SSR فاضي
+  useEffect(() => {
+    if (initialListings && initialListings.length > 0) {
+      setListings(initialListings);
+      setLoading(false);
+      setErr('');
+      setHasMore(initialListings.length === PAGE_SIZE);
+      lastDocRef.current = null;
+      return;
     }
-  }, []);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const saved = window.localStorage.getItem('preferredViewMode');
-    if (saved === 'grid' || saved === 'list' || saved === 'map') setViewMode(saved);
-  }, []);
-
-  // ✅ جلب أول صفحة (مرة واحدة) بدل onSnapshot + limit(100)
-  useEffect(() => {
     let cancelled = false;
 
-    const fetchFirstPage = async () => {
-      if (initialListings.length > 0) {
-        setLoading(false);
-        setError('');
-        setHasMore(true);
-        return;
-      }
-
+    const fetchFirst = async () => {
       setLoading(true);
-      setError('');
+      setErr('');
 
       try {
-        const { db } = await loadFirebaseClient();
+        const { db } = await import('@/lib/firebaseClient');
         if (cancelled) return;
 
-        const q = db.collection('listings').orderBy('createdAt', 'desc').limit(PAGE_SIZE);
-        const snap = await q.get();
+        const snap = await db.collection('listings').orderBy('createdAt', 'desc').limit(PAGE_SIZE).get();
 
-        const data = snap.docs
+        const items = snap.docs
           .map((doc) => ({ id: doc.id, ...doc.data() }))
-          .filter((listing) => listing.isActive !== false && listing.hidden !== true);
+          .filter((l) => l.isActive !== false && l.hidden !== true);
 
         if (!aliveRef.current || cancelled) return;
 
-        setListings(data);
+        setListings(items);
         lastDocRef.current = snap.docs[snap.docs.length - 1] || null;
         setHasMore(snap.docs.length === PAGE_SIZE);
         setLoading(false);
       } catch (e) {
+        console.error('[ListingsPageClient] fetchFirst error:', e);
         if (!aliveRef.current || cancelled) return;
-        setError(e?.message || 'حدث خطأ في جلب الإعلانات');
+        setErr('تعذر تحميل الإعلانات. يرجى المحاولة لاحقاً.');
         setLoading(false);
         setHasMore(false);
       }
     };
 
-    const cancelIdle = scheduleIdleCallback(fetchFirstPage);
+    fetchFirst();
 
     return () => {
       cancelled = true;
-      cancelIdle?.();
     };
-  }, [initialListings.length]);
+  }, [initialListings, PAGE_SIZE]);
 
-  // ✅ تحميل المزيد (Pagination)
-  const fetchMore = useCallback(async () => {
+  // ✅ فلترة وترتيب الإعلانات
+  const filteredAndSorted = useMemo(() => {
+    const filtered = search.trim()
+      ? listings.filter((l) => {
+          const q = search.toLowerCase();
+          const title = safeText(l.title).toLowerCase();
+          const city = safeText(l.city).toLowerCase();
+          const desc = safeText(l.description).toLowerCase();
+          const loc = safeText(l.locationLabel).toLowerCase();
+          return title.includes(q) || city.includes(q) || desc.includes(q) || loc.includes(q);
+        })
+      : [...listings];
+
+    const sortOption = SORT_OPTIONS.find((opt) => opt.key === sortBy) || SORT_OPTIONS[0];
+
+    return filtered.sort((a, b) => {
+      let valA = a[sortOption.field];
+      let valB = b[sortOption.field];
+
+      if (sortOption.field === 'featured') {
+        valA = a.featured ? 1 : 0;
+        valB = b.featured ? 1 : 0;
+      }
+
+      if (sortOption.field === 'priceYER') {
+        valA = a.currentBidYER || a.priceYER || 0;
+        valB = b.currentBidYER || b.priceYER || 0;
+      }
+
+      if (sortOption.order === 'desc') {
+        return (valB || 0) - (valA || 0);
+      } else {
+        return (valA || 0) - (valB || 0);
+      }
+    });
+  }, [listings, search, sortBy]);
+
+  const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
 
     setLoadingMore(true);
-    setError('');
+    setErr('');
 
     try {
-      const { db } = await loadFirebaseClient();
+      const { db } = await import('@/lib/firebaseClient');
 
       if (!lastDocRef.current) {
-        const firstSnap = await db.collection('listings').orderBy('createdAt', 'desc').limit(PAGE_SIZE).get();
-        lastDocRef.current = firstSnap.docs[firstSnap.docs.length - 1] || null;
+        const snap0 = await db.collection('listings').orderBy('createdAt', 'desc').limit(PAGE_SIZE).get();
+        lastDocRef.current = snap0.docs[snap0.docs.length - 1] || null;
 
         if (!lastDocRef.current) {
           if (!aliveRef.current) return;
@@ -475,549 +414,695 @@ export default function HomePageClient({ initialListings = [] }) {
         }
       }
 
-      const lastDoc = lastDocRef.current;
       const snap = await db
         .collection('listings')
         .orderBy('createdAt', 'desc')
-        .startAfter(lastDoc)
+        .startAfter(lastDocRef.current)
         .limit(PAGE_SIZE)
         .get();
 
-      const data = snap.docs
+      const items = snap.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }))
-        .filter((listing) => listing.isActive !== false && listing.hidden !== true);
+        .filter((l) => l.isActive !== false && l.hidden !== true);
 
       if (!aliveRef.current) return;
 
       setListings((prev) => {
         const existing = new Set(prev.map((x) => x.id));
-        const merged = [...prev, ...data.filter((x) => !existing.has(x.id))];
-        return merged;
+        return [...prev, ...items.filter((x) => !existing.has(x.id))];
       });
 
       lastDocRef.current = snap.docs[snap.docs.length - 1] || lastDocRef.current;
       setHasMore(snap.docs.length === PAGE_SIZE);
       setLoadingMore(false);
     } catch (e) {
+      console.error('[ListingsPageClient] loadMore error:', e);
       if (!aliveRef.current) return;
-      setError(e?.message || 'فشل تحميل المزيد');
+      setErr('تعذر تحميل المزيد. حاول مرة أخرى.');
       setLoadingMore(false);
     }
-  }, [PAGE_SIZE, hasMore, loadingMore]);
+  }, [hasMore, loadingMore, PAGE_SIZE]);
 
-  // ✅ تحميل تلقائي عند النزول (نوقفه في وضع الخريطة حتى لا تثقل markers)
+  // ✅ Infinite Scroll: تحميل تلقائي عند الوصول لنهاية القائمة
   useEffect(() => {
-    const el = loadMoreSentinelRef.current;
+    if (view === 'map') return;
+
+    const el = loadMoreRef.current;
     if (!el) return;
+
     if (!hasMore || loading || loadingMore) return;
-    if (viewMode === 'map') return;
 
     const obs = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting) fetchMore();
+        const first = entries[0];
+        if (!first?.isIntersecting) return;
+        if (loadingMore || !hasMore) return;
+        loadMore();
       },
-      { root: null, rootMargin: '900px 0px', threshold: 0 }
+      {
+        root: null,
+        rootMargin: '800px 0px',
+        threshold: 0,
+      }
     );
 
     obs.observe(el);
+
     return () => {
       try {
         obs.disconnect();
       } catch {}
     };
-  }, [fetchMore, hasMore, loading, loadingMore, viewMode]);
+  }, [view, hasMore, loading, loadingMore, loadMore]);
 
-  const handleCategoryClick = (category) => {
-    if (!category) return;
-    if (category.key === 'all') {
-      setSelectedCategory('all');
-      return;
-    }
-    if (category.href) {
-      router.push(category.href);
-      return;
-    }
-    router.push(`/${category.key}`);
+  const openFilters = () => setShowFilters(true);
+  const closeFilters = () => setShowFilters(false);
+
+  const resetFilters = () => {
+    setSearch('');
+    setSortBy('newest');
   };
 
-  const suggestions = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return [];
-    const results = new Set();
-    const allListings = listings.slice(0, 50);
-    allListings.forEach((l) => {
-      const title = safeText(l.title).toLowerCase();
-      if (title.includes(q)) results.add(l.title);
-    });
-    allListings.forEach((l) => {
-      const city = safeText(l.city).toLowerCase();
-      if (city.includes(q)) results.add(l.city);
-    });
-    CATEGORY_CONFIG.forEach((cat) => {
-      if (cat.label.toLowerCase().includes(q) || cat.key.includes(q)) results.add(cat.label);
-    });
-    return Array.from(results).slice(0, 8);
-  }, [search, listings]);
+  // ✅ Bottom Sheet (Mobile)
+  const MobileFiltersSheet = () => {
+    if (!isMobile || !showFilters) return null;
+    return (
+      <div className="mSheetWrap" role="dialog" aria-modal="true" aria-label="فلاتر الإعلانات">
+        <div className="mSheetBackdrop" onClick={closeFilters} />
+        <div className="mSheet">
+          <div className="mSheetHeader">
+            <div style={{ fontWeight: 1000, fontSize: 16 }}>⚙️ الفلاتر</div>
+            <button className="mSheetClose" onClick={closeFilters}>
+              ✕
+            </button>
+          </div>
 
-  // ✅ عدّاد الأقسام (يعتمد على الإعلانات المحمّلة في الصفحة الرئيسية)
-  const categoryCounts = useMemo(() => {
-    const out = {};
-    for (const l of listings) {
-      const k = normalizeCategoryKey(l.category) || 'other';
-      out[k] = (out[k] || 0) + 1;
-    }
-    out.all = listings.length;
-    return out;
-  }, [listings]);
+          <div className="mSheetBody">
+            <div>
+              <div className="mLabel">ترتيب حسب</div>
+              <select className="mSelect" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.key} value={opt.key}>
+                    {opt.icon} {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-  const filteredListings = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const catSelected = normalizeCategoryKey(selectedCategory || 'all');
-
-    return listings.filter((listing) => {
-      const listingCat = normalizeCategoryKey(listing.category);
-      if (catSelected !== 'all' && listingCat !== catSelected) return false;
-      if (!q) return true;
-      const title = safeText(listing.title).toLowerCase();
-      const city = safeText(listing.city).toLowerCase();
-      const locationLabel = safeText(listing.locationLabel).toLowerCase();
-      const description = safeText(listing.description).toLowerCase();
-      return (
-        title.includes(q) ||
-        city.includes(q) ||
-        locationLabel.includes(q) ||
-        description.includes(q) ||
-        listingCat.includes(q)
-      );
-    });
-  }, [listings, search, selectedCategory]);
-
-  const handleViewModeChange = (mode) => {
-    setViewMode(mode);
-    if (typeof window !== 'undefined') localStorage.setItem('preferredViewMode', mode);
+            <div className="mActions">
+              <button className="mBtn" onClick={resetFilters}>
+                🗑️ مسح الكل
+              </button>
+              <button className="mBtnPrimary" onClick={closeFilters}>
+                ✅ تطبيق
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
-
-  const handleRetry = () => window.location.reload();
 
   return (
-    <>
-      <WebsiteJsonLd />
-      <div className="home-page" dir="rtl">
-        <section className="hero-section" aria-label="القسم الرئيسي">
-          <div className="hero-container">
-            <div className="hero-content">
-              <h1 className="hero-title">سوق اليمن</h1>
-              <p className="hero-subtitle">أكبر منصة للإعلانات والمزادات في اليمن - بيع وشراء كل شيء</p>
-              <SearchBar search={search} setSearch={setSearch} suggestions={suggestions} />
-            </div>
+    <div dir="rtl" className="listings-page">
+      <div className="container" style={{ paddingTop: '20px', paddingBottom: '30px' }}>
+        {/* العنوان الرئيسي */}
+        <div
+          className="card"
+          style={{
+            padding: '20px',
+            marginBottom: '16px',
+            background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+            color: 'white',
+            borderRadius: '16px',
+            border: 'none',
+          }}
+        >
+          <div style={{ fontWeight: '900', fontSize: '24px', marginBottom: '6px' }}>جميع الإعلانات</div>
+          <div style={{ fontSize: '15px', opacity: 0.9 }}>
+            تصفّح {listings.length.toLocaleString('ar-YE')} إعلان مع بحث وعرض شبكة/قائمة/خريطة
           </div>
-        </section>
+        </div>
 
-        <main className="main-content" role="main">
-          <div className="container">
-            <div className="categories-container" aria-label="أقسام الإعلانات">
-              <div className="categories-scroll" role="tablist">
-                {CATEGORY_CONFIG.map((category) => {
-                  const isActive = selectedCategory === category.key;
-                  return (
-                    <button
-                      key={category.key}
-                      type="button"
-                      className={`category-button focus-ring ${isActive ? 'active' : ''}`}
-                      onClick={() => handleCategoryClick(category)}
-                      role="tab"
-                      aria-selected={isActive}
-                    >
-                      <span className="category-button-icon" aria-hidden="true">
-                        {category.icon}
-                      </span>
-                      <span className="category-button-label">{category.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+        {/* شريط الأدوات */}
+        <div
+          className="card"
+          style={{
+            padding: '16px',
+            marginBottom: '20px',
+            borderRadius: '14px',
+            border: '1px solid #e2e8f0',
+            background: 'white',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {/* Row: View buttons + Filters */}
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              {/* View group */}
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '8px',
+                  background: '#f8fafc',
+                  padding: '6px',
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0',
+                  flex: 1,
+                  minWidth: 220,
+                  justifyContent: 'space-between',
+                }}
+              >
+                <button
+                  className={`view-btn ${view === 'grid' ? 'active' : ''}`}
+                  onClick={() => setView('grid')}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: view === 'grid' ? '#3b82f6' : 'transparent',
+                    color: view === 'grid' ? 'white' : '#475569',
+                    fontWeight: '900',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                    flex: 1,
+                  }}
+                >
+                  <span className="vIcon">◼️</span>
+                  <span className="vLabel">شبكة</span>
+                </button>
 
-            <div className="toolbar">
-              <div className="toolbar-left">
-                <div className="view-toggle" role="group" aria-label="طريقة العرض">
-                  <button
-                    type="button"
-                    className={`view-toggle-button focus-ring ${viewMode === 'grid' ? 'active' : ''}`}
-                    onClick={() => handleViewModeChange('grid')}
-                    aria-pressed={viewMode === 'grid'}
-                    title="عرض شبكي"
-                  >
-                    <span className="view-toggle-icon" aria-hidden="true">
-                      ◼️◼️
-                    </span>
-                    <span className="view-toggle-label">شبكة</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`view-toggle-button focus-ring ${viewMode === 'list' ? 'active' : ''}`}
-                    onClick={() => handleViewModeChange('list')}
-                    aria-pressed={viewMode === 'list'}
-                    title="عرض قائمة"
-                  >
-                    <span className="view-toggle-icon" aria-hidden="true">
-                      ☰
-                    </span>
-                    <span className="view-toggle-label">قائمة</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`view-toggle-button focus-ring ${viewMode === 'map' ? 'active' : ''}`}
-                    onClick={() => handleViewModeChange('map')}
-                    aria-pressed={viewMode === 'map'}
-                    title="عرض خريطة"
-                  >
-                    <span className="view-toggle-icon" aria-hidden="true">
-                      🗺️
-                    </span>
-                    <span className="view-toggle-label">خريطة</span>
-                  </button>
-                </div>
-              </div>
-            </div>
+                <button
+                  className={`view-btn ${view === 'list' ? 'active' : ''}`}
+                  onClick={() => setView('list')}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: view === 'list' ? '#3b82f6' : 'transparent',
+                    color: view === 'list' ? 'white' : '#475569',
+                    fontWeight: '900',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                    flex: 1,
+                  }}
+                >
+                  <span className="vIcon">☰</span>
+                  <span className="vLabel">قائمة</span>
+                </button>
 
-            {loading ? (
-              <SkeletonLoader count={viewMode === 'list' ? 4 : 6} type={viewMode === 'grid' ? 'grid' : 'list'} />
-            ) : error ? (
-              <div className="error-retry-wrapper">
-                <EmptyState type="error" icon="⚠️" title="حدث خطأ" message={error} showAction={false} />
-                <button className="error-retry-button focus-ring" onClick={handleRetry} aria-label="إعادة المحاولة">
-                  🔄 إعادة المحاولة
+                <button
+                  className={`view-btn ${view === 'map' ? 'active' : ''}`}
+                  onClick={() => setView('map')}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: view === 'map' ? '#3b82f6' : 'transparent',
+                    color: view === 'map' ? 'white' : '#475569',
+                    fontWeight: '900',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                    flex: 1,
+                  }}
+                >
+                  <span className="vIcon">🗺️</span>
+                  <span className="vLabel">خريطة</span>
                 </button>
               </div>
-            ) : filteredListings.length === 0 ? (
-              <EmptyState
-                icon="📭"
-                title="لا توجد إعلانات"
-                message={
-                  search || selectedCategory !== 'all'
-                    ? 'لا توجد إعلانات مطابقة لبحثك حالياً.'
-                    : 'لا توجد إعلانات منشورة حالياً.'
-                }
-                actionText="➕ أضف أول إعلان"
-                actionUrl="/add"
+
+              {/* Filters button */}
+              <button
+                className="filters-btn"
+                onClick={() => (isMobile ? openFilters() : setShowFilters((s) => !s))}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0',
+                  background: showFilters ? '#3b82f6' : 'white',
+                  color: showFilters ? 'white' : '#475569',
+                  fontWeight: '900',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s ease',
+                  minWidth: 130,
+                }}
+              >
+                ⚙️ <span>{showFilters ? 'إخفاء' : 'الفلاتر'}</span>
+              </button>
+            </div>
+
+            {/* Search */}
+            <div style={{ width: '100%', position: 'relative' }}>
+              <input
+                className="search-input"
+                style={{
+                  width: '100%',
+                  padding: '12px 16px 12px 44px',
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0',
+                  fontSize: '15px',
+                  background: '#f8fafc',
+                  transition: 'all 0.2s ease',
+                }}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="🔍 ابحث في العناوين، الوصف، أو المدينة..."
               />
-            ) : viewMode === 'map' ? (
-              <div className="map-view">
-                <HomeMapView listings={filteredListings} />
+              <div
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  fontSize: '18px',
+                  opacity: 0.6,
+                }}
+              >
+                🔍
               </div>
-            ) : viewMode === 'grid' ? (
-              <>
-                <div className="grid-view compact-grid" role="list" aria-label="قائمة الإعلانات">
-                  {filteredListings.map((listing, index) => (
-                    <GridListingCard key={listing.id} listing={listing} priority={index === 0} />
-                  ))}
-                </div>
+            </div>
 
-                <div ref={loadMoreSentinelRef} style={{ height: 1 }} />
+            {/* Desktop Filters Panel */}
+            {!isMobile && showFilters && (
+              <div
+                style={{
+                  padding: '14px',
+                  background: '#f8fafc',
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0',
+                }}
+              >
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'end', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '220px' }}>
+                    <label style={{ fontSize: '13px', fontWeight: '900', color: '#475569' }}>ترتيب حسب:</label>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value)}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid #e2e8f0',
+                        fontSize: '14px',
+                        background: 'white',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {SORT_OPTIONS.map((opt) => (
+                        <option key={opt.key} value={opt.key}>
+                          {opt.icon} {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center' }}>
-                  {loadingMore ? (
-                    <div className="muted" style={{ padding: 10 }}>
-                      ...جاري تحميل المزيد
-                    </div>
-                  ) : hasMore ? (
-                    <div className="muted" style={{ padding: 10 }}>
-                      انزل لأسفل لتحميل المزيد
-                    </div>
-                  ) : (
-                    <div className="muted" style={{ padding: 10 }}>
-                      لا يوجد المزيد
-                    </div>
-                  )}
+                  <button
+                    onClick={resetFilters}
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid #e2e8f0',
+                      background: 'white',
+                      color: '#475569',
+                      fontWeight: '900',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    🗑️ مسح الكل
+                  </button>
                 </div>
-              </>
-            ) : (
-              <>
-                <div className="list-view compact-list-view" role="list" aria-label="قائمة الإعلانات">
-                  {filteredListings.map((listing, index) => (
-                    <ListListingCard key={listing.id} listing={listing} priority={index === 0} />
-                  ))}
-                </div>
-
-                <div ref={loadMoreSentinelRef} style={{ height: 1 }} />
-
-                <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center' }}>
-                  {loadingMore ? (
-                    <div className="muted" style={{ padding: 10 }}>
-                      ...جاري تحميل المزيد
-                    </div>
-                  ) : hasMore ? (
-                    <div className="muted" style={{ padding: 10 }}>
-                      انزل لأسفل لتحميل المزيد
-                    </div>
-                  ) : (
-                    <div className="muted" style={{ padding: 10 }}>
-                      لا يوجد المزيد
-                    </div>
-                  )}
-                </div>
-              </>
+              </div>
             )}
 
-            {/* ✅ تذييل الأقسام */}
-            {!loading && !error && (
-              <footer className="homeCatsFooter" aria-label="تذييل الأقسام">
-                <div className="homeCatsFooterHead">
-                  <div className="homeCatsFooterTitle">تصفّح الأقسام</div>
-                  <div className="homeCatsFooterHint">اضغط على أي قسم للانتقال له</div>
-                </div>
+            {/* Count */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                paddingTop: '10px',
+                borderTop: '1px solid #f1f5f9',
+                flexWrap: 'wrap',
+                gap: '8px',
+              }}
+            >
+              <div style={{ fontSize: '14px', color: '#64748b' }}>
+                <span style={{ fontWeight: '900', color: '#3b82f6' }}>
+                  {filteredAndSorted.length.toLocaleString('ar-YE')}
+                </span>{' '}
+                إعلان متاح
+              </div>
 
-                <div className="homeCatsFooterGrid">
-                  {CATEGORY_CONFIG.filter((c) => c.key !== 'all').map((cat) => {
-                    const st = CATEGORY_STYLES[cat.key] || CATEGORY_STYLES.other;
-                    const count = Number(categoryCounts[cat.key] || 0);
-
-                    return (
-                      <button
-                        key={cat.key}
-                        type="button"
-                        className="homeCatsChip focus-ring"
-                        onClick={() => handleCategoryClick(cat)}
-                        style={{ borderColor: st.color, background: st.bg }}
-                        title={cat.label}
-                      >
-                        <span className="homeCatsIcon" style={{ background: st.color }} aria-hidden="true">
-                          {cat.icon}
-                        </span>
-                        <span className="homeCatsLabel">{cat.label}</span>
-                        <span className="homeCatsCount">{count}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </footer>
-            )}
+              <div style={{ fontSize: '13px', color: '#64748b' }}>
+                {search && (
+                  <span>
+                    نتائج البحث عن: "<strong>{search}</strong>"
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-        </main>
+        </div>
 
-        <style jsx>{`
-          .hidden {
-            display: none !important;
-          }
+        {/* Mobile Bottom Sheet */}
+        <MobileFiltersSheet />
 
-          /* ===== Map view ===== */
-          .map-view {
-            height: 500px;
-            border-radius: 12px;
-            overflow: hidden;
-            margin-bottom: 2.5rem;
-          }
-          .list-category-label {
-            margin-right: 4px;
-          }
-          .view-toggle-label {
-            font-size: 0.875rem;
-          }
+        {/* المحتوى الرئيسي */}
+        {loading ? (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '60px 20px',
+              background: 'white',
+              borderRadius: '12px',
+              border: '1px solid #e2e8f0',
+            }}
+          >
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                border: '4px solid #f1f5f9',
+                borderTopColor: '#3b82f6',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+                marginBottom: '16px',
+              }}
+            ></div>
+            <div style={{ fontWeight: '900', fontSize: '16px', marginBottom: '8px', color: '#1e293b' }}>
+              جاري تحميل الإعلانات...
+            </div>
+            <div style={{ fontSize: '14px', color: '#64748b' }}>
+              {initialListings.length > 0 ? 'جاري تحديث القائمة' : 'جاري تحميل الإعلانات'}
+            </div>
 
-          /* ===== Compact Grid/List ===== */
-          .compact-grid {
-            display: grid;
-            gap: 10px;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-          @media (min-width: 768px) {
-            .compact-grid {
-              grid-template-columns: repeat(3, minmax(0, 1fr));
-              gap: 12px;
-            }
-          }
-          @media (min-width: 1100px) {
-            .compact-grid {
-              grid-template-columns: repeat(4, minmax(0, 1fr));
-            }
-          }
+            <style>{`
+              @keyframes spin {
+                to { transform: rotate(360deg); }
+              }
+            `}</style>
+          </div>
+        ) : err && listings.length === 0 ? (
+          <div
+            className="card"
+            style={{
+              padding: '24px',
+              border: '1px solid rgba(220,38,38,0.2)',
+              background: '#fef2f2',
+              borderRadius: '12px',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+            <div style={{ fontWeight: '900', fontSize: '18px', color: '#991b1b', marginBottom: '8px' }}>حدث خطأ</div>
+            <div style={{ fontSize: '15px', color: '#64748b', marginBottom: '16px' }}>{err}</div>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                padding: '10px 20px',
+                borderRadius: '10px',
+                border: 'none',
+                background: '#3b82f6',
+                color: 'white',
+                fontWeight: '900',
+                fontSize: '14px',
+                cursor: 'pointer',
+              }}
+            >
+              🔄 إعادة المحاولة
+            </button>
+          </div>
+        ) : filteredAndSorted.length === 0 ? (
+          <div
+            className="card"
+            style={{
+              padding: '40px 20px',
+              textAlign: 'center',
+              background: 'white',
+              borderRadius: '12px',
+              border: '1px solid #e2e8f0',
+            }}
+          >
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
+            <div style={{ fontWeight: '900', fontSize: '18px', marginBottom: '8px' }}>لا توجد نتائج مطابقة</div>
+            <div
+              style={{
+                fontSize: '15px',
+                color: '#64748b',
+                marginBottom: '24px',
+                maxWidth: '400px',
+                margin: '0 auto 24px',
+              }}
+            >
+              {search ? `لم نعثر على إعلانات تطابق "${search}"` : 'لا توجد إعلانات متاحة حالياً'}
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setSearch('')}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0',
+                  background: 'white',
+                  color: '#475569',
+                  fontWeight: '900',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                }}
+              >
+                🗑️ مسح البحث
+              </button>
+              <Link
+                href="/add"
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: '#3b82f6',
+                  color: 'white',
+                  fontWeight: '900',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  textDecoration: 'none',
+                  display: 'inline-block',
+                }}
+              >
+                ➕ أضف إعلان جديد
+              </Link>
+            </div>
+          </div>
+        ) : view === 'map' ? (
+          <HomeMapView listings={filteredAndSorted} />
+        ) : view === 'list' ? (
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {filteredAndSorted.map((l) => (
+                <div key={l.id} className="mobile-card">
+                  <ListingRow listing={l} />
+                </div>
+              ))}
+            </div>
 
-          .compact-card {
-            border-radius: 12px;
-            overflow: hidden;
-          }
-          .compact-img {
-            height: 132px;
-          }
-          @media (min-width: 768px) {
-            .compact-img {
-              height: 150px;
-            }
-          }
+            <div ref={loadMoreRef} style={{ height: '1px', margin: '20px 0' }} />
 
-          .compact-content {
-            padding: 10px 10px 8px !important;
-          }
-          .compact-header {
-            margin-bottom: 6px;
-          }
-          .compact-title {
-            font-size: 13px !important;
-            line-height: 1.25 !important;
-            margin: 0;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-          }
-          .compact-cat {
-            padding: 4px 6px !important;
-            border-radius: 10px;
-          }
-          .compact-loc {
-            font-size: 12px !important;
-            opacity: 0.9;
-            margin-bottom: 6px;
-            display: flex;
-            gap: 6px;
-            align-items: center;
-          }
-          .loc-text {
-            display: -webkit-box;
-            -webkit-line-clamp: 1;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-          }
-          .compact-desc {
-            font-size: 12px !important;
-            line-height: 1.45 !important;
-            margin: 0 0 8px 0 !important;
-            opacity: 0.9;
-          }
-          .compact-price :global(*) {
-            font-size: 13px !important;
-          }
-          .compact-footer {
-            font-size: 11px !important;
-            opacity: 0.9;
-            display: flex;
-            justify-content: space-between;
-            gap: 8px;
-          }
-          .compact-badge {
-            font-size: 11px !important;
-            padding: 5px 8px !important;
-            border-radius: 999px;
-          }
+            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
+              {loadingMore ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', color: '#64748b' }}>
+                  <div
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      border: '3px solid #f1f5f9',
+                      borderTopColor: '#3b82f6',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite',
+                      marginBottom: '12px',
+                    }}
+                  ></div>
+                  <div style={{ fontSize: '14px' }}>جاري تحميل المزيد...</div>
+                </div>
+              ) : hasMore ? (
+                <div style={{ padding: '16px', textAlign: 'center', color: '#64748b', fontSize: '14px' }}>
+                  <div>⬇️</div>
+                  <div>انزل لأسفل لتحميل المزيد من الإعلانات</div>
+                </div>
+              ) : filteredAndSorted.length > 5 ? (
+                <div
+                  style={{
+                    padding: '16px',
+                    textAlign: 'center',
+                    color: '#059669',
+                    fontSize: '14px',
+                    fontWeight: '900',
+                    background: '#f0fdf4',
+                    borderRadius: '10px',
+                    border: '1px solid #bbf7d0',
+                    width: '100%',
+                    maxWidth: '400px',
+                  }}
+                >
+                  🎉 لقد وصلت إلى نهاية القائمة ({filteredAndSorted.length} إعلان)
+                </div>
+              ) : null}
+            </div>
 
-          .compact-list-view {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-          }
-          .compact-list {
-            padding: 10px !important;
-            border-radius: 12px;
-            overflow: hidden;
-          }
-          .compact-list-img {
-            width: 110px;
-            min-width: 110px;
-            height: 110px;
-            border-radius: 10px;
-            overflow: hidden;
-          }
-          .compact-list-content {
-            padding: 0 !important;
-          }
-          .compact-list-header {
-            gap: 10px;
-            align-items: flex-start;
-          }
-          .compact-list-cat {
-            font-size: 12px;
-          }
+            {err && listings.length > 0 ? (
+              <div
+                className="card"
+                style={{
+                  padding: '16px',
+                  marginTop: '16px',
+                  border: '1px solid rgba(220,38,38,0.2)',
+                  background: '#fef2f2',
+                  borderRadius: '10px',
+                }}
+              >
+                <div style={{ fontWeight: '900', color: '#991b1b', marginBottom: '4px' }}>⚠️ ملاحظة</div>
+                <div style={{ fontSize: '14px', color: '#64748b' }}>{err}</div>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: '16px',
+              }}
+            >
+              {filteredAndSorted.map((l) => (
+                <ListingCard key={l.id} listing={l} variant="grid" />
+              ))}
+            </div>
 
-          /* ===== Footer Categories ===== */
-          .homeCatsFooter {
-            margin-top: 18px;
-            padding: 14px 0 6px;
-            border-top: 1px solid rgba(0, 0, 0, 0.06);
-          }
-          .homeCatsFooterHead {
-            display: flex;
-            align-items: baseline;
-            justify-content: space-between;
-            gap: 10px;
-            margin-bottom: 10px;
-          }
-          .homeCatsFooterTitle {
-            font-size: 1rem;
-            font-weight: 800;
-          }
-          .homeCatsFooterHint {
-            font-size: 0.85rem;
-            opacity: 0.7;
-          }
-          .homeCatsFooterGrid {
-            display: grid;
-            grid-template-columns: repeat(5, minmax(0, 1fr));
-            gap: 10px;
-          }
-          .homeCatsChip {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px;
-            border-radius: 14px;
-            border: 1px solid transparent;
-            cursor: pointer;
-            text-align: right;
-          }
-          .homeCatsIcon {
-            width: 26px;
-            height: 26px;
-            border-radius: 10px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            color: #fff;
-            font-size: 14px;
-            flex: 0 0 auto;
-          }
-          .homeCatsLabel {
-            font-size: 0.9rem;
-            font-weight: 750;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            flex: 1 1 auto;
-          }
-          .homeCatsCount {
-            font-size: 0.85rem;
-            font-weight: 850;
-            padding: 2px 8px;
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.85);
-            border: 1px solid rgba(0, 0, 0, 0.05);
-            flex: 0 0 auto;
-          }
+            <div ref={loadMoreRef} style={{ height: '1px', margin: '20px 0' }} />
 
-          @media (max-width: 1024px) {
-            .homeCatsFooterGrid {
-              grid-template-columns: repeat(4, minmax(0, 1fr));
-            }
-          }
-          @media (max-width: 768px) {
-            .map-view {
-              height: 400px;
-            }
-            .view-toggle-label {
-              display: none;
-            }
-            .view-toggle-button {
-              padding: 0.5rem;
-            }
-            .homeCatsFooterGrid {
-              grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-            .homeCatsFooterHint {
-              display: none;
-            }
-          }
-        `}</style>
+            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
+              {loadingMore ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', color: '#64748b' }}>
+                  <div
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      border: '3px solid #f1f5f9',
+                      borderTopColor: '#3b82f6',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite',
+                      marginBottom: '12px',
+                    }}
+                  ></div>
+                  <div style={{ fontSize: '14px' }}>جاري تحميل المزيد...</div>
+                </div>
+              ) : hasMore ? (
+                <div style={{ padding: '16px', textAlign: 'center', color: '#64748b', fontSize: '14px' }}>
+                  <div>⬇️</div>
+                  <div>انزل لأسفل لتحميل المزيد من الإعلانات</div>
+                </div>
+              ) : filteredAndSorted.length > 5 ? (
+                <div
+                  style={{
+                    padding: '16px',
+                    textAlign: 'center',
+                    color: '#059669',
+                    fontSize: '14px',
+                    fontWeight: '900',
+                    background: '#f0fdf4',
+                    borderRadius: '10px',
+                    border: '1px solid #bbf7d0',
+                    width: '100%',
+                    maxWidth: '400px',
+                  }}
+                >
+                  🎉 لقد وصلت إلى نهاية القائمة ({filteredAndSorted.length} إعلان)
+                </div>
+              ) : null}
+            </div>
+
+            {err && listings.length > 0 ? (
+              <div
+                className="card"
+                style={{
+                  padding: '16px',
+                  marginTop: '16px',
+                  border: '1px solid rgba(220,38,38,0.2)',
+                  background: '#fef2f2',
+                  borderRadius: '10px',
+                }}
+              >
+                <div style={{ fontWeight: '900', color: '#991b1b', marginBottom: '4px' }}>⚠️ ملاحظة</div>
+                <div style={{ fontSize: '14px', color: '#64748b' }}>{err}</div>
+              </div>
+            ) : null}
+          </>
+        )}
+
+        {/* دعوة لإضافة إعلان */}
+        {!loading && filteredAndSorted.length > 0 && (
+          <div
+            style={{
+              marginTop: '30px',
+              padding: '20px',
+              background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+              borderRadius: '14px',
+              color: 'white',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: '20px', fontWeight: '900', marginBottom: '8px' }}>لديك شيء للبيع؟</div>
+            <div style={{ fontSize: '15px', opacity: 0.9, marginBottom: '20px', maxWidth: '500px', margin: '0 auto' }}>
+              أضف إعلانك مجاناً ووصل إلى الآلاف من المشترين في اليمن خلال دقائق
+            </div>
+            <Link
+              href="/add"
+              style={{
+                display: 'inline-block',
+                padding: '12px 28px',
+                background: 'white',
+                color: '#8b5cf6',
+                fontWeight: '900',
+                fontSize: '15px',
+                borderRadius: '10px',
+                textDecoration: 'none',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+              }}
+            >
+              ➕ أضف إعلان مجاناً
+            </Link>
+          </div>
+        )}
       </div>
-    </>
+    </div>
   );
 }
