@@ -1,3 +1,4 @@
+// app/listing/[id]/page-client.js
 'use client';
 
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
@@ -24,7 +25,6 @@ import {
 import Price from '@/components/Price';
 import ImageGallery from '@/components/ImageGallery';
 import WhatsAppIcon from '@/components/Icons/WhatsAppIcon';
-import ShareIcon from '@/components/Icons/ShareIcon';
 import ListingJsonLd from '@/components/StructuredData/ListingJsonLd';
 import BreadcrumbJsonLd from '@/components/StructuredData/BreadcrumbJsonLd';
 import './listing.css';
@@ -140,118 +140,14 @@ function safePhoneDigits(v) {
   return String(v || '').replace(/\D/g, '');
 }
 
-// مكون المشاركة
-function ShareButtons({ listing, shareUrl }) {
-  const [showShareMenu, setShowShareMenu] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  const shareText = `🔍 ${listing.title}\n${listing.description?.substring(0, 100)}...\n\n${shareUrl}`;
-  
-  const shareOptions = [
-    {
-      name: 'واتساب',
-      icon: '📱',
-      color: '#25D366',
-      action: () => {
-        window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
-        setShowShareMenu(false);
-      }
-    },
-    {
-      name: 'تيليجرام',
-      icon: '📨',
-      color: '#0088cc',
-      action: () => {
-        window.open(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(listing.title)}`, '_blank');
-        setShowShareMenu(false);
-      }
-    },
-    {
-      name: 'تويتر',
-      icon: '🐦',
-      color: '#1DA1F2',
-      action: () => {
-        window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`, '_blank');
-        setShowShareMenu(false);
-      }
-    },
-    {
-      name: 'فيسبوك',
-      icon: '📘',
-      color: '#4267B2',
-      action: () => {
-        window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`, '_blank');
-        setShowShareMenu(false);
-      }
-    },
-    {
-      name: 'نسخ الرابط',
-      icon: copied ? '✅' : '📋',
-      color: '#6B7280',
-      action: () => {
-        navigator.clipboard.writeText(shareUrl);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-        setShowShareMenu(false);
-      }
-    }
-  ];
-
-  return (
-    <div className="share-container">
-      <button 
-        className="share-button-main"
-        onClick={() => setShowShareMenu(!showShareMenu)}
-        aria-label="مشاركة الإعلان"
-      >
-        <ShareIcon size={20} />
-        <span>مشاركة</span>
-      </button>
-      
-      {showShareMenu && (
-        <>
-          <div className="share-overlay" onClick={() => setShowShareMenu(false)} />
-          <div className="share-menu">
-            <div className="share-menu-header">
-              <h4>مشاركة الإعلان</h4>
-              <button 
-                className="close-share-menu"
-                onClick={() => setShowShareMenu(false)}
-                aria-label="إغلاق"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="share-options">
-              {shareOptions.map((option, index) => (
-                <button
-                  key={index}
-                  className="share-option"
-                  onClick={option.action}
-                  style={{ '--option-color': option.color }}
-                >
-                  <span className="share-option-icon">{option.icon}</span>
-                  <span className="share-option-name">{option.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
 // --- المكون الرئيسي ---
 export default function ListingDetailsClient({ params, initialListing = null }) {
   const { id } = params;
   const router = useRouter();
   const { user } = useAuth();
 
-  // ✅ الخريطة: تظهر تلقائياً لكن لا تُحمّل إلا عند ظهورها في الشاشة
-  const [mapVisible, setMapVisible] = useState(true);
-  const [mapLoaded, setMapLoaded] = useState(false);
-  const mapContainerRef = useRef(null);
+  // ✅ الخريطة تفتح تلقائياً بدون نقر
+  const [showMap, setShowMap] = useState(true);
 
   // تحميل التعليقات والمزاد فقط عند الطلب (تحسين الأداء)
   const [showComments, setShowComments] = useState(false);
@@ -265,9 +161,6 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
   const [loading, setLoading] = useState(!initialListing);
   const [error, setError] = useState(null);
 
-  // رابط المشاركة
-  const [shareUrl, setShareUrl] = useState('');
-
   // لا تعرض/تحمّل المزاد إذا الإعلان ليس مزادًا
   useEffect(() => {
     if (!listing?.auctionEnabled) setShowAuction(false);
@@ -275,13 +168,6 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
 
   const [startingChat, setStartingChat] = useState(false);
   const [chatErr, setChatErr] = useState('');
-
-  useEffect(() => {
-    // تعيين رابط المشاركة
-    if (typeof window !== 'undefined') {
-      setShareUrl(window.location.href);
-    }
-  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -319,7 +205,7 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
     if (id && user?.uid) logListingView(id, user).catch(() => {});
   }, [id, user?.uid]);
 
-  // IntersectionObserver لتحميل المكونات عند التمرير
+  // IntersectionObserver to auto-load comments and auction when scrolling
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -331,14 +217,8 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
           if (entry.target === commentsRef.current && !showComments) {
             setShowComments(true);
           }
-          
           if (entry.target === auctionRef.current && !showAuction && listing?.auctionEnabled) {
             setShowAuction(true);
-          }
-          
-          // ✅ تحميل الخريطة فقط عندما تصبح مرئية
-          if (entry.target === mapContainerRef.current && mapVisible && !mapLoaded) {
-            setMapLoaded(true);
           }
         });
       },
@@ -350,21 +230,9 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
 
     if (commentsRef.current) observer.observe(commentsRef.current);
     if (listing?.auctionEnabled && auctionRef.current) observer.observe(auctionRef.current);
-    
-    // ✅ مراقبة حاوية الخريطة فقط إذا كانت مرئية
-    if (mapVisible && mapContainerRef.current && !mapLoaded) {
-      observer.observe(mapContainerRef.current);
-    }
 
     return () => observer.disconnect();
-  }, [showComments, showAuction, mapVisible, mapLoaded, listing?.auctionEnabled]);
-
-  // ✅ تحميل الخريطة يدوياً إذا كان المستخدم يريد رؤيتها ولم تكن محملة بعد
-  const loadMapIfNeeded = useCallback(() => {
-    if (mapVisible && !mapLoaded) {
-      setMapLoaded(true);
-    }
-  }, [mapVisible, mapLoaded]);
+  }, [showComments, showAuction, listing?.auctionEnabled]);
 
   // استخراج الإحداثيات + تصحيحها
   const coords = useMemo(() => {
@@ -567,15 +435,10 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
       <div className="listing-details-page">
         <div className="container">
           <div className="header-bar">
-            <div className="header-left">
-              <Link href="/" className="back-button">
-                ← العودة للرئيسية
-              </Link>
-            </div>
-            <div className="header-right">
-              {shareUrl && <ShareButtons listing={listing} shareUrl={shareUrl} />}
-              <div className="views-badge">👁️ {Number(listing.views || 0).toLocaleString('en-US')}</div>
-            </div>
+            <Link href="/" className="back-button">
+              ← العودة للرئيسية
+            </Link>
+            <div className="views-badge">👁️ {Number(listing.views || 0).toLocaleString('en-US')}</div>
           </div>
 
           {listing.hidden && (isAdmin || isOwner) && <div className="hidden-alert">⚠️ هذا الإعلان مخفي عن الجمهور</div>}
@@ -713,10 +576,10 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                   <h3 style={{ margin: 0 }}>الموقع</h3>
 
-                  {/* ✅ زر اختياري للإخفاء/الإظهار */}
+                  {/* ✅ زر اختياري للإخفاء/الإظهار (الخريطة افتراضياً مفتوحة) */}
                   <button
                     type="button"
-                    onClick={() => setMapVisible((v) => !v)}
+                    onClick={() => setShowMap((v) => !v)}
                     className="btn"
                     style={{
                       padding: '6px 10px',
@@ -724,34 +587,16 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                       fontSize: 12,
                       minHeight: 0,
                     }}
-                    aria-label={mapVisible ? 'إخفاء الخريطة' : 'إظهار الخريطة'}
+                    aria-label={showMap ? 'إخفاء الخريطة' : 'إظهار الخريطة'}
                   >
-                    {mapVisible ? 'إخفاء' : 'إظهار'}
+                    {showMap ? 'إخفاء' : 'إظهار'}
                   </button>
                 </div>
 
-                {/* ✅ الخريطة تُظهر ولكن لا تُحمّل إلا عند ظهورها في الشاشة */}
-                {mapVisible ? (
-                  <div 
-                    ref={mapContainerRef} 
-                    className="map-container" 
-                    style={{ marginTop: 10 }}
-                  >
-                    {mapLoaded ? (
-                      <ListingMap coords={coords} label={listing.locationLabel || listing.city || 'اليمن'} />
-                    ) : (
-                      <div className="map-placeholder">
-                        <div className="map-icon">🗺️</div>
-                        <p>جاري تحميل الخريطة...</p>
-                        <button 
-                          className="btn btn-small"
-                          onClick={loadMapIfNeeded}
-                          style={{ marginTop: '8px' }}
-                        >
-                          ⚡ تحميل الآن
-                        </button>
-                      </div>
-                    )}
+                {/* ✅ الخريطة تظهر تلقائياً بدون نقر */}
+                {showMap ? (
+                  <div className="map-container" style={{ marginTop: 10 }}>
+                    <ListingMap coords={coords} label={listing.locationLabel || listing.city || 'اليمن'} />
                   </div>
                 ) : (
                   <div className="map-placeholder" style={{ marginTop: 10 }}>
@@ -760,7 +605,7 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                   </div>
                 )}
 
-                {coords && mapLoaded && (
+                {coords ? (
                   <div className="google-maps-buttons">
                     <a
                       href={`https://www.google.com/maps/search/?api=1&query=${coords[0]},${coords[1]}`}
@@ -779,7 +624,7 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                       🛰️ قمر صناعي
                     </a>
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
@@ -787,129 +632,6 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
       </div>
 
       <style jsx>{`
-        .header-bar {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 20px;
-          flex-wrap: wrap;
-          gap: 10px;
-        }
-        
-        .header-left,
-        .header-right {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-        
-        .share-container {
-          position: relative;
-        }
-        
-        .share-button-main {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding: 8px 14px;
-          background: #3b82f6;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          font-weight: bold;
-          cursor: pointer;
-          transition: background 0.2s;
-        }
-        
-        .share-button-main:hover {
-          background: #2563eb;
-        }
-        
-        .share-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(0,0,0,0.3);
-          z-index: 100;
-        }
-        
-        .share-menu {
-          position: absolute;
-          top: 100%;
-          right: 0;
-          background: white;
-          border-radius: 12px;
-          box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-          padding: 15px;
-          min-width: 220px;
-          z-index: 101;
-          margin-top: 8px;
-        }
-        
-        .share-menu-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 12px;
-          padding-bottom: 10px;
-          border-bottom: 1px solid #e5e7eb;
-        }
-        
-        .share-menu-header h4 {
-          margin: 0;
-          font-size: 16px;
-          color: #1f2937;
-        }
-        
-        .close-share-menu {
-          background: none;
-          border: none;
-          font-size: 18px;
-          cursor: pointer;
-          color: #6b7280;
-        }
-        
-        .share-options {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 8px;
-        }
-        
-        .share-option {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 10px 14px;
-          background: var(--option-color, #f3f4f6);
-          color: white;
-          border: none;
-          border-radius: 8px;
-          cursor: pointer;
-          text-align: right;
-          transition: transform 0.2s;
-        }
-        
-        .share-option:hover {
-          transform: translateY(-2px);
-        }
-        
-        .share-option-icon {
-          font-size: 18px;
-        }
-        
-        .share-option-name {
-          flex: 1;
-          font-weight: 500;
-        }
-        
-        .btn-small {
-          padding: 4px 10px;
-          font-size: 12px;
-          min-height: 28px;
-        }
-        
         .lazy-load-box {
           padding: 20px;
           text-align: center;
@@ -917,14 +639,12 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
           border-radius: 8px;
           margin: 10px 0;
         }
-        
         .google-maps-buttons {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 10px;
           margin-top: 10px;
         }
-        
         .google-maps-button {
           display: flex;
           align-items: center;
@@ -938,15 +658,12 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
           background: #4285f4;
           transition: transform 0.2s;
         }
-        
         .google-maps-button:hover {
           transform: translateY(-2px);
         }
-        
         .satellite {
           background: #10b981;
         }
-        
         .error-msg {
           background: #fee2e2;
           color: #991b1b;
@@ -962,7 +679,6 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
           gap: 8px;
           margin: 10px 0 6px;
         }
-        
         .taxo-chip {
           display: inline-flex;
           align-items: center;
@@ -977,46 +693,21 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
           color: #0f172a;
           user-select: none;
         }
-        
         .taxo-chip.make {
           background: #eff6ff;
           border-color: rgba(59, 130, 246, 0.28);
         }
-        
         .taxo-chip.phone {
           background: #faf5ff;
           border-color: rgba(168, 85, 247, 0.25);
         }
-        
         .taxo-chip.deal {
           background: #ecfeff;
           border-color: rgba(20, 184, 166, 0.28);
         }
-        
         .taxo-chip.prop {
           background: #f0fdf4;
           border-color: rgba(34, 197, 94, 0.25);
-        }
-        
-        @media (max-width: 768px) {
-          .header-bar {
-            flex-direction: column;
-            align-items: stretch;
-          }
-          
-          .header-left,
-          .header-right {
-            justify-content: space-between;
-          }
-          
-          .share-menu {
-            right: -60px;
-            min-width: 280px;
-          }
-          
-          .google-maps-buttons {
-            grid-template-columns: 1fr;
-          }
         }
       `}</style>
     </>
