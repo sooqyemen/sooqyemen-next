@@ -58,6 +58,27 @@ const CATEGORY_CONFIG = [
   { key: 'other', label: 'أخرى', icon: '📦', href: '/other' },
 ];
 
+// ✅ ألوان الأقسام (تذييل الصفحة)
+const CATEGORY_STYLES = {
+  cars: { color: '#2563eb', bg: 'rgba(37,99,235,0.12)' },
+  realestate: { color: '#059669', bg: 'rgba(5,150,105,0.12)' },
+  phones: { color: '#7c3aed', bg: 'rgba(124,58,237,0.12)' },
+  electronics: { color: '#0ea5e9', bg: 'rgba(14,165,233,0.12)' },
+  motorcycles: { color: '#f97316', bg: 'rgba(249,115,22,0.12)' },
+  heavy_equipment: { color: '#92400e', bg: 'rgba(146,64,14,0.12)' },
+  solar: { color: '#eab308', bg: 'rgba(234,179,8,0.14)' },
+  networks: { color: '#06b6d4', bg: 'rgba(6,182,212,0.12)' },
+  maintenance: { color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
+  furniture: { color: '#a855f7', bg: 'rgba(168,85,247,0.12)' },
+  home_tools: { color: '#22c55e', bg: 'rgba(34,197,94,0.12)' },
+  clothes: { color: '#ec4899', bg: 'rgba(236,72,153,0.12)' },
+  animals: { color: '#84cc16', bg: 'rgba(132,204,22,0.12)' },
+  jobs: { color: '#3b82f6', bg: 'rgba(59,130,246,0.12)' },
+  services: { color: '#14b8a6', bg: 'rgba(20,184,166,0.12)' },
+  other: { color: '#64748b', bg: 'rgba(100,116,139,0.12)' },
+  all: { color: '#64748b', bg: 'rgba(100,116,139,0.10)' },
+};
+
 // ✅ Blur placeholder لتحسين تجربة تحميل الصور
 const BLUR_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
@@ -67,7 +88,6 @@ function safeText(v) {
 }
 
 // ✅ توحيد اسم القسم
-
 
 function formatRelative(ts) {
   try {
@@ -549,6 +569,17 @@ export default function HomePageClient({ initialListings = [] }) {
     return Array.from(results).slice(0, 8);
   }, [search, listings]);
 
+  // ✅ عدّاد الأقسام (يعتمد على الإعلانات المحمّلة في الصفحة الرئيسية)
+  const categoryCounts = useMemo(() => {
+    const out = {};
+    for (const l of listings) {
+      const k = normalizeCategoryKey(l.category) || 'other';
+      out[k] = (out[k] || 0) + 1;
+    }
+    out.all = listings.length;
+    return out;
+  }, [listings]);
+
   const filteredListings = useMemo(() => {
     const q = search.trim().toLowerCase();
     const catSelected = normalizeCategoryKey(selectedCategory || 'all');
@@ -743,6 +774,42 @@ export default function HomePageClient({ initialListings = [] }) {
                 </div>
               </>
             )}
+
+            {/* ✅ تذييل الأقسام (أسماء الأقسام + عدد الإعلانات + تحويل عند الضغط) */}
+            {!loading && !error && (
+              <footer className="homeCatsFooter" aria-label="تذييل الأقسام">
+                <div className="homeCatsFooterHead">
+                  <div className="homeCatsFooterTitle">تصفّح الأقسام</div>
+                  <div className="homeCatsFooterHint">اضغط على أي قسم للانتقال له</div>
+                </div>
+
+                <div className="homeCatsFooterGrid">
+                  {CATEGORY_CONFIG.filter((c) => c.key !== 'all').map((cat) => {
+                    const st = CATEGORY_STYLES[cat.key] || CATEGORY_STYLES.other;
+                    const count = Number(categoryCounts[cat.key] || 0);
+
+                    return (
+                      <button
+                        key={cat.key}
+                        type="button"
+                        className="homeCatsChip focus-ring"
+                        onClick={() => handleCategoryClick(cat)}
+                        style={{ borderColor: st.color, background: st.bg }}
+                        title={cat.label}
+                      >
+                        <span className="homeCatsIcon" style={{ background: st.color }} aria-hidden="true">
+                          {cat.icon}
+                        </span>
+
+                        <span className="homeCatsLabel">{cat.label}</span>
+
+                        <span className="homeCatsCount">{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </footer>
+            )}
           </div>
         </main>
 
@@ -762,6 +829,76 @@ export default function HomePageClient({ initialListings = [] }) {
           .view-toggle-label {
             font-size: 0.875rem;
           }
+
+          /* ===== Footer Categories ===== */
+          .homeCatsFooter {
+            margin-top: 18px;
+            padding: 14px 0 6px;
+            border-top: 1px solid rgba(0, 0, 0, 0.06);
+          }
+          .homeCatsFooterHead {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 10px;
+          }
+          .homeCatsFooterTitle {
+            font-size: 1rem;
+            font-weight: 800;
+          }
+          .homeCatsFooterHint {
+            font-size: 0.85rem;
+            opacity: 0.7;
+          }
+          .homeCatsFooterGrid {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 10px;
+          }
+          .homeCatsChip {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px;
+            border-radius: 14px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            text-align: right;
+          }
+          .homeCatsIcon {
+            width: 26px;
+            height: 26px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 14px;
+            flex: 0 0 auto;
+          }
+          .homeCatsLabel {
+            font-size: 0.9rem;
+            font-weight: 750;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1 1 auto;
+          }
+          .homeCatsCount {
+            font-size: 0.85rem;
+            font-weight: 850;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.85);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            flex: 0 0 auto;
+          }
+          @media (max-width: 1024px) {
+            .homeCatsFooterGrid {
+              grid-template-columns: repeat(4, minmax(0, 1fr));
+            }
+          }
           @media (max-width: 768px) {
             .map-view {
               height: 400px;
@@ -771,6 +908,13 @@ export default function HomePageClient({ initialListings = [] }) {
             }
             .view-toggle-button {
               padding: 0.5rem;
+            }
+
+            .homeCatsFooterGrid {
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .homeCatsFooterHint {
+              display: none;
             }
           }
         `}</style>
