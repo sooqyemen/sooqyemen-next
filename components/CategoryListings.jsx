@@ -244,7 +244,7 @@ function pickTaxonomy(listing, categoryKey) {
     out.phoneBrand = out.phoneBrand || 'other';
   }
 
-  if (root === 'electronics') {
+  if (root === 'realestate') {
     const v =
       listing?.electronicsType ??
       listing?.electronics ??
@@ -374,7 +374,9 @@ export default function CategoryListings({ category, initialListings = [] }) {
   const [q, setQ] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [priceRange, setPriceRange] = useState({ min: '', max: '' });
-  const [showPriceFilter, setShowPriceFilter] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  
   const searchParams = useSearchParams();
 
   const [items, setItems] = useState(() => (Array.isArray(initialListings) ? initialListings : []));
@@ -398,16 +400,36 @@ export default function CategoryListings({ category, initialListings = [] }) {
     };
   }, []);
 
+  // ✅ detect mobile
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 640px)');
+    const onChange = () => setIsMobile(!!mq.matches);
+    onChange();
+    if (mq.addEventListener) mq.addEventListener('change', onChange);
+    else mq.addListener(onChange);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener('change', onChange);
+      else mq.removeListener(onChange);
+    };
+  }, []);
+
+  // ✅ lock body scroll when sheet open
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (isMobile && showFilters) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prev || '';
+      };
+    }
+  }, [isMobile, showFilters]);
+
   useEffect(() => {
     const qp = safeStr(searchParams?.get('q'));
     if (!qp) return;
     setQ((prev) => (safeStr(prev) === qp ? prev : qp));
-  }, [searchParams]);
-
-  useEffect(() => {
-    const g = safeStr(searchParams?.get('gov') || searchParams?.get('g'));
-    if (!g) return;
-    setGovKey((prev) => (safeStr(prev) === g ? prev : g));
   }, [searchParams]);
 
   const catsRaw = Array.isArray(category) ? category : [category];
@@ -1022,44 +1044,30 @@ export default function CategoryListings({ category, initialListings = [] }) {
     </button>
   );
 
-  const renderSingleFacet = ({
-    title,
-    icon,
-    selected,
-    setSelected,
-    options,
-    labelOf,
-    prefix,
-  }) => (
-    <div className="sooq-taxSection" aria-label={title}>
-      <div className="sooq-taxTitle">{title}</div>
-      <div className="sooq-chips" role="tablist" aria-label={title}>
-        <Chip
-          active={!selected}
-          onClick={() => setSelected('')}
-          text="الكل"
-          count={itemsWithTax.length}
-          dotColor={CAT_COLOR}
-        />
-        {options.map(([k, c]) => {
-          const label = labelOf(k) || k;
-          return (
-            <Chip
-              key={k}
-              active={selected === k}
-              onClick={() => setSelected(k)}
-              text={label}
-              count={c}
-              icon={icon}
-              dotColor={colorForKey(`${prefix}:${k}`)}
-            />
-          );
-        })}
-      </div>
-    </div>
-  );
+  const resetAllFilters = () => {
+    setCarMake('');
+    setCarModel('');
+    setPhoneBrand('');
+    setDealType('');
+    setPropertyType('');
+    setElectronicsType('');
+    setMotorcycleBrand('');
+    setHeavyEquipmentType('');
+    setSolarType('');
+    setNetworkType('');
+    setMaintenanceType('');
+    setFurnitureType('');
+    setHomeToolsType('');
+    setClothesType('');
+    setAnimalType('');
+    setJobType('');
+    setServiceType('');
+    setGovKey('');
+    setPriceRange({ min: '', max: '' });
+    setQ('');
+  };
 
-  const TaxonomyInner = () => {
+  const TaxonomySection = () => {
     if (!single) return null;
 
     if (single === 'cars') {
@@ -1067,369 +1075,433 @@ export default function CategoryListings({ category, initialListings = [] }) {
       const md = safeStr(carModel);
       const mkLabel = mk ? carMakeLabel(mk) : '';
 
-      if (!mk) {
-        return (
-          <div className="sooq-taxSection" aria-label="فلترة سيارات">
-            <div className="sooq-taxTitle">🚗 اختر ماركة السيارة</div>
-            <div className="sooq-chips" role="tablist">
-              <Chip
-                active={!mk}
+      return (
+        <>
+          <div style={{ marginBottom: '16px' }}>
+            <div className="mLabel" style={{ marginBottom: '8px' }}>🚗 ماركة السيارة</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              <button
+                type="button"
+                className={`mBtn ${!carMake ? 'active' : ''}`}
                 onClick={() => {
                   setCarMake('');
                   setCarModel('');
                 }}
-                text="الكل"
-                count={itemsWithTax.length}
-                dotColor={CAT_COLOR}
-              />
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: !carMake ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                  background: !carMake ? '#3b82f6' : 'white',
+                  color: !carMake ? 'white' : '#475569',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                }}
+              >
+                الكل
+              </button>
               {carMakeOptions.map(([k, c]) => (
-                <Chip
+                <button
                   key={k}
-                  active={mk === k}
+                  type="button"
+                  className={`mBtn ${carMake === k ? 'active' : ''}`}
                   onClick={() => {
                     setCarMake(k);
                     setCarModel('');
                   }}
-                  text={carMakeLabel(k) || k}
-                  count={c}
-                  dotColor={colorForKey(`make:${k}`)}
-                />
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: carMake === k ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                    background: carMake === k ? '#3b82f6' : 'white',
+                    color: carMake === k ? 'white' : '#475569',
+                    fontWeight: '600',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {carMakeLabel(k) || k} {c > 0 ? `(${c})` : ''}
+                </button>
               ))}
             </div>
           </div>
-        );
-      }
 
-      const modelsTotal = Array.from(taxonomyCounts.carModels.values()).reduce((a, b) => a + Number(b || 0), 0);
-
-      return (
-        <div className="sooq-taxSection" aria-label="فلترة موديلات السيارات">
-          <div className="sooq-taxTitle">🚗 {mkLabel} — اختر الموديل</div>
-          <div className="sooq-chips" role="tablist">
-            <Chip
-              active={false}
-              onClick={() => {
-                setCarMake('');
-                setCarModel('');
-              }}
-              text="رجوع"
-              icon="⬅️"
-              dotColor={CAT_COLOR}
-            />
-
-            <Chip
-              active={!md}
-              onClick={() => setCarModel('')}
-              text={`كل موديلات ${mkLabel}`}
-              count={modelsTotal || undefined}
-              dotColor={colorForKey(`make:${mk}`)}
-            />
-
-            {carModelOptions.map(([k, c]) => (
-              <Chip
-                key={k}
-                active={md === k}
-                onClick={() => setCarModel(k)}
-                text={k === 'other' ? 'أخرى' : (carModelLabel(mk, k) || k)}
-                count={c}
-                dotColor={colorForKey(`model:${mk}:${k}`)}
-              />
-            ))}
-          </div>
-        </div>
+          {mk && (
+            <div style={{ marginBottom: '16px' }}>
+              <div className="mLabel" style={{ marginBottom: '8px' }}>🚗 موديل {mkLabel}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                <button
+                  type="button"
+                  className={`mBtn ${!carModel ? 'active' : ''}`}
+                  onClick={() => setCarModel('')}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: !carModel ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                    background: !carModel ? '#3b82f6' : 'white',
+                    color: !carModel ? 'white' : '#475569',
+                    fontWeight: '600',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  كل الموديلات
+                </button>
+                {carModelOptions.map(([k, c]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    className={`mBtn ${carModel === k ? 'active' : ''}`}
+                    onClick={() => setCarModel(k)}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: carModel === k ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                      background: carModel === k ? '#3b82f6' : 'white',
+                      color: carModel === k ? 'white' : '#475569',
+                      fontWeight: '600',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {k === 'other' ? 'أخرى' : (carModelLabel(mk, k) || k)} {c > 0 ? `(${c})` : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       );
     }
 
     if (single === 'phones') {
-      return renderSingleFacet({
-        title: '📱 اختر ماركة الجوال',
-        icon: '📱',
-        selected: phoneBrand,
-        setSelected: setPhoneBrand,
-        options: phoneBrandOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (phoneBrandLabel(k) || k)),
-        prefix: 'phone',
-      });
-    }
-
-    if (single === 'realestate') {
-      const hasDeal = !!safeStr(dealType);
-      const visibleDealOptions = hasDeal ? dealTypeOptions.filter(([k]) => k === dealType) : dealTypeOptions;
-
-      const dealDot = (k) => (k === 'sale' ? '#0ea5e9' : k === 'rent' ? '#f59e0b' : CAT_COLOR);
-
       return (
-        <div className="sooq-taxSection" aria-label="فلترة العقارات">
-          <div className="sooq-taxTitle">🏡 فلترة العقارات</div>
-
-          <div className="sooq-taxSub">نوع العملية</div>
-          <div className="sooq-chips" role="tablist" aria-label="بيع أو إيجار">
-            <Chip
-              active={!dealType}
-              onClick={() => {
-                setDealType('');
-                setPropertyType('');
+        <div style={{ marginBottom: '16px' }}>
+          <div className="mLabel" style={{ marginBottom: '8px' }}>📱 ماركة الجوال</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            <button
+              type="button"
+              className={`mBtn ${!phoneBrand ? 'active' : ''}`}
+              onClick={() => setPhoneBrand('')}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: !phoneBrand ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                background: !phoneBrand ? '#3b82f6' : 'white',
+                color: !phoneBrand ? 'white' : '#475569',
+                fontWeight: '600',
+                fontSize: '14px',
+                cursor: 'pointer',
               }}
-              text="الكل"
-              count={itemsWithTax.length}
-              dotColor={CAT_COLOR}
-            />
-
-            {visibleDealOptions.map(([k, c]) => (
-              <Chip
+            >
+              الكل
+            </button>
+            {phoneBrandOptions.map(([k, c]) => (
+              <button
                 key={k}
-                active={dealType === k}
-                onClick={() => {
-                  setDealType(k);
-                  setPropertyType('');
+                type="button"
+                className={`mBtn ${phoneBrand === k ? 'active' : ''}`}
+                onClick={() => setPhoneBrand(k)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: phoneBrand === k ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                  background: phoneBrand === k ? '#3b82f6' : 'white',
+                  color: phoneBrand === k ? 'white' : '#475569',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  cursor: 'pointer',
                 }}
-                text={dealTypeLabel(k) || k}
-                count={c}
-                icon="🏷️"
-                dotColor={dealDot(k)}
-              />
+              >
+                {k === 'other' ? 'أخرى' : (phoneBrandLabel(k) || k)} {c > 0 ? `(${c})` : ''}
+              </button>
             ))}
           </div>
-
-          {hasDeal ? (
-            <>
-              <div className="sooq-taxSub" style={{ marginTop: 10 }}>
-                نوع العقار
-              </div>
-              <div className="sooq-chips" role="tablist" aria-label="نوع العقار">
-                <Chip
-                  active={!propertyType}
-                  onClick={() => setPropertyType('')}
-                  text="كل الأنواع"
-                  dotColor={CAT_COLOR}
-                />
-                {propertyTypeOptions.map(([k, c]) => (
-                  <Chip
-                    key={k}
-                    active={propertyType === k}
-                    onClick={() => setPropertyType(k)}
-                    text={k === 'other' ? 'أخرى' : (propertyTypeLabel(k) || k)}
-                    count={c}
-                    icon="🏡"
-                    dotColor={colorForKey(`property:${k}`)}
-                  />
-                ))}
-              </div>
-            </>
-          ) : null}
         </div>
       );
     }
 
+    if (single === 'realestate') {
+      return (
+        <>
+          <div style={{ marginBottom: '16px' }}>
+            <div className="mLabel" style={{ marginBottom: '8px' }}>🏡 نوع العملية</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              <button
+                type="button"
+                className={`mBtn ${!dealType ? 'active' : ''}`}
+                onClick={() => {
+                  setDealType('');
+                  setPropertyType('');
+                }}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: !dealType ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                  background: !dealType ? '#3b82f6' : 'white',
+                  color: !dealType ? 'white' : '#475569',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                }}
+              >
+                الكل
+              </button>
+              {dealTypeOptions.map(([k, c]) => (
+                <button
+                  key={k}
+                  type="button"
+                  className={`mBtn ${dealType === k ? 'active' : ''}`}
+                  onClick={() => {
+                    setDealType(k);
+                    setPropertyType('');
+                  }}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: dealType === k ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                    background: dealType === k ? '#3b82f6' : 'white',
+                    color: dealType === k ? 'white' : '#475569',
+                    fontWeight: '600',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {dealTypeLabel(k) || k} {c > 0 ? `(${c})` : ''}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {dealType && (
+            <div style={{ marginBottom: '16px' }}>
+              <div className="mLabel" style={{ marginBottom: '8px' }}>🏡 نوع العقار</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                <button
+                  type="button"
+                  className={`mBtn ${!propertyType ? 'active' : ''}`}
+                  onClick={() => setPropertyType('')}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: !propertyType ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                    background: !propertyType ? '#3b82f6' : 'white',
+                    color: !propertyType ? 'white' : '#475569',
+                    fontWeight: '600',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  كل الأنواع
+                </button>
+                {propertyTypeOptions.map(([k, c]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    className={`mBtn ${propertyType === k ? 'active' : ''}`}
+                    onClick={() => setPropertyType(k)}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: propertyType === k ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                      background: propertyType === k ? '#3b82f6' : 'white',
+                      color: propertyType === k ? 'white' : '#475569',
+                      fontWeight: '600',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {k === 'other' ? 'أخرى' : (propertyTypeLabel(k) || k)} {c > 0 ? `(${c})` : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      );
+    }
+
+    const renderSingleCategory = (title, icon, state, setState, options, labelFn) => (
+      <div style={{ marginBottom: '16px' }}>
+        <div className="mLabel" style={{ marginBottom: '8px' }}>{icon} {title}</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          <button
+            type="button"
+            className={`mBtn ${!state ? 'active' : ''}`}
+            onClick={() => setState('')}
+            style={{
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: !state ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+              background: !state ? '#3b82f6' : 'white',
+              color: !state ? 'white' : '#475569',
+              fontWeight: '600',
+              fontSize: '14px',
+              cursor: 'pointer',
+            }}
+          >
+            الكل
+          </button>
+          {options.map(([k, c]) => (
+            <button
+              key={k}
+              type="button"
+              className={`mBtn ${state === k ? 'active' : ''}`}
+              onClick={() => setState(k)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: state === k ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                background: state === k ? '#3b82f6' : 'white',
+                color: state === k ? 'white' : '#475569',
+                fontWeight: '600',
+                fontSize: '14px',
+                cursor: 'pointer',
+              }}
+            >
+              {labelFn ? labelFn(k) : k} {c > 0 ? `(${c})` : ''}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+
     if (single === 'electronics') {
-      return renderSingleFacet({
-        title: '💻 اختر فئة الإلكترونيات',
-        icon: '💻',
-        selected: electronicsType,
-        setSelected: setElectronicsType,
-        options: electronicsTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (electronicsTypeLabel(k) || k)),
-        prefix: 'electronics',
-      });
+      return renderSingleCategory(
+        'فئة الإلكترونيات',
+        '💻',
+        electronicsType,
+        setElectronicsType,
+        electronicsTypeOptions,
+        (k) => k === 'other' ? 'أخرى' : (electronicsTypeLabel(k) || k)
+      );
     }
 
     if (single === 'motorcycles') {
-      return renderSingleFacet({
-        title: '🏍️ اختر ماركة الدراجة',
-        icon: '🏍️',
-        selected: motorcycleBrand,
-        setSelected: setMotorcycleBrand,
-        options: motorcycleBrandOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (motorcycleBrandLabel(k) || k)),
-        prefix: 'moto',
-      });
+      return renderSingleCategory(
+        'ماركة الدراجة',
+        '🏍️',
+        motorcycleBrand,
+        setMotorcycleBrand,
+        motorcycleBrandOptions,
+        (k) => k === 'other' ? 'أخرى' : (motorcycleBrandLabel(k) || k)
+      );
     }
 
     if (single === 'heavy_equipment') {
-      return renderSingleFacet({
-        title: '🏗️ اختر نوع المعدة',
-        icon: '🏗️',
-        selected: heavyEquipmentType,
-        setSelected: setHeavyEquipmentType,
-        options: heavyEquipmentTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (heavyEquipmentTypeLabel(k) || k)),
-        prefix: 'heavy',
-      });
+      return renderSingleCategory(
+        'نوع المعدة',
+        '🏗️',
+        heavyEquipmentType,
+        setHeavyEquipmentType,
+        heavyEquipmentTypeOptions,
+        (k) => k === 'other' ? 'أخرى' : (heavyEquipmentTypeLabel(k) || k)
+      );
     }
 
     if (single === 'solar') {
-      return renderSingleFacet({
-        title: '☀️ اختر فئة الطاقة الشمسية',
-        icon: '☀️',
-        selected: solarType,
-        setSelected: setSolarType,
-        options: solarTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (solarTypeLabel(k) || k)),
-        prefix: 'solar',
-      });
+      return renderSingleCategory(
+        'فئة الطاقة الشمسية',
+        '☀️',
+        solarType,
+        setSolarType,
+        solarTypeOptions,
+        (k) => k === 'other' ? 'أخرى' : (solarTypeLabel(k) || k)
+      );
     }
 
     if (single === 'networks') {
-      return renderSingleFacet({
-        title: '📡 اختر فئة الشبكات',
-        icon: '📡',
-        selected: networkType,
-        setSelected: setNetworkType,
-        options: networkTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (networkTypeLabel(k) || k)),
-        prefix: 'net',
-      });
+      return renderSingleCategory(
+        'فئة الشبكات',
+        '📡',
+        networkType,
+        setNetworkType,
+        networkTypeOptions,
+        (k) => k === 'other' ? 'أخرى' : (networkTypeLabel(k) || k)
+      );
     }
 
     if (single === 'maintenance') {
-      return renderSingleFacet({
-        title: '🛠️ اختر نوع الصيانة',
-        icon: '🛠️',
-        selected: maintenanceType,
-        setSelected: setMaintenanceType,
-        options: maintenanceTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (maintenanceTypeLabel(k) || k)),
-        prefix: 'maint',
-      });
+      return renderSingleCategory(
+        'نوع الصيانة',
+        '🛠️',
+        maintenanceType,
+        setMaintenanceType,
+        maintenanceTypeOptions,
+        (k) => k === 'other' ? 'أخرى' : (maintenanceTypeLabel(k) || k)
+      );
     }
 
     if (single === 'furniture') {
-      return renderSingleFacet({
-        title: '🛋️ اختر نوع الأثاث',
-        icon: '🛋️',
-        selected: furnitureType,
-        setSelected: setFurnitureType,
-        options: furnitureTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (furnitureTypeLabel(k) || k)),
-        prefix: 'furn',
-      });
+      return renderSingleCategory(
+        'نوع الأثاث',
+        '🛋️',
+        furnitureType,
+        setFurnitureType,
+        furnitureTypeOptions,
+        (k) => k === 'other' ? 'أخرى' : (furnitureTypeLabel(k) || k)
+      );
     }
 
     if (single === 'home_tools') {
-      return renderSingleFacet({
-        title: '🏠 اختر نوع الأدوات المنزلية',
-        icon: '🏠',
-        selected: homeToolsType,
-        setSelected: setHomeToolsType,
-        options: homeToolsTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (homeToolsTypeLabel(k) || k)),
-        prefix: 'home',
-      });
+      return renderSingleCategory(
+        'نوع الأدوات المنزلية',
+        '🏠',
+        homeToolsType,
+        setHomeToolsType,
+        homeToolsTypeOptions,
+        (k) => k === 'other' ? 'أخرى' : (homeToolsTypeLabel(k) || k)
+      );
     }
 
     if (single === 'clothes') {
-      return renderSingleFacet({
-        title: '👕 اختر نوع الملابس',
-        icon: '👕',
-        selected: clothesType,
-        setSelected: setClothesType,
-        options: clothesTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (clothesTypeLabel(k) || k)),
-        prefix: 'clothes',
-      });
+      return renderSingleCategory(
+        'نوع الملابس',
+        '👕',
+        clothesType,
+        setClothesType,
+        clothesTypeOptions,
+        (k) => k === 'other' ? 'أخرى' : (clothesTypeLabel(k) || k)
+      );
     }
 
     if (single === 'animals') {
-      return renderSingleFacet({
-        title: '🐑 اختر نوع الحيوانات',
-        icon: '🐑',
-        selected: animalType,
-        setSelected: setAnimalType,
-        options: animalTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (animalTypeLabel(k) || k)),
-        prefix: 'animal',
-      });
+      return renderSingleCategory(
+        'نوع الحيوانات',
+        '🐑',
+        animalType,
+        setAnimalType,
+        animalTypeOptions,
+        (k) => k === 'other' ? 'أخرى' : (animalTypeLabel(k) || k)
+      );
     }
 
     if (single === 'jobs') {
-      return renderSingleFacet({
-        title: '💼 اختر نوع الوظيفة',
-        icon: '💼',
-        selected: jobType,
-        setSelected: setJobType,
-        options: jobTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (jobTypeLabel(k) || k)),
-        prefix: 'job',
-      });
+      return renderSingleCategory(
+        'نوع الوظيفة',
+        '💼',
+        jobType,
+        setJobType,
+        jobTypeOptions,
+        (k) => k === 'other' ? 'أخرى' : (jobTypeLabel(k) || k)
+      );
     }
 
     if (single === 'services') {
-      return renderSingleFacet({
-        title: '🧰 اختر نوع الخدمة',
-        icon: '🧰',
-        selected: serviceType,
-        setSelected: setServiceType,
-        options: serviceTypeOptions,
-        labelOf: (k) => (k === 'other' ? 'أخرى' : (serviceTypeLabel(k) || k)),
-        prefix: 'service',
-      });
+      return renderSingleCategory(
+        'نوع الخدمة',
+        '🧰',
+        serviceType,
+        setServiceType,
+        serviceTypeOptions,
+        (k) => k === 'other' ? 'أخرى' : (serviceTypeLabel(k) || k)
+      );
     }
 
     return null;
   };
 
   const categoryLabel = useMemo(() => (single ? getCategoryLabel(single) : ''), [single]);
-
-  const hashtagOptions = useMemo(() => {
-    const max = 18;
-
-    let opts = [];
-    if (single === 'cars') opts = carMakeOptions;
-    else if (single === 'realestate') opts = propertyTypeOptions;
-    else if (single === 'phones') opts = phoneBrandOptions;
-    else if (single === 'electronics') opts = electronicsTypeOptions;
-    else if (single === 'motorcycles') opts = motorcycleBrandOptions;
-    else if (single === 'heavy_equipment') opts = heavyEquipmentTypeOptions;
-    else if (single === 'solar') opts = solarTypeOptions;
-    else if (single === 'networks') opts = networkTypeOptions;
-    else if (single === 'maintenance') opts = maintenanceTypeOptions;
-    else if (single === 'furniture') opts = furnitureTypeOptions;
-    else if (single === 'home_tools') opts = homeToolsTypeOptions;
-    else if (single === 'clothes') opts = clothesTypeOptions;
-    else if (single === 'animals') opts = animalTypeOptions;
-    else if (single === 'jobs') opts = jobTypeOptions;
-    else if (single === 'services') opts = serviceTypeOptions;
-
-    const cleaned = (opts || [])
-      .filter((o) => Array.isArray(o) && o[0] && o[0] !== 'other')
-      .map(([key, count, label]) => ({
-        key: String(key),
-        label: String(label || key),
-        count: Number(count || 0),
-      }));
-
-    const hasCounts = cleaned.some((o) => o.count > 0);
-    const sorted = hasCounts
-      ? [...cleaned].sort((a, b) => (b.count - a.count) || String(a.label).localeCompare(String(b.label), 'ar'))
-      : cleaned;
-
-    return sorted.slice(0, max);
-  }, [
-    single,
-    carMakeOptions,
-    propertyTypeOptions,
-    phoneBrandOptions,
-    electronicsTypeOptions,
-    motorcycleBrandOptions,
-    heavyEquipmentTypeOptions,
-    solarTypeOptions,
-    networkTypeOptions,
-    maintenanceTypeOptions,
-    furnitureTypeOptions,
-    homeToolsTypeOptions,
-    clothesTypeOptions,
-    animalTypeOptions,
-    jobTypeOptions,
-    serviceTypeOptions,
-  ]);
-
-  const popularListings = useMemo(() => {
-    const list = Array.isArray(items) ? items : [];
-    return [...list]
-      .filter(Boolean)
-      .sort((a, b) => (Number(b.views || 0) - Number(a.views || 0)) || (Number(b.likes || 0) - Number(a.likes || 0)))
-      .slice(0, 8);
-  }, [items]);
 
   const applyHashtag = (key) => {
     const k = safeStr(key);
@@ -1466,347 +1538,443 @@ export default function CategoryListings({ category, initialListings = [] }) {
 
   if (loading) {
     return (
-      <div className="loading-container">
-        <div className="loading-spinner"></div>
-        <div className="loading-text">جاري تحميل إعلانات القسم...</div>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '60px 20px',
+          background: 'white',
+          borderRadius: '12px',
+          border: '1px solid #e2e8f0',
+        }}
+      >
+        <div
+          style={{
+            width: '48px',
+            height: '48px',
+            border: '4px solid #f1f5f9',
+            borderTopColor: '#3b82f6',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            marginBottom: '16px',
+          }}
+        />
+        <div style={{ fontWeight: '900', fontSize: '16px', marginBottom: '8px', color: '#1e293b' }}>
+          جاري تحميل إعلانات القسم...
+        </div>
+        <div style={{ fontSize: '14px', color: '#64748b' }}>
+          {initialListings.length > 0 ? 'جاري تحديث القائمة' : 'جاري تحميل الإعلانات'}
+        </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
   if (err && items.length === 0) {
     return (
-      <div className="card" style={{ padding: 16, border: '1px solid #fecaca' }}>
-        <div style={{ fontWeight: 900, color: '#b91c1c' }}>⚠️ حدث خطأ</div>
-        <div className="muted" style={{ marginTop: 6 }}>{err}</div>
+      <div
+        className="card"
+        style={{
+          padding: '24px',
+          border: '1px solid rgba(220,38,38,0.2)',
+          background: '#fef2f2',
+          borderRadius: '12px',
+          textAlign: 'center',
+        }}
+      >
+        <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+        <div style={{ fontWeight: '900', fontSize: '18px', color: '#991b1b', marginBottom: '8px' }}>حدث خطأ</div>
+        <div style={{ fontSize: '15px', color: '#64748b', marginBottom: '16px' }}>{err}</div>
+        <button
+          onClick={() => window.location.reload()}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '10px',
+            border: 'none',
+            background: '#3b82f6',
+            color: 'white',
+            fontWeight: '900',
+            fontSize: '14px',
+            cursor: 'pointer',
+          }}
+        >
+          🔄 إعادة المحاولة
+        </button>
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="sooq-filterShell">
-        <TaxonomyInner />
-
-        <div className="sooq-controlsRow">
-          <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <div className="row" style={{ gap: 8 }}>
-              <button className={`btn ${view === 'grid' ? 'btnPrimary' : ''}`} onClick={() => setView('grid')}>
-                ◼️ شبكة
-              </button>
-              <button className={`btn ${view === 'list' ? 'btnPrimary' : ''}`} onClick={() => setView('list')}>
-                ☰ قائمة
-              </button>
-              <button className={`btn ${view === 'map' ? 'btnPrimary' : ''}`} onClick={() => setView('map')}>
-                🗺️ خريطة
-              </button>
-            </div>
-
-            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-              <span className="muted" style={{ fontWeight: 900 }}>المحافظة:</span>
-              <select
-                className="input"
-                value={govKey}
-                onChange={(e) => setGovKey(e.target.value)}
-                style={{ minWidth: 170 }}
-              >
-                <option value="">{govLoading ? 'جاري التحميل...' : 'الكل'}</option>
-                {govOptions.map((g) => (
-                  <option key={g.key} value={g.key}>{g.nameAr}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-              <span className="muted" style={{ fontWeight: 900 }}>ترتيب:</span>
-              <select
-                className="input"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                style={{ minWidth: 140 }}
-              >
-                {SORT_OPTIONS.map((opt) => (
-                  <option key={opt.key} value={opt.key}>
-                    {opt.icon} {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              className={`btn ${showPriceFilter ? 'btnPrimary' : ''}`}
-              onClick={() => setShowPriceFilter(!showPriceFilter)}
-            >
-              💰 فلتر السعر
-            </button>
-
-            <button
-              className="btn btnSecondary"
-              onClick={fetchFirstPage}
-              disabled={loading}
-              style={{ marginRight: 'auto' }}
-            >
-              🔄 تحديث
-            </button>
-
-            <input
-              className="input sooq-search"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="🔍 ابحث داخل القسم..."
-              style={{ flex: 1, minWidth: 180 }}
-            />
+    <div dir="rtl">
+      <div className="container" style={{ paddingTop: '20px', paddingBottom: '30px' }}>
+        {/* العنوان الرئيسي */}
+        <div
+          className="card"
+          style={{
+            padding: '20px',
+            marginBottom: '16px',
+            background: `linear-gradient(135deg, ${CAT_COLOR} 0%, ${CAT_COLOR}80 100%)`,
+            color: 'white',
+            borderRadius: '16px',
+            border: 'none',
+          }}
+        >
+          <div style={{ fontWeight: '900', fontSize: '24px', marginBottom: '6px' }}>
+            {categoryLabel || 'قسم'}
           </div>
+          <div style={{ fontSize: '15px', opacity: 0.9 }}>
+            تصفّح {items.length.toLocaleString('ar-YE')} إعلان مع بحث وعرض شبكة/قائمة/خريطة
+          </div>
+        </div>
 
-          {showPriceFilter && (
-            <div className="price-filter" style={{ marginTop: 12, padding: 12, background: '#f8fafc', borderRadius: 8 }}>
-              <div style={{ fontWeight: 900, marginBottom: 8 }}>نطاق السعر (ريال يمني)</div>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                <input
-                  type="number"
-                  className="input"
-                  placeholder="الحد الأدنى"
-                  value={priceRange.min}
-                  onChange={(e) => setPriceRange(prev => ({ ...prev, min: e.target.value }))}
-                  style={{ width: 120 }}
-                />
-                <span>إلى</span>
-                <input
-                  type="number"
-                  className="input"
-                  placeholder="الحد الأقصى"
-                  value={priceRange.max}
-                  onChange={(e) => setPriceRange(prev => ({ ...prev, max: e.target.value }))}
-                  style={{ width: 120 }}
-                />
+        {/* شريط الأدوات */}
+        <div
+          className="card"
+          style={{
+            padding: '16px',
+            marginBottom: '20px',
+            borderRadius: '14px',
+            border: '1px solid #e2e8f0',
+            background: 'white',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {/* ✅ Views row */}
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '8px',
+                  background: '#f8fafc',
+                  padding: '6px',
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0',
+                  flex: 1,
+                  minWidth: 220,
+                }}
+              >
                 <button
-                  className="btn btnSecondary"
-                  onClick={() => setPriceRange({ min: '', max: '' })}
+                  className={`view-btn ${view === 'grid' ? 'active' : ''}`}
+                  onClick={() => setView('grid')}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: view === 'grid' ? '#3b82f6' : 'transparent',
+                    color: view === 'grid' ? 'white' : '#475569',
+                    fontWeight: '900',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                    flex: 1,
+                  }}
                 >
-                  مسح
+                  <span className="vIcon">◼️</span>
+                  <span className="vLabel">شبكة</span>
+                </button>
+
+                <button
+                  className={`view-btn ${view === 'list' ? 'active' : ''}`}
+                  onClick={() => setView('list')}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: view === 'list' ? '#3b82f6' : 'transparent',
+                    color: view === 'list' ? 'white' : '#475569',
+                    fontWeight: '900',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                    flex: 1,
+                  }}
+                >
+                  <span className="vIcon">☰</span>
+                  <span className="vLabel">قائمة</span>
+                </button>
+
+                <button
+                  className={`view-btn ${view === 'map' ? 'active' : ''}`}
+                  onClick={() => setView('map')}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: view === 'map' ? '#3b82f6' : 'transparent',
+                    color: view === 'map' ? 'white' : '#475569',
+                    fontWeight: '900',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                    flex: 1,
+                  }}
+                >
+                  <span className="vIcon">🗺️</span>
+                  <span className="vLabel">خريطة</span>
                 </button>
               </div>
-            </div>
-          )}
-        </div>
-      </div>
 
-      {sortedListings.length === 0 ? (
-        <div className="card" style={{ padding: 16, textAlign: 'center' }}>
-          <div style={{ fontWeight: 900 }}>لا توجد إعلانات مطابقة</div>
-          <div className="muted" style={{ marginTop: 6 }}>جرّب تغيير الفلاتر أو البحث.</div>
-          <div style={{ marginTop: 12 }}>
-            <Link className="btn btnPrimary" href="/add">➕ أضف إعلان</Link>
-          </div>
-        </div>
-      ) : view === 'map' ? (
-        <HomeMapView listings={sortedListings} />
-      ) : (
-        <>
-          <div className="category-stats" style={{
-            display: 'flex',
-            gap: 16,
-            marginBottom: 16,
-            padding: 12,
-            background: '#f8fafc',
-            borderRadius: 8,
-            flexWrap: 'wrap'
-          }}>
-            <div className="stat-item">
-              <span className="stat-label">إجمالي الإعلانات:</span>
-              <span className="stat-value">{items.length.toLocaleString('ar-YE')}</span>
+              <button
+                className="filters-btn"
+                onClick={() => setShowFilters(true)}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0',
+                  background: '#fff',
+                  color: '#475569',
+                  fontWeight: '900',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s ease',
+                  minWidth: 140,
+                }}
+              >
+                ⚙️ ترتيب/فلاتر
+              </button>
             </div>
-            <div className="stat-item">
-              <span className="stat-label">المعروض:</span>
-              <span className="stat-value">{sortedListings.length.toLocaleString('ar-YE')}</span>
-            </div>
-            {single === 'cars' && carMake && (
-              <div className="stat-item">
-                <span className="stat-label">الماركة المختارة:</span>
-                <span className="stat-value">{carMakeLabel(carMake)}</span>
+
+            {/* Search */}
+            <div style={{ width: '100%', position: 'relative' }}>
+              <input
+                className="search-input"
+                style={{
+                  width: '100%',
+                  padding: '12px 16px 12px 44px',
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0',
+                  fontSize: '15px',
+                  background: '#f8fafc',
+                  transition: 'all 0.2s ease',
+                }}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="🔍 ابحث في العناوين، الوصف، أو المدينة..."
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  fontSize: '18px',
+                  opacity: 0.6,
+                }}
+              >
+                🔍
               </div>
-            )}
-          </div>
+            </div>
 
+            {/* Count */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                paddingTop: '10px',
+                borderTop: '1px solid #f1f5f9',
+                flexWrap: 'wrap',
+                gap: '8px',
+              }}
+            >
+              <div style={{ fontSize: '14px', color: '#64748b' }}>
+                <span style={{ fontWeight: '900', color: '#3b82f6' }}>
+                  {sortedListings.length.toLocaleString('ar-YE')}
+                </span>{' '}
+                إعلان متاح
+              </div>
+
+              <div style={{ fontSize: '13px', color: '#64748b' }}>
+                {q && (
+                  <span>
+                    نتائج البحث عن: "<strong>{q}</strong>"
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ✅ Mobile/All Bottom Sheet */}
+        {showFilters && (
+          <div className="mSheetWrap" role="dialog" aria-modal="true" aria-label="ترتيب/فلاتر">
+            <div className="mSheetBackdrop" onClick={() => setShowFilters(false)} />
+            <div className="mSheet">
+              <div className="mSheetHeader">
+                <div style={{ fontWeight: 1000, fontSize: 16 }}>⚙️ ترتيب وفلاتر القسم</div>
+                <button className="mSheetClose" onClick={() => setShowFilters(false)} aria-label="إغلاق">
+                  ✕
+                </button>
+              </div>
+
+              <div className="mSheetBody">
+                <div style={{ marginBottom: '16px' }}>
+                  <div className="mLabel" style={{ marginBottom: '8px' }}>المحافظة</div>
+                  <select
+                    className="mSelect"
+                    value={govKey}
+                    onChange={(e) => setGovKey(e.target.value)}
+                  >
+                    <option value="">{govLoading ? 'جاري التحميل...' : 'الكل'}</option>
+                    {govOptions.map((g) => (
+                      <option key={g.key} value={g.key}>{g.nameAr}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <div className="mLabel" style={{ marginBottom: '8px' }}>ترتيب حسب</div>
+                  <select className="mSelect" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                    {SORT_OPTIONS.map((opt) => (
+                      <option key={opt.key} value={opt.key}>
+                        {opt.icon} {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <div className="mLabel" style={{ marginBottom: '8px' }}>نطاق السعر (ريال يمني)</div>
+                  <div style={{ display: 'flex', gap: '10px', marginBottom: '8px' }}>
+                    <input
+                      type="number"
+                      className="mSelect"
+                      placeholder="الحد الأدنى"
+                      value={priceRange.min}
+                      onChange={(e) => setPriceRange(prev => ({ ...prev, min: e.target.value }))}
+                      style={{ flex: 1 }}
+                    />
+                    <input
+                      type="number"
+                      className="mSelect"
+                      placeholder="الحد الأقصى"
+                      value={priceRange.max}
+                      onChange={(e) => setPriceRange(prev => ({ ...prev, max: e.target.value }))}
+                      style={{ flex: 1 }}
+                    />
+                  </div>
+                </div>
+
+                <TaxonomySection />
+
+                <div className="mActions">
+                  <button className="mBtn" onClick={resetAllFilters}>
+                    🗑️ مسح الكل
+                  </button>
+                  <button className="mBtnPrimary" onClick={() => setShowFilters(false)}>
+                    ✅ تطبيق
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* المحتوى */}
+        {sortedListings.length === 0 ? (
           <div
+            className="card"
             style={{
-              display: 'grid',
-              gridTemplateColumns: view === 'grid' ? 'repeat(auto-fill, minmax(210px, 1fr))' : '1fr',
-              gap: 10,
+              padding: '40px 20px',
+              textAlign: 'center',
+              background: 'white',
+              borderRadius: '12px',
+              border: '1px solid #e2e8f0',
             }}
           >
-            {sortedListings.map((l) => (
-              <ListingCard key={l.id} listing={l} variant={view === 'list' ? 'list' : 'grid'} />
-            ))}
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
+            <div style={{ fontWeight: '900', fontSize: '18px', marginBottom: '8px' }}>لا توجد نتائج مطابقة</div>
+            <div style={{ fontSize: '15px', color: '#64748b', marginBottom: '24px', maxWidth: 400, margin: '0 auto 24px' }}>
+              {q ? `لم نعثر على إعلانات تطابق "${q}"` : 'لا توجد إعلانات متاحة حالياً'}
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setQ('')}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0',
+                  background: 'white',
+                  color: '#475569',
+                  fontWeight: '900',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                }}
+              >
+                🗑️ مسح البحث
+              </button>
+              <Link
+                href="/add"
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: '#3b82f6',
+                  color: 'white',
+                  fontWeight: '900',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  textDecoration: 'none',
+                  display: 'inline-block',
+                }}
+              >
+                ➕ أضف إعلان جديد
+              </Link>
+            </div>
           </div>
-
-          <div ref={loadMoreRef} style={{ height: 1 }} />
-
-          <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center' }}>
-            {loadingMore ? (
-              <div className="muted" style={{ padding: 10 }}>...جاري تحميل المزيد</div>
-            ) : hasMore ? (
-              <div className="muted" style={{ padding: 10 }}>انزل لأسفل لتحميل المزيد</div>
-            ) : (
-              <div className="muted" style={{ padding: 10 }}>لا يوجد المزيد</div>
-            )}
-          </div>
-
-          {view !== 'map' && popularListings.length >= 4 ? (
-            <div className="card" style={{ padding: 14, marginTop: 14 }}>
-              <div style={{ fontWeight: 900, marginBottom: 10 }}>🔥 الإعلانات الأكثر رواجًا</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
-                {popularListings.map((p) => (
-                  <ListingCard key={p.id} listing={p} variant="grid" />
-                ))}
-              </div>
+        ) : view === 'map' ? (
+          <HomeMapView listings={sortedListings} />
+        ) : view === 'list' ? (
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {sortedListings.map((l) => (
+                <ListingCard key={l.id} listing={l} variant="list" />
+              ))}
             </div>
-          ) : null}
-
-          {view !== 'map' && single && hashtagOptions.length ? (
-            <div className="card sooq-hashtagsBox" style={{ padding: 14, marginTop: 12 }}>
-              <div style={{ fontWeight: 900, marginBottom: 8 }}># وسوم شائعة في {categoryLabel || 'القسم'}</div>
-
-              <div className="sooq-hashtags">
-                {hashtagOptions.map((t) => (
-                  <button
-                    key={t.key}
-                    type="button"
-                    className="sooq-tag"
-                    onClick={() => applyHashtag(t.key)}
-                    title={`فلترة: ${t.label}`}
-                  >
-                    <span className="sooq-tagText">#{t.label}</span>
-                    <span className="sooq-tagCount">{Number(t.count || 0).toLocaleString('en-US')}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="muted" style={{ marginTop: 10, lineHeight: 1.7 }}>
-                تصفح إعلانات {categoryLabel || 'القسم'} في اليمن، واستخدم الوسوم أعلاه للوصول بسرعة إلى الفئات المطلوبة.
-              </div>
+            <div ref={loadMoreRef} style={{ height: '1px', margin: '20px 0' }} />
+          </>
+        ) : (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
+              {sortedListings.map((l) => (
+                <ListingCard key={l.id} listing={l} variant="grid" />
+              ))}
             </div>
-          ) : null}
-
-          {err && items.length > 0 ? (
-            <div className="card" style={{ padding: 12, marginTop: 12, border: '1px solid #fecaca' }}>
-              <div style={{ fontWeight: 900, color: '#b91c1c' }}>⚠️</div>
-              <div className="muted" style={{ marginTop: 6 }}>{err}</div>
-            </div>
-          ) : null}
-        </>
-      )}
+            <div ref={loadMoreRef} style={{ height: '1px', margin: '20px 0' }} />
+          </>
+        )}
+      </div>
 
       <style jsx>{`
         /* ====== الأنماط الأساسية ====== */
-        .sooq-filterShell {
-          margin-bottom: 16px;
-          padding: 16px;
-          border-radius: 12px;
+        .container {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 0 16px;
+        }
+
+        .card {
           background: white;
+          border-radius: 12px;
           border: 1px solid #e2e8f0;
-          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-        .sooq-taxSection {
-          margin-bottom: 10px;
-        }
-        .sooq-controlsRow {
-          margin-top: 10px;
-        }
-        .sooq-search {
-          flex: 1;
-          min-width: 180px;
-        }
-
-        .sooq-taxTitle {
-          font-weight: 900;
-          margin-bottom: 8px;
-          display: flex;
-          gap: 8px;
-          align-items: center;
-          font-size: 16px;
-        }
-        .sooq-taxSub {
-          font-size: 13px;
-          font-weight: 900;
-          opacity: 0.85;
-          margin: 6px 0 6px;
-        }
-
-        .sooq-chips {
-          display: flex;
-          gap: 8px;
-          overflow-x: auto;
-          padding: 12px;
-          border-radius: 12px;
-          background: #f8fafc;
-          align-items: center;
-        }
-
-        .sooq-chip {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 8px 16px;
-          border-radius: 20px;
-          border: 2px solid #e2e8f0;
-          background: white;
-          font-size: 14px;
-          font-weight: 900;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          white-space: nowrap;
-          user-select: none;
-        }
-        .sooq-chip.isDisabled {
-          opacity: 0.55;
-          filter: grayscale(0.15);
-          cursor: not-allowed;
-        }
-        .sooq-chip:disabled {
-          opacity: 0.55;
-          cursor: not-allowed;
-        }
-
-        .sooq-chip:hover {
-          border-color: #3b82f6;
-          transform: translateY(-2px);
-        }
-
-        .sooq-chip.isActive {
-          border-color: #3b82f6;
-          background: #3b82f6;
-          color: white;
-          box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-        }
-
-        .sooq-chipDot {
-          width: 10px;
-          height: 10px;
-          border-radius: 50%;
-          flex: 0 0 10px;
-        }
-        .sooq-chipIcon {
-          font-size: 14px;
-          line-height: 1;
-        }
-        .sooq-chipText {
-          font-weight: 900;
-        }
-        .sooq-chipCount {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          min-width: 22px;
-          height: 18px;
-          padding: 0 6px;
-          border-radius: 999px;
-          background: rgba(0, 0, 0, 0.08);
-          font-size: 12px;
-          font-weight: 900;
-        }
-
-        .sooq-chip.isActive .sooq-chipCount {
-          background: rgba(255, 255, 255, 0.2);
+          overflow: hidden;
         }
 
         /* ====== الهاشتاقات ====== */
@@ -1851,101 +2019,125 @@ export default function CategoryListings({ category, initialListings = [] }) {
           white-space: nowrap;
         }
 
-        /* ====== مؤشر التحميل ====== */
-        .loading-container {
+        /* ====== Bottom Sheet ====== */
+        .mSheetWrap {
+          position: fixed;
+          inset: 0;
+          z-index: 9999;
+          display: flex;
+          align-items: flex-end;
+          justify-content: center;
+        }
+        .mSheetBackdrop {
+          position: absolute;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.35);
+        }
+        .mSheet {
+          position: relative;
+          width: 100%;
+          max-width: 520px;
+          background: #fff;
+          border-top-left-radius: 18px;
+          border-top-right-radius: 18px;
+          box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.15);
+          padding: 14px 14px 18px;
+          max-height: 85vh;
+          overflow-y: auto;
+        }
+        .mSheetHeader {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding-bottom: 10px;
+          border-bottom: 1px solid #f1f5f9;
+        }
+        .mSheetClose {
+          border: 1px solid #e2e8f0;
+          background: #fff;
+          border-radius: 10px;
+          padding: 6px 10px;
+          cursor: pointer;
+          font-weight: 800;
+          color: #334155;
+        }
+        .mSheetBody {
+          padding-top: 12px;
           display: flex;
           flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 48px;
+          gap: 10px;
         }
-
-        .loading-spinner {
-          width: 48px;
-          height: 48px;
-          border: 4px solid #e2e8f0;
-          border-top-color: #3b82f6;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-          margin-bottom: 16px;
+        .mLabel {
+          font-size: 13px;
+          font-weight: 800;
+          color: #475569;
+          margin-bottom: 6px;
         }
-
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-
-        .loading-text {
-          font-size: 16px;
-          color: #64748b;
-          font-weight: 900;
-        }
-
-        /* ====== الإحصائيات ====== */
-        .category-stats {
-          background: #f8fafc;
-          border-radius: 8px;
-          padding: 12px 16px;
-        }
-
-        .stat-item {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-
-        .stat-label {
-          color: #64748b;
-          font-size: 14px;
-        }
-
-        .stat-value {
-          font-weight: 900;
-          color: #1e293b;
+        .mSelect {
+          width: 100%;
+          padding: 12px 12px;
+          border-radius: 12px;
+          border: 1px solid #e2e8f0;
+          background: #fff;
           font-size: 15px;
         }
-
-        /* ====== فلتر السعر ====== */
-        .price-filter {
-          background: #f8fafc;
-          border-radius: 8px;
+        .mActions {
+          margin-top: 10px;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+        .mBtn {
+          padding: 12px;
+          border-radius: 12px;
           border: 1px solid #e2e8f0;
+          background: #fff;
+          color: #334155;
+          font-weight: 900;
+          cursor: pointer;
+        }
+        .mBtnPrimary {
+          padding: 12px;
+          border-radius: 12px;
+          border: none;
+          background: #3b82f6;
+          color: #fff;
+          font-weight: 1000;
+          cursor: pointer;
         }
 
         /* ====== تحسينات للجوال ====== */
         @media (max-width: 768px) {
-          .sooq-controlsRow .row {
-            flex-direction: column;
-            align-items: stretch;
+          .container {
+            padding-left: 12px !important;
+            padding-right: 12px !important;
           }
           
-          .sooq-chip {
-            padding: 6px 12px;
-            font-size: 13px;
+          .mSheetBody {
+            padding-top: 10px;
           }
           
-          .category-stats {
-            flex-direction: column;
-            gap: 8px;
-          }
-          
-          .price-filter div {
-            flex-direction: column;
-            align-items: flex-start;
+          .mBtn, .mBtnPrimary {
+            padding: 10px;
           }
         }
 
-        @media (max-width: 520px) {
-          .sooq-chips { 
-            padding: 8px; 
-            gap: 6px;
+        @media (max-width: 640px) {
+          .view-btn {
+            padding: 8px 10px !important;
+            font-size: 13px !important;
+            min-width: 0 !important;
           }
-          .sooq-chip { 
-            padding: 6px 10px; 
-            font-size: 12px; 
+          .view-btn .vLabel {
+            display: none !important;
           }
-          
-          .sooq-taxTitle {
-            font-size: 15px;
+          .view-btn .vIcon {
+            font-size: 16px;
+          }
+
+          .filters-btn {
+            width: 100%;
+            justify-content: center;
           }
         }
       `}</style>
