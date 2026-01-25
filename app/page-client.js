@@ -359,7 +359,9 @@ export default function HomePageClient({ initialListings = [] }) {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [viewMode, setViewMode] = useState('grid');
+
+  // ✅ الافتراضي: خريطة بدل الشبكة
+  const [viewMode, setViewMode] = useState('map');
 
   useEffect(() => {
     aliveRef.current = true;
@@ -399,10 +401,19 @@ export default function HomePageClient({ initialListings = [] }) {
     }
   }, []);
 
+  // ✅ قراءة التفضيل: لو ما في شيء محفوظ، نخليه خريطة ونحفظها (أول زيارة)
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const saved = window.localStorage.getItem('preferredViewMode');
-    if (saved === 'grid' || saved === 'list' || saved === 'map') setViewMode(saved);
+
+    try {
+      const saved = window.localStorage.getItem('preferredViewMode');
+      if (saved === 'grid' || saved === 'list' || saved === 'map') {
+        setViewMode(saved);
+      } else {
+        window.localStorage.setItem('preferredViewMode', 'map');
+        setViewMode('map');
+      }
+    } catch {}
   }, []);
 
   // ✅ جلب أول صفحة (مرة واحدة) بدل onSnapshot + limit(100)
