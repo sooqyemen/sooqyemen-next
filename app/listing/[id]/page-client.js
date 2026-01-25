@@ -140,6 +140,46 @@ function safePhoneDigits(v) {
   return String(v || '').replace(/\D/g, '');
 }
 
+// ✅ مشاركة + نسخ رابط (Fallback)
+async function shareListing({ url, title, text }) {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      await navigator.share({
+        title: title || 'سوق اليمن',
+        text: text || '',
+        url,
+      });
+      return { ok: true, mode: 'native' };
+    }
+  } catch (e) {
+    // لو المستخدم أغلق الشير، ما نعتبره خطأ مزعج
+    return { ok: false, mode: 'native', cancelled: true };
+  }
+
+  // fallback: copy
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+      return { ok: true, mode: 'copy' };
+    }
+  } catch {}
+
+  // fallback: old copy
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = url;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    return { ok: true, mode: 'copy' };
+  } catch {
+    return { ok: false, mode: 'copy' };
+  }
+}
+
 // --- المكون الرئيسي ---
 export default function ListingDetailsClient({ params, initialListing = null }) {
   const { id } = params;
@@ -160,6 +200,9 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
   const [listing, setListing] = useState(initialListing);
   const [loading, setLoading] = useState(!initialListing);
   const [error, setError] = useState(null);
+
+  // ✅ مشاركة
+  const [shareMsg, setShareMsg] = useState('');
 
   // لا تعرض/تحمّل المزاد إذا الإعلان ليس مزادًا
   useEffect(() => {
@@ -284,14 +327,14 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
     if (catKey === 'cars') {
       const k = String(listing?.carMake || taxonomy?.carMake || '').trim();
       const t = String(listing?.carMakeText || '').trim();
-      const label = k === 'other' ? (t || 'أخرى') : (carMakeLabel(k) || t || '');
+      const label = k === 'other' ? (t || 'أخرى') : carMakeLabel(k) || t || '';
       if (label) chips.push({ kind: 'make', icon: '🚗', text: label });
     }
 
     if (catKey === 'phones') {
       const k = String(listing?.phoneBrand || taxonomy?.phoneBrand || '').trim();
       const t = String(listing?.phoneBrandText || '').trim();
-      const label = k === 'other' ? (t || 'أخرى') : (phoneBrandLabel(k) || t || '');
+      const label = k === 'other' ? (t || 'أخرى') : phoneBrandLabel(k) || t || '';
       if (label) chips.push({ kind: 'phone', icon: '📱', text: label });
     }
 
@@ -301,7 +344,7 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
       const propText = String(listing?.propertyTypeText || '').trim();
 
       const dealLabel = dealTypeLabel(deal) || '';
-      const propLabel = prop === 'other' ? (propText || 'أخرى') : (propertyTypeLabel(prop) || propText || '');
+      const propLabel = prop === 'other' ? (propText || 'أخرى') : propertyTypeLabel(prop) || propText || '';
 
       if (dealLabel) chips.push({ kind: 'deal', icon: '🏷️', text: dealLabel });
       if (propLabel) chips.push({ kind: 'prop', icon: '🏡', text: propLabel });
@@ -359,7 +402,8 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
       ? [listing.image]
       : [];
 
-  const sellerUid = listing.userId;
+  // ✅ Owner ID موحّد
+  const sellerUid = listing.userId || listing.ownerId || listing.uid || listing.createdBy || '';
   const isAdmin = !!user?.email && String(user.email).toLowerCase() === ADMIN_EMAIL;
   const isOwner = !!user?.uid && !!sellerUid && user.uid === sellerUid;
 
@@ -427,6 +471,44 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
   const whatsappRaw = listing.whatsappNumber || listing.whatsapp || contactPhoneRaw || '';
   const whatsappDigits = safePhoneDigits(whatsappRaw);
 
+  // ✅ رابط الشير
+  const shareUrl =
+    typeof window !== 'undefined' ? window.location.href : `https://sooqyemen.com/listing/${listing.id}`;
+
+  const handleShare = useCallback(async () => {
+    setShareMsg('');
+    const res = await shareListing({
+      url: shareUrl,
+      title: listing.title || 'إعلان - سوق اليمن',
+      text: (listing.description || '').slice(0, 80),
+    });
+
+    if (res?.ok && res.mode === 'native') {
+      setShareMsg('✅ تم فتح المشاركة');
+      setTimeout(() => setShareMsg(''), 2000);
+      return;
+    }
+
+    if (res?.ok && res.mode === 'copy') {
+      setShareMsg('✅ تم نسخ رابط الإعلان');
+      setTimeout(() => setShareMsg(''), 2500);
+      return;
+    }
+
+    if (res?.cancelled) {
+      // تجاهل
+      return;
+    }
+
+    setShareMsg('تعذر مشاركة الرابط');
+    setTimeout(() => setShareMsg(''), 2500);
+  }, [shareUrl, listing.title, listing.description]);
+
+  const handleEdit = useCallback(() => {
+    // صفحة التعديل عندك موجودة: /edit-listing/[id]
+    router.push(`/edit-listing/${listing.id}`);
+  }, [router, listing.id]);
+
   return (
     <>
       <ListingJsonLd listing={listing} />
@@ -438,8 +520,55 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
             <Link href="/" className="back-button">
               ← العودة للرئيسية
             </Link>
-            <div className="views-badge">👁️ {Number(listing.views || 0).toLocaleString('en-US')}</div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              {/* ✅ زر مشاركة */}
+              <button
+                type="button"
+                onClick={handleShare}
+                className="btn"
+                style={{ padding: '8px 12px', fontWeight: 1000 }}
+                aria-label="مشاركة الإعلان"
+                title="مشاركة"
+              >
+                🔗 مشاركة
+              </button>
+
+              {/* ✅ زر تعديل للمالك فقط */}
+              {isOwner ? (
+                <button
+                  type="button"
+                  onClick={handleEdit}
+                  className="btn btnPrimary"
+                  style={{ padding: '8px 12px', fontWeight: 1000 }}
+                  aria-label="تعديل الإعلان"
+                  title="تعديل"
+                >
+                  ✏️ تعديل
+                </button>
+              ) : null}
+
+              <div className="views-badge">👁️ {Number(listing.views || 0).toLocaleString('en-US')}</div>
+            </div>
           </div>
+
+          {shareMsg ? (
+            <div
+              className="card"
+              style={{
+                marginTop: 10,
+                marginBottom: 10,
+                padding: 10,
+                borderRadius: 12,
+                border: '1px solid rgba(0,0,0,0.06)',
+                background: '#f8fafc',
+                fontWeight: 900,
+                color: '#0f172a',
+              }}
+            >
+              {shareMsg}
+            </div>
+          ) : null}
 
           {listing.hidden && (isAdmin || isOwner) && <div className="hidden-alert">⚠️ هذا الإعلان مخفي عن الجمهور</div>}
 
@@ -545,11 +674,51 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
               <div className="sidebar-card">
                 <div className="seller-header">
                   <div className="seller-avatar">{getInitials(listing.userEmail)}</div>
-                  <div>
-                    <h3>{listing.userName || listing.userEmail?.split('@')[0] || 'البائع'}</h3>
-                    <small>{isOwner ? 'أنت البائع' : 'البائع'}</small>
+                  <div style={{ minWidth: 0 }}>
+                    {/* ✅ اسم المعلن كرابط لصفحة /user/[id] */}
+                    {sellerUid ? (
+                      <Link href={`/user/${sellerUid}`} className="seller-name-link" title="عرض جميع إعلانات هذا المعلن">
+                        <h3 style={{ margin: 0 }}>
+                          {listing.userName || listing.userEmail?.split('@')[0] || 'البائع'}
+                        </h3>
+                      </Link>
+                    ) : (
+                      <h3 style={{ margin: 0 }}>{listing.userName || listing.userEmail?.split('@')[0] || 'البائع'}</h3>
+                    )}
+
+                    <small style={{ display: 'block', marginTop: 4 }}>
+                      {isOwner ? 'أنت البائع' : 'البائع'}
+                      {sellerUid ? (
+                        <>
+                          {' '}
+                          •{' '}
+                          <Link href={`/user/${sellerUid}`} className="seller-sub-link">
+                            عرض جميع الإعلانات
+                          </Link>
+                        </>
+                      ) : null}
+                    </small>
                   </div>
                 </div>
+
+                {/* ✅ زر إضافي واضح داخل بطاقة البائع */}
+                {sellerUid ? (
+                  <Link
+                    href={`/user/${sellerUid}`}
+                    className="btn"
+                    style={{
+                      width: '100%',
+                      marginTop: 12,
+                      display: 'inline-flex',
+                      justifyContent: 'center',
+                      textDecoration: 'none',
+                      fontWeight: 1000,
+                      padding: '10px 12px',
+                    }}
+                  >
+                    📦 إعلانات هذا المعلن
+                  </Link>
+                ) : null}
               </div>
 
               {listing?.auctionEnabled ? (
@@ -670,6 +839,22 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
           padding: 10px;
           border-radius: 8px;
           margin-bottom: 10px;
+        }
+
+        /* ✅ روابط المعلن */
+        .seller-name-link {
+          text-decoration: none;
+          color: inherit;
+          display: inline-block;
+          max-width: 100%;
+        }
+        .seller-name-link h3 {
+          text-decoration: underline;
+          text-underline-offset: 3px;
+        }
+        .seller-sub-link {
+          text-decoration: underline;
+          font-weight: 900;
         }
 
         /* ====== Taxonomy chips ====== */
