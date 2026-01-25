@@ -140,44 +140,8 @@ function safePhoneDigits(v) {
   return String(v || '').replace(/\D/g, '');
 }
 
-// ✅ مشاركة + نسخ رابط (Fallback)
-async function shareListing({ url, title, text }) {
-  try {
-    if (typeof navigator !== 'undefined' && navigator.share) {
-      await navigator.share({
-        title: title || 'سوق اليمن',
-        text: text || '',
-        url,
-      });
-      return { ok: true, mode: 'native' };
-    }
-  } catch (e) {
-    // لو المستخدم أغلق الشير، ما نعتبره خطأ مزعج
-    return { ok: false, mode: 'native', cancelled: true };
-  }
-
-  // fallback: copy
-  try {
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(url);
-      return { ok: true, mode: 'copy' };
-    }
-  } catch {}
-
-  // fallback: old copy
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = url;
-    ta.style.position = 'fixed';
-    ta.style.left = '-9999px';
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    return { ok: true, mode: 'copy' };
-  } catch {
-    return { ok: false, mode: 'copy' };
-  }
+function safeText(v) {
+  return typeof v === 'string' ? v : '';
 }
 
 // --- المكون الرئيسي ---
@@ -201,16 +165,26 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
   const [loading, setLoading] = useState(!initialListing);
   const [error, setError] = useState(null);
 
+  const [startingChat, setStartingChat] = useState(false);
+  const [chatErr, setChatErr] = useState('');
+
   // ✅ مشاركة
-  const [shareMsg, setShareMsg] = useState('');
+  const [shareToast, setShareToast] = useState('');
+
+  // ✅ إعلانات أخرى لنفس المعلن
+  const [sellerListings, setSellerListings] = useState([]);
+  const [sellerListingsLoading, setSellerListingsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!shareToast) return;
+    const t = setTimeout(() => setShareToast(''), 2200);
+    return () => clearTimeout(t);
+  }, [shareToast]);
 
   // لا تعرض/تحمّل المزاد إذا الإعلان ليس مزادًا
   useEffect(() => {
     if (!listing?.auctionEnabled) setShowAuction(false);
   }, [listing?.auctionEnabled]);
-
-  const [startingChat, setStartingChat] = useState(false);
-  const [chatErr, setChatErr] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -327,14 +301,14 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
     if (catKey === 'cars') {
       const k = String(listing?.carMake || taxonomy?.carMake || '').trim();
       const t = String(listing?.carMakeText || '').trim();
-      const label = k === 'other' ? (t || 'أخرى') : carMakeLabel(k) || t || '';
+      const label = k === 'other' ? (t || 'أخرى') : (carMakeLabel(k) || t || '');
       if (label) chips.push({ kind: 'make', icon: '🚗', text: label });
     }
 
     if (catKey === 'phones') {
       const k = String(listing?.phoneBrand || taxonomy?.phoneBrand || '').trim();
       const t = String(listing?.phoneBrandText || '').trim();
-      const label = k === 'other' ? (t || 'أخرى') : phoneBrandLabel(k) || t || '';
+      const label = k === 'other' ? (t || 'أخرى') : (phoneBrandLabel(k) || t || '');
       if (label) chips.push({ kind: 'phone', icon: '📱', text: label });
     }
 
@@ -344,7 +318,7 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
       const propText = String(listing?.propertyTypeText || '').trim();
 
       const dealLabel = dealTypeLabel(deal) || '';
-      const propLabel = prop === 'other' ? (propText || 'أخرى') : propertyTypeLabel(prop) || propText || '';
+      const propLabel = prop === 'other' ? (propText || 'أخرى') : (propertyTypeLabel(prop) || propText || '');
 
       if (dealLabel) chips.push({ kind: 'deal', icon: '🏷️', text: dealLabel });
       if (propLabel) chips.push({ kind: 'prop', icon: '🏡', text: propLabel });
@@ -352,6 +326,84 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
 
     return chips;
   }, [listing, taxonomy, categoryKey]);
+
+  const sellerUid = listing?.userId || '';
+  const isAdmin = !!user?.email && String(user.email).toLowerCase() === ADMIN_EMAIL;
+  const isOwner = !!user?.uid && !!sellerUid && user.uid === sellerUid;
+
+  // ✅ جلب إعلانات أخرى لنفس المعلن
+  useEffect(() => {
+    if (!listing?.id) return;
+    if (!sellerUid) return;
+
+    let cancelled = false;
+
+    const run = async () => {
+      setSellerListingsLoading(true);
+      try {
+        let snap = null;
+
+        try {
+          snap = await db
+            .collection('listings')
+            .where('userId', '==', sellerUid)
+            .orderBy('createdAt', 'desc')
+            .limit(12)
+            .get();
+        } catch (e) {
+          // fallback بدون orderBy لتفادي مشاكل الفهارس
+          snap = await db
+            .collection('listings')
+            .where('userId', '==', sellerUid)
+            .limit(12)
+            .get();
+        }
+
+        const items = snap.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() }))
+          .filter((l) => l.isActive !== false && l.hidden !== true)
+          .filter((l) => l.id !== listing.id);
+
+        if (!cancelled) setSellerListings(items.slice(0, 8));
+      } catch (e) {
+        console.warn('[seller listings] failed', e);
+        if (!cancelled) setSellerListings([]);
+      } finally {
+        if (!cancelled) setSellerListingsLoading(false);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [sellerUid, listing?.id]);
+
+  const handleShare = useCallback(async () => {
+    try {
+      if (typeof window === 'undefined') return;
+      const url = window.location.href;
+      const title = String(listing?.title || 'إعلان');
+      const text = `${title} - سوق اليمن`;
+
+      if (navigator.share) {
+        await navigator.share({ title, text, url });
+        setShareToast('تمت المشاركة ✅');
+        return;
+      }
+
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        setShareToast('تم نسخ الرابط ✅');
+        return;
+      }
+
+      window.prompt('انسخ رابط الإعلان:', url);
+      setShareToast('انسخ الرابط ✅');
+    } catch {
+      setShareToast('تعذر المشاركة');
+    }
+  }, [listing?.title]);
 
   if (loading) {
     return (
@@ -395,18 +447,6 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
     );
   }
 
-  const images =
-    Array.isArray(listing.images) && listing.images.length > 0
-      ? listing.images
-      : listing.image
-      ? [listing.image]
-      : [];
-
-  // ✅ Owner ID موحّد
-  const sellerUid = listing.userId || listing.ownerId || listing.uid || listing.createdBy || '';
-  const isAdmin = !!user?.email && String(user.email).toLowerCase() === ADMIN_EMAIL;
-  const isOwner = !!user?.uid && !!sellerUid && user.uid === sellerUid;
-
   if (listing.hidden && !isAdmin && !isOwner) {
     return (
       <div className="container" style={{ padding: 40, textAlign: 'center' }}>
@@ -416,6 +456,13 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
       </div>
     );
   }
+
+  const images =
+    Array.isArray(listing.images) && listing.images.length > 0
+      ? listing.images
+      : listing.image
+      ? [listing.image]
+      : [];
 
   // IMPORTANT: do NOT create a chat id if the viewer is the owner.
   let chatId = null;
@@ -471,43 +518,7 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
   const whatsappRaw = listing.whatsappNumber || listing.whatsapp || contactPhoneRaw || '';
   const whatsappDigits = safePhoneDigits(whatsappRaw);
 
-  // ✅ رابط الشير
-  const shareUrl =
-    typeof window !== 'undefined' ? window.location.href : `https://sooqyemen.com/listing/${listing.id}`;
-
-  const handleShare = useCallback(async () => {
-    setShareMsg('');
-    const res = await shareListing({
-      url: shareUrl,
-      title: listing.title || 'إعلان - سوق اليمن',
-      text: (listing.description || '').slice(0, 80),
-    });
-
-    if (res?.ok && res.mode === 'native') {
-      setShareMsg('✅ تم فتح المشاركة');
-      setTimeout(() => setShareMsg(''), 2000);
-      return;
-    }
-
-    if (res?.ok && res.mode === 'copy') {
-      setShareMsg('✅ تم نسخ رابط الإعلان');
-      setTimeout(() => setShareMsg(''), 2500);
-      return;
-    }
-
-    if (res?.cancelled) {
-      // تجاهل
-      return;
-    }
-
-    setShareMsg('تعذر مشاركة الرابط');
-    setTimeout(() => setShareMsg(''), 2500);
-  }, [shareUrl, listing.title, listing.description]);
-
-  const handleEdit = useCallback(() => {
-    // صفحة التعديل عندك موجودة: /edit-listing/[id]
-    router.push(`/edit-listing/${listing.id}`);
-  }, [router, listing.id]);
+  const sellerName = listing.userName || listing.userEmail?.split('@')[0] || 'البائع';
 
   return (
     <>
@@ -516,57 +527,29 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
 
       <div className="listing-details-page">
         <div className="container">
-          <div className="header-bar">
+          <div className="header-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
             <Link href="/" className="back-button">
               ← العودة للرئيسية
             </Link>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              {/* ✅ زر مشاركة */}
-              <button
-                type="button"
-                onClick={handleShare}
-                className="btn"
-                style={{ padding: '8px 12px', fontWeight: 1000 }}
-                aria-label="مشاركة الإعلان"
-                title="مشاركة"
-              >
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div className="views-badge">👁️ {Number(listing.views || 0).toLocaleString('en-US')}</div>
+
+              <button type="button" className="btn" onClick={handleShare} style={{ fontWeight: 900 }}>
                 🔗 مشاركة
               </button>
 
-              {/* ✅ زر تعديل للمالك فقط */}
               {isOwner ? (
-                <button
-                  type="button"
-                  onClick={handleEdit}
-                  className="btn btnPrimary"
-                  style={{ padding: '8px 12px', fontWeight: 1000 }}
-                  aria-label="تعديل الإعلان"
-                  title="تعديل"
-                >
-                  ✏️ تعديل
-                </button>
+                <Link href={`/edit-listing/${listing.id}`} className="btn btnPrimary" style={{ textDecoration: 'none', fontWeight: 900 }}>
+                  ✏️ تعديل الإعلان
+                </Link>
               ) : null}
-
-              <div className="views-badge">👁️ {Number(listing.views || 0).toLocaleString('en-US')}</div>
             </div>
           </div>
 
-          {shareMsg ? (
-            <div
-              className="card"
-              style={{
-                marginTop: 10,
-                marginBottom: 10,
-                padding: 10,
-                borderRadius: 12,
-                border: '1px solid rgba(0,0,0,0.06)',
-                background: '#f8fafc',
-                fontWeight: 900,
-                color: '#0f172a',
-              }}
-            >
-              {shareMsg}
+          {shareToast ? (
+            <div className="card" style={{ marginTop: 10, padding: 10, borderRadius: 12, textAlign: 'center', fontWeight: 900 }}>
+              {shareToast}
             </div>
           ) : null}
 
@@ -616,6 +599,44 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
                   <h2 className="section-title">التفاصيل</h2>
                   <div className="listing-description">{listing.description || 'لا يوجد وصف'}</div>
                 </div>
+
+                {/* ✅ إعلانات أخرى لنفس المعلن */}
+                {sellerUid ? (
+                  <div className="related-section">
+                    <h2 className="section-title">إعلانات أخرى لنفس المعلن</h2>
+
+                    {sellerListingsLoading ? (
+                      <div className="muted" style={{ padding: 10 }}>جاري التحميل...</div>
+                    ) : sellerListings.length === 0 ? (
+                      <div className="muted" style={{ padding: 10 }}>لا توجد إعلانات أخرى حالياً.</div>
+                    ) : (
+                      <div className="related-grid">
+                        {sellerListings.map((l) => {
+                          const img = (Array.isArray(l.images) && l.images[0]) || l.image || '';
+                          return (
+                            <Link key={l.id} href={`/listing/${l.id}`} className="related-card">
+                              <div className="related-img">
+                                {img ? <img src={img} alt={safeText(l.title) || 'إعلان'} /> : <div className="related-fb">🖼️</div>}
+                              </div>
+                              <div className="related-body">
+                                <div className="related-title">{safeText(l.title) || 'بدون عنوان'}</div>
+                                <div className="related-price">
+                                  <Price listing={l} variant="compact" />
+                                </div>
+                              </div>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
+                      <Link href={`/user/${sellerUid}`} className="btn" style={{ textDecoration: 'none', fontWeight: 900 }}>
+                        عرض كل إعلاناته →
+                      </Link>
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="contact-section">
                   <h2 className="section-title">التواصل</h2>
@@ -672,53 +693,26 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
 
             <div className="sidebar">
               <div className="sidebar-card">
-                <div className="seller-header">
-                  <div className="seller-avatar">{getInitials(listing.userEmail)}</div>
-                  <div style={{ minWidth: 0 }}>
-                    {/* ✅ اسم المعلن كرابط لصفحة /user/[id] */}
-                    {sellerUid ? (
-                      <Link href={`/user/${sellerUid}`} className="seller-name-link" title="عرض جميع إعلانات هذا المعلن">
-                        <h3 style={{ margin: 0 }}>
-                          {listing.userName || listing.userEmail?.split('@')[0] || 'البائع'}
-                        </h3>
-                      </Link>
-                    ) : (
-                      <h3 style={{ margin: 0 }}>{listing.userName || listing.userEmail?.split('@')[0] || 'البائع'}</h3>
-                    )}
-
-                    <small style={{ display: 'block', marginTop: 4 }}>
-                      {isOwner ? 'أنت البائع' : 'البائع'}
-                      {sellerUid ? (
-                        <>
-                          {' '}
-                          •{' '}
-                          <Link href={`/user/${sellerUid}`} className="seller-sub-link">
-                            عرض جميع الإعلانات
-                          </Link>
-                        </>
-                      ) : null}
-                    </small>
-                  </div>
-                </div>
-
-                {/* ✅ زر إضافي واضح داخل بطاقة البائع */}
+                {/* ✅ اسم المعلن صار رابط */}
                 {sellerUid ? (
-                  <Link
-                    href={`/user/${sellerUid}`}
-                    className="btn"
-                    style={{
-                      width: '100%',
-                      marginTop: 12,
-                      display: 'inline-flex',
-                      justifyContent: 'center',
-                      textDecoration: 'none',
-                      fontWeight: 1000,
-                      padding: '10px 12px',
-                    }}
-                  >
-                    📦 إعلانات هذا المعلن
+                  <Link href={`/user/${sellerUid}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                    <div className="seller-header" title="عرض كل إعلانات المعلن">
+                      <div className="seller-avatar">{getInitials(listing.userEmail)}</div>
+                      <div>
+                        <h3 style={{ marginBottom: 2 }}>{sellerName}</h3>
+                        <small>{isOwner ? 'أنت البائع' : 'اضغط لعرض كل الإعلانات'}</small>
+                      </div>
+                    </div>
                   </Link>
-                ) : null}
+                ) : (
+                  <div className="seller-header">
+                    <div className="seller-avatar">{getInitials(listing.userEmail)}</div>
+                    <div>
+                      <h3 style={{ marginBottom: 2 }}>{sellerName}</h3>
+                      <small>{isOwner ? 'أنت البائع' : 'البائع'}</small>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {listing?.auctionEnabled ? (
@@ -841,22 +835,6 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
           margin-bottom: 10px;
         }
 
-        /* ✅ روابط المعلن */
-        .seller-name-link {
-          text-decoration: none;
-          color: inherit;
-          display: inline-block;
-          max-width: 100%;
-        }
-        .seller-name-link h3 {
-          text-decoration: underline;
-          text-underline-offset: 3px;
-        }
-        .seller-sub-link {
-          text-decoration: underline;
-          font-weight: 900;
-        }
-
         /* ====== Taxonomy chips ====== */
         .taxo-chips {
           display: flex;
@@ -893,6 +871,73 @@ export default function ListingDetailsClient({ params, initialListing = null }) 
         .taxo-chip.prop {
           background: #f0fdf4;
           border-color: rgba(34, 197, 94, 0.25);
+        }
+
+        /* ====== Related listings ====== */
+        .related-section {
+          margin-top: 18px;
+          padding-top: 14px;
+          border-top: 1px solid rgba(0, 0, 0, 0.06);
+        }
+        .related-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+          margin-top: 10px;
+        }
+        .related-card {
+          display: flex;
+          gap: 10px;
+          padding: 10px;
+          border-radius: 12px;
+          border: 1px solid rgba(0, 0, 0, 0.08);
+          background: #fff;
+          text-decoration: none;
+          color: inherit;
+        }
+        .related-img {
+          width: 74px;
+          height: 74px;
+          border-radius: 10px;
+          overflow: hidden;
+          background: #f1f5f9;
+          flex: 0 0 auto;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .related-img img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+        .related-fb {
+          font-size: 22px;
+          opacity: 0.7;
+        }
+        .related-body {
+          flex: 1 1 auto;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+        .related-title {
+          font-weight: 900;
+          font-size: 13px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .related-price {
+          font-size: 12px;
+          opacity: 0.9;
+        }
+        @media (max-width: 768px) {
+          .related-grid {
+            grid-template-columns: 1fr;
+          }
         }
       `}</style>
     </>
