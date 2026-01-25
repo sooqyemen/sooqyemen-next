@@ -1,12 +1,9 @@
-[file name]: page-client.js
-[file content begin]
 'use client';
 
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import Image from 'next/image';
 import Price from '@/components/Price';
 import WebsiteJsonLd from '@/components/StructuredData/WebsiteJsonLd';
 import SkeletonLoader from '@/components/SkeletonLoader';
@@ -39,25 +36,25 @@ function normalizeRefCode(v) {
     .slice(0, 64);
 }
 
-// ✅ مفاتيح الأقسام الموحّدة
+// ✅ مسارات الأقسام (مطابقة لـ app/category/[slug])
 const CATEGORY_CONFIG = [
   { key: 'all', label: 'الكل', icon: '📋', href: '/' },
-  { key: 'cars', label: 'سيارات', icon: '🚗', href: '/cars' },
-  { key: 'realestate', label: 'عقارات', icon: '🏡', href: '/realestate' },
-  { key: 'phones', label: 'جوالات', icon: '📱', href: '/phones' },
-  { key: 'electronics', label: 'إلكترونيات', icon: '💻', href: '/electronics' },
-  { key: 'motorcycles', label: 'دراجات نارية', icon: '🏍️', href: '/motorcycles' },
-  { key: 'heavy_equipment', label: 'معدات ثقيلة', icon: '🚜', href: '/heavy_equipment' },
-  { key: 'solar', label: 'طاقة شمسية', icon: '☀️', href: '/solar' },
-  { key: 'networks', label: 'نت وشبكات', icon: '📡', href: '/networks' },
-  { key: 'maintenance', label: 'صيانة', icon: '🛠️', href: '/maintenance' },
-  { key: 'furniture', label: 'أثاث', icon: '🛋️', href: '/furniture' },
-  { key: 'home_tools', label: 'أدوات منزلية', icon: '🧹', href: '/home_tools' },
-  { key: 'clothes', label: 'ملابس', icon: '👕', href: '/clothes' },
-  { key: 'animals', label: 'حيوانات وطيور', icon: '🐑', href: '/animals' },
-  { key: 'jobs', label: 'وظائف', icon: '💼', href: '/jobs' },
-  { key: 'services', label: 'خدمات', icon: '🧰', href: '/services' },
-  { key: 'other', label: 'أخرى', icon: '📦', href: '/other' },
+  { key: 'cars', label: 'سيارات', icon: '🚗', href: '/category/cars' },
+  { key: 'realestate', label: 'عقارات', icon: '🏡', href: '/category/realestate' },
+  { key: 'phones', label: 'جوالات', icon: '📱', href: '/category/phones' },
+  { key: 'electronics', label: 'إلكترونيات', icon: '💻', href: '/category/electronics' },
+  { key: 'motorcycles', label: 'دراجات نارية', icon: '🏍️', href: '/category/motorcycles' },
+  { key: 'heavy_equipment', label: 'معدات ثقيلة', icon: '🚜', href: '/category/heavy_equipment' },
+  { key: 'solar', label: 'طاقة شمسية', icon: '☀️', href: '/category/solar' },
+  { key: 'networks', label: 'نت وشبكات', icon: '📡', href: '/category/networks' },
+  { key: 'maintenance', label: 'صيانة', icon: '🛠️', href: '/category/maintenance' },
+  { key: 'furniture', label: 'أثاث', icon: '🛋️', href: '/category/furniture' },
+  { key: 'home_tools', label: 'أدوات منزلية', icon: '🧹', href: '/category/home_tools' },
+  { key: 'clothes', label: 'ملابس', icon: '👕', href: '/category/clothes' },
+  { key: 'animals', label: 'حيوانات وطيور', icon: '🐑', href: '/category/animals' },
+  { key: 'jobs', label: 'وظائف', icon: '💼', href: '/category/jobs' },
+  { key: 'services', label: 'خدمات', icon: '🧰', href: '/category/services' },
+  { key: 'other', label: 'أخرى', icon: '📦', href: '/category/other' },
 ];
 
 // ✅ ألوان الأقسام (تذييل الصفحة)
@@ -80,10 +77,6 @@ const CATEGORY_STYLES = {
   other: { color: '#64748b', bg: 'rgba(100,116,139,0.12)' },
   all: { color: '#64748b', bg: 'rgba(100,116,139,0.10)' },
 };
-
-// ✅ Blur placeholder لتحسين تجربة تحميل الصور
-const BLUR_DATA_URL =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
 
 function safeText(v) {
   return typeof v === 'string' ? v : '';
@@ -110,7 +103,7 @@ function formatRelative(ts) {
   }
 }
 
-// ✅ بطاقة شبكة (تم تحسين الصور)
+// ✅ بطاقة شبكة (صور باستخدام <img> لتفادي مشاكل next/image والدومينات)
 function GridListingCard({ listing, priority = false }) {
   const img = (Array.isArray(listing.images) && listing.images[0]) || null;
   const catKey = normalizeCategoryKey(listing.category);
@@ -123,28 +116,27 @@ function GridListingCard({ listing, priority = false }) {
       <div className="listing-card grid-card compact-card">
         <div className="image-container compact-img">
           {img ? (
-            <Image
+            <img
               src={img}
               alt={listing.title || 'صورة الإعلان'}
               className="listing-img"
-              width={420}
-              height={280}
-              priority={priority}
-              fetchPriority={priority ? 'high' : 'auto'}
-              placeholder="blur"
-              blurDataURL={BLUR_DATA_URL}
-              sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
+              loading={priority ? 'eager' : 'lazy'}
+              decoding="async"
               style={{ objectFit: 'cover', width: '100%', height: '100%' }}
               onError={(e) => {
-                e.target.style.display = 'none';
-                const container = e.currentTarget.closest('.image-container');
+                const el = e.currentTarget;
+                el.style.display = 'none';
+                const container = el.closest('.image-container');
                 const fb = container?.querySelector('.img-fallback');
                 if (fb) fb.style.display = 'flex';
               }}
             />
           ) : null}
 
-          <div className={`img-fallback ${img ? 'hidden' : ''}`}>{catObj?.icon || '🖼️'}</div>
+          <div className={`img-fallback ${img ? 'hidden' : ''}`} style={{ display: img ? 'none' : 'flex' }}>
+            {catObj?.icon || '🖼️'}
+          </div>
+
           {listing.auctionEnabled && <div className="auction-badge compact-badge">⚡ مزاد</div>}
         </div>
 
@@ -154,7 +146,7 @@ function GridListingCard({ listing, priority = false }) {
               {listing.title || 'بدون عنوان'}
             </h3>
             {catObj && (
-              <span className="category-badge compact-cat">
+              <span className="category-badge compact-cat" title={catObj.label}>
                 <span className="category-icon">{catObj.icon}</span>
               </span>
             )}
@@ -186,7 +178,7 @@ function GridListingCard({ listing, priority = false }) {
   );
 }
 
-// ✅ بطاقة قائمة (تم تحسين الصور)
+// ✅ بطاقة قائمة (صور باستخدام <img>)
 function ListListingCard({ listing, priority = false }) {
   const img = (Array.isArray(listing.images) && listing.images[0]) || null;
   const catKey = normalizeCategoryKey(listing.category);
@@ -199,27 +191,25 @@ function ListListingCard({ listing, priority = false }) {
       <div className="listing-card list-card compact-list">
         <div className="list-image-container compact-list-img">
           {img ? (
-            <Image
+            <img
               src={img}
               alt={listing.title || 'صورة الإعلان'}
               className="list-img"
-              width={140}
-              height={140}
-              priority={priority}
-              fetchPriority={priority ? 'high' : 'auto'}
-              placeholder="blur"
-              blurDataURL={BLUR_DATA_URL}
-              sizes="(max-width: 768px) 120px, 140px"
+              loading={priority ? 'eager' : 'lazy'}
+              decoding="async"
               style={{ objectFit: 'cover', width: '100%', height: '100%' }}
               onError={(e) => {
-                e.target.style.display = 'none';
-                const fb = e.target.parentElement?.querySelector('.list-img-fallback');
+                const el = e.currentTarget;
+                el.style.display = 'none';
+                const fb = el.parentElement?.querySelector('.list-img-fallback');
                 if (fb) fb.style.display = 'flex';
               }}
             />
           ) : null}
 
-          <div className={`list-img-fallback ${img ? 'hidden' : ''}`}>{catObj?.icon || '🖼️'}</div>
+          <div className={`list-img-fallback ${img ? 'hidden' : ''}`} style={{ display: img ? 'none' : 'flex' }}>
+            {catObj?.icon || '🖼️'}
+          </div>
         </div>
 
         <div className="list-content compact-list-content">
@@ -361,7 +351,7 @@ export default function HomePageClient({ initialListings = [] }) {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  
+
   // ✅ تغيير: الخريطة كعرض افتراضي
   const [viewMode, setViewMode] = useState('map');
 
@@ -409,12 +399,11 @@ export default function HomePageClient({ initialListings = [] }) {
     if (saved === 'grid' || saved === 'list' || saved === 'map') {
       setViewMode(saved);
     } else {
-      // ✅ إذا لم يكن هناك تفضيل محفوظ، استخدم الخريطة كافتراضي
       setViewMode('map');
     }
   }, []);
 
-  // ✅ جلب أول صفحة (مرة واحدة) بدل onSnapshot + limit(100)
+  // ✅ جلب أول صفحة (مرة واحدة)
   useEffect(() => {
     let cancelled = false;
 
@@ -460,7 +449,7 @@ export default function HomePageClient({ initialListings = [] }) {
       cancelled = true;
       cancelIdle?.();
     };
-  }, [initialListings.length]);
+  }, [initialListings.length, PAGE_SIZE]);
 
   // ✅ تحميل المزيد (Pagination)
   const fetchMore = useCallback(async () => {
@@ -500,8 +489,7 @@ export default function HomePageClient({ initialListings = [] }) {
 
       setListings((prev) => {
         const existing = new Set(prev.map((x) => x.id));
-        const merged = [...prev, ...data.filter((x) => !existing.has(x.id))];
-        return merged;
+        return [...prev, ...data.filter((x) => !existing.has(x.id))];
       });
 
       lastDocRef.current = snap.docs[snap.docs.length - 1] || lastDocRef.current;
@@ -514,7 +502,7 @@ export default function HomePageClient({ initialListings = [] }) {
     }
   }, [PAGE_SIZE, hasMore, loadingMore]);
 
-  // ✅ تحميل تلقائي عند النزول (نوقفه في وضع الخريطة حتى لا تثقل markers)
+  // ✅ تحميل تلقائي عند النزول (نوقفه في وضع الخريطة)
   useEffect(() => {
     const el = loadMoreSentinelRef.current;
     if (!el) return;
@@ -538,15 +526,19 @@ export default function HomePageClient({ initialListings = [] }) {
 
   const handleCategoryClick = (category) => {
     if (!category) return;
+
+    // ✅ تحديث حالة التحديد (حتى لو راح ننتقل)
+    setSelectedCategory(category.key || 'all');
+
     if (category.key === 'all') {
-      setSelectedCategory('all');
+      // على الرئيسية
+      router.push('/');
       return;
     }
-    if (category.href) {
-      router.push(category.href);
-      return;
-    }
-    router.push(`/${category.key}`);
+
+    // ✅ انتقال إلى صفحة القسم (مطابقة لـ /category/[slug])
+    const href = category.href || `/category/${category.key}`;
+    router.push(href);
   };
 
   const suggestions = useMemo(() => {
@@ -554,17 +546,21 @@ export default function HomePageClient({ initialListings = [] }) {
     if (!q) return [];
     const results = new Set();
     const allListings = listings.slice(0, 50);
+
     allListings.forEach((l) => {
       const title = safeText(l.title).toLowerCase();
       if (title.includes(q)) results.add(l.title);
     });
+
     allListings.forEach((l) => {
       const city = safeText(l.city).toLowerCase();
       if (city.includes(q)) results.add(l.city);
     });
+
     CATEGORY_CONFIG.forEach((cat) => {
       if (cat.label.toLowerCase().includes(q) || cat.key.includes(q)) results.add(cat.label);
     });
+
     return Array.from(results).slice(0, 8);
   }, [search, listings]);
 
@@ -579,14 +575,12 @@ export default function HomePageClient({ initialListings = [] }) {
     return out;
   }, [listings]);
 
+  // ✅ فلترة بحث فقط داخل الرئيسية (تصنيف الصفحة الرئيسية يبقى "all")
   const filteredListings = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const catSelected = normalizeCategoryKey(selectedCategory || 'all');
-
     return listings.filter((listing) => {
-      const listingCat = normalizeCategoryKey(listing.category);
-      if (catSelected !== 'all' && listingCat !== catSelected) return false;
       if (!q) return true;
+      const listingCat = normalizeCategoryKey(listing.category);
       const title = safeText(listing.title).toLowerCase();
       const city = safeText(listing.city).toLowerCase();
       const locationLabel = safeText(listing.locationLabel).toLowerCase();
@@ -599,7 +593,7 @@ export default function HomePageClient({ initialListings = [] }) {
         listingCat.includes(q)
       );
     });
-  }, [listings, search, selectedCategory]);
+  }, [listings, search]);
 
   const handleViewModeChange = (mode) => {
     setViewMode(mode);
@@ -703,26 +697,21 @@ export default function HomePageClient({ initialListings = [] }) {
               <EmptyState
                 icon="📭"
                 title="لا توجد إعلانات"
-                message={
-                  search || selectedCategory !== 'all'
-                    ? 'لا توجد إعلانات مطابقة لبحثك حالياً.'
-                    : 'لا توجد إعلانات منشورة حالياً.'
-                }
+                message={search ? 'لا توجد إعلانات مطابقة لبحثك حالياً.' : 'لا توجد إعلانات منشورة حالياً.'}
                 actionText="➕ أضف أول إعلان"
                 actionUrl="/add"
               />
             ) : viewMode === 'map' ? (
               <>
-                {/* ✅ خريطة كعرض افتراضي */}
                 <div className="map-view" style={{ marginBottom: '1rem' }}>
                   <HomeMapView listings={filteredListings} />
                 </div>
-                
-                {/* ✅ إضافة رسالة توجيهية للمستخدم */}
+
                 <div className="map-guide">
                   <p className="map-guide-text">
                     <span className="map-guide-icon">🗺️</span>
-                    أنت حالياً في <strong>وضع الخريطة</strong>. استخدم أزرار العرض أعلاه للتبديل إلى <strong>الشبكة</strong> أو <strong>القائمة</strong>.
+                    أنت حالياً في <strong>وضع الخريطة</strong>. استخدم أزرار العرض أعلاه للتبديل إلى{' '}
+                    <strong>الشبكة</strong> أو <strong>القائمة</strong>.
                   </p>
                 </div>
               </>
@@ -780,7 +769,6 @@ export default function HomePageClient({ initialListings = [] }) {
               </>
             )}
 
-            {/* ✅ تذييل الأقسام */}
             {!loading && !error && (
               <footer className="homeCatsFooter" aria-label="تذييل الأقسام">
                 <div className="homeCatsFooterHead">
@@ -828,7 +816,7 @@ export default function HomePageClient({ initialListings = [] }) {
             overflow: hidden;
             margin-bottom: 1rem;
           }
-          
+
           /* ✅ رسالة توجيهية لوضع الخريطة */
           .map-guide {
             background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
@@ -850,7 +838,7 @@ export default function HomePageClient({ initialListings = [] }) {
           .map-guide-icon {
             font-size: 1.2rem;
           }
-          
+
           .list-category-label {
             margin-right: 4px;
           }
@@ -1069,4 +1057,3 @@ export default function HomePageClient({ initialListings = [] }) {
     </>
   );
 }
-[file content end]
