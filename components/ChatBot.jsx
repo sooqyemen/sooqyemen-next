@@ -76,8 +76,8 @@ export default function ChatBot() {
     {
       role: 'assistant',
       text:
-        'مرحباً بك في سوق اليمن 🇾🇪\nأنا أساعدك في: إضافة إعلان عبر الشات، أو العثور على الإعلانات القريبة، أو أي سؤال عن الأقسام.'
-    }
+        'مرحباً بك في سوق اليمن 🇾🇪\nأنا أساعدك في: إضافة إعلان عبر الشات، أو العثور على الإعلانات القريبة، أو أي سؤال عن الأقسام.',
+    },
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -461,7 +461,8 @@ export default function ChatBot() {
         .chat-toggle-btn {
           position: fixed;
           bottom: 20px;
-          right: 20px;
+          left: 20px;
+          right: auto;
           z-index: 9999;
           background: linear-gradient(135deg, #2563eb, #0ea5e9);
           color: white;
@@ -481,7 +482,8 @@ export default function ChatBot() {
         .chat-window {
           position: fixed;
           bottom: 20px;
-          right: 20px;
+          left: 20px;
+          right: auto;
           width: 360px;
           height: 540px;
           z-index: 9999;
@@ -659,13 +661,15 @@ export default function ChatBot() {
         @media (max-width: 480px) {
           .chat-window {
             width: 100%;
-            right: 0;
+            left: 0;
+            right: auto;
             bottom: 0;
             height: 72vh;
             border-radius: 0;
           }
           .chat-toggle-btn {
-            right: 14px;
+            left: 14px;
+            right: auto;
             bottom: 14px;
           }
         }
