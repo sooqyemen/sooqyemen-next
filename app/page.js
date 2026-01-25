@@ -13,11 +13,11 @@ export const metadata = {
 };
 
 export default async function HomePage() {
-  // ✅ اجلب 25 إعلان (بدل 12) عشان تظهر كل الأقسام بشكل طبيعي
+  // ✅ اجلب 48 إعلان (بدل 12) عشان تظهر كل الأقسام بشكل طبيعي
   let initialListings = [];
 
   try {
-    initialListings = await fetchPublicListings({ limit: 25 });
+    initialListings = await fetchPublicListings({ limit: 48 });
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
       console.error('[HomePage SSR] Failed to fetch initial listings:', error);
