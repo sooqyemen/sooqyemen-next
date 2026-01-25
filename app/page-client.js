@@ -58,6 +58,27 @@ const CATEGORY_CONFIG = [
   { key: 'other', label: 'أخرى', icon: '📦', href: '/other' },
 ];
 
+// ✅ ألوان الأقسام (تذييل الصفحة)
+const CATEGORY_STYLES = {
+  cars: { color: '#2563eb', bg: 'rgba(37,99,235,0.12)' },
+  realestate: { color: '#059669', bg: 'rgba(5,150,105,0.12)' },
+  phones: { color: '#7c3aed', bg: 'rgba(124,58,237,0.12)' },
+  electronics: { color: '#0ea5e9', bg: 'rgba(14,165,233,0.12)' },
+  motorcycles: { color: '#f97316', bg: 'rgba(249,115,22,0.12)' },
+  heavy_equipment: { color: '#92400e', bg: 'rgba(146,64,14,0.12)' },
+  solar: { color: '#eab308', bg: 'rgba(234,179,8,0.14)' },
+  networks: { color: '#06b6d4', bg: 'rgba(6,182,212,0.12)' },
+  maintenance: { color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
+  furniture: { color: '#a855f7', bg: 'rgba(168,85,247,0.12)' },
+  home_tools: { color: '#22c55e', bg: 'rgba(34,197,94,0.12)' },
+  clothes: { color: '#ec4899', bg: 'rgba(236,72,153,0.12)' },
+  animals: { color: '#84cc16', bg: 'rgba(132,204,22,0.12)' },
+  jobs: { color: '#3b82f6', bg: 'rgba(59,130,246,0.12)' },
+  services: { color: '#14b8a6', bg: 'rgba(20,184,166,0.12)' },
+  other: { color: '#64748b', bg: 'rgba(100,116,139,0.12)' },
+  all: { color: '#64748b', bg: 'rgba(100,116,139,0.10)' },
+};
+
 // ✅ Blur placeholder لتحسين تجربة تحميل الصور
 const BLUR_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
@@ -87,12 +108,13 @@ function formatRelative(ts) {
   }
 }
 
-// ✅ بطاقة شبكة (مقاس أصغر ومتناسق)
+// ✅ بطاقة شبكة (تم تحسين الصور)
 function GridListingCard({ listing, priority = false }) {
   const img = (Array.isArray(listing.images) && listing.images[0]) || null;
   const catKey = normalizeCategoryKey(listing.category);
   const catObj = CATEGORY_CONFIG.find((c) => c.key === catKey);
   const desc = safeText(listing.description).trim();
+  const shortDesc = desc.length > 60 ? `${desc.slice(0, 60)}...` : desc || '—';
 
   return (
     <Link href={`/listing/${listing.id}`} className="card-link focus-ring">
@@ -141,7 +163,7 @@ function GridListingCard({ listing, priority = false }) {
             <span className="loc-text">{listing.city || listing.locationLabel || 'غير محدد'}</span>
           </div>
 
-          <p className="listing-description compact-desc">{desc || '—'}</p>
+          <p className="listing-description compact-desc">{shortDesc}</p>
 
           <div className="price-section compact-price">
             <Price
@@ -162,12 +184,13 @@ function GridListingCard({ listing, priority = false }) {
   );
 }
 
-// ✅ بطاقة قائمة (أخف)
+// ✅ بطاقة قائمة (تم تحسين الصور)
 function ListListingCard({ listing, priority = false }) {
   const img = (Array.isArray(listing.images) && listing.images[0]) || null;
   const catKey = normalizeCategoryKey(listing.category);
   const catObj = CATEGORY_CONFIG.find((c) => c.key === catKey);
   const desc = safeText(listing.description).trim();
+  const shortDesc = desc.length > 120 ? `${desc.slice(0, 120)}...` : desc || '—';
 
   return (
     <Link href={`/listing/${listing.id}`} className="card-link focus-ring">
@@ -178,8 +201,8 @@ function ListListingCard({ listing, priority = false }) {
               src={img}
               alt={listing.title || 'صورة الإعلان'}
               className="list-img"
-              width={150}
-              height={150}
+              width={140}
+              height={140}
               priority={priority}
               fetchPriority={priority ? 'high' : 'auto'}
               placeholder="blur"
@@ -226,12 +249,12 @@ function ListListingCard({ listing, priority = false }) {
             <span className="loc-text">{listing.city || listing.locationLabel || 'غير محدد'}</span>
           </div>
 
-          <p className="list-description compact-desc">{desc || '—'}</p>
+          <p className="list-description compact-desc">{shortDesc}</p>
 
           <div className="list-footer compact-footer">
-            <span className="list-views">👁️ {Number(listing.views || 0).toLocaleString('ar-YE')}</span>
+            <span className="list-views">👁️ {Number(listing.views || 0).toLocaleString('ar-YE')} مشاهدة</span>
             <span className="list-time">⏱️ {formatRelative(listing.createdAt)}</span>
-            {listing.auctionEnabled && <span className="list-auction">⚡ مزاد</span>}
+            {listing.auctionEnabled && <span className="list-auction">⚡ مزاد نشط</span>}
           </div>
         </div>
       </div>
@@ -382,7 +405,7 @@ export default function HomePageClient({ initialListings = [] }) {
     if (saved === 'grid' || saved === 'list' || saved === 'map') setViewMode(saved);
   }, []);
 
-  // ✅ جلب أول صفحة (مرة واحدة)
+  // ✅ جلب أول صفحة (مرة واحدة) بدل onSnapshot + limit(100)
   useEffect(() => {
     let cancelled = false;
 
@@ -468,7 +491,8 @@ export default function HomePageClient({ initialListings = [] }) {
 
       setListings((prev) => {
         const existing = new Set(prev.map((x) => x.id));
-        return [...prev, ...data.filter((x) => !existing.has(x.id))];
+        const merged = [...prev, ...data.filter((x) => !existing.has(x.id))];
+        return merged;
       });
 
       lastDocRef.current = snap.docs[snap.docs.length - 1] || lastDocRef.current;
@@ -481,6 +505,7 @@ export default function HomePageClient({ initialListings = [] }) {
     }
   }, [PAGE_SIZE, hasMore, loadingMore]);
 
+  // ✅ تحميل تلقائي عند النزول (نوقفه في وضع الخريطة حتى لا تثقل markers)
   useEffect(() => {
     const el = loadMoreSentinelRef.current;
     if (!el) return;
@@ -534,6 +559,17 @@ export default function HomePageClient({ initialListings = [] }) {
     return Array.from(results).slice(0, 8);
   }, [search, listings]);
 
+  // ✅ عدّاد الأقسام (يعتمد على الإعلانات المحمّلة في الصفحة الرئيسية)
+  const categoryCounts = useMemo(() => {
+    const out = {};
+    for (const l of listings) {
+      const k = normalizeCategoryKey(l.category) || 'other';
+      out[k] = (out[k] || 0) + 1;
+    }
+    out.all = listings.length;
+    return out;
+  }, [listings]);
+
   const filteredListings = useMemo(() => {
     const q = search.trim().toLowerCase();
     const catSelected = normalizeCategoryKey(selectedCategory || 'all');
@@ -542,7 +578,6 @@ export default function HomePageClient({ initialListings = [] }) {
       const listingCat = normalizeCategoryKey(listing.category);
       if (catSelected !== 'all' && listingCat !== catSelected) return false;
       if (!q) return true;
-
       const title = safeText(listing.title).toLowerCase();
       const city = safeText(listing.city).toLowerCase();
       const locationLabel = safeText(listing.locationLabel).toLowerCase();
@@ -724,16 +759,63 @@ export default function HomePageClient({ initialListings = [] }) {
                 </div>
               </>
             )}
+
+            {/* ✅ تذييل الأقسام */}
+            {!loading && !error && (
+              <footer className="homeCatsFooter" aria-label="تذييل الأقسام">
+                <div className="homeCatsFooterHead">
+                  <div className="homeCatsFooterTitle">تصفّح الأقسام</div>
+                  <div className="homeCatsFooterHint">اضغط على أي قسم للانتقال له</div>
+                </div>
+
+                <div className="homeCatsFooterGrid">
+                  {CATEGORY_CONFIG.filter((c) => c.key !== 'all').map((cat) => {
+                    const st = CATEGORY_STYLES[cat.key] || CATEGORY_STYLES.other;
+                    const count = Number(categoryCounts[cat.key] || 0);
+
+                    return (
+                      <button
+                        key={cat.key}
+                        type="button"
+                        className="homeCatsChip focus-ring"
+                        onClick={() => handleCategoryClick(cat)}
+                        style={{ borderColor: st.color, background: st.bg }}
+                        title={cat.label}
+                      >
+                        <span className="homeCatsIcon" style={{ background: st.color }} aria-hidden="true">
+                          {cat.icon}
+                        </span>
+                        <span className="homeCatsLabel">{cat.label}</span>
+                        <span className="homeCatsCount">{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </footer>
+            )}
           </div>
         </main>
 
-        {/* ✅ CSS صغير داخل الملف لضبط المقاسات بدون ما يخرب home.css */}
         <style jsx>{`
           .hidden {
             display: none !important;
           }
 
-          /* ===== Compact Grid Layout ===== */
+          /* ===== Map view ===== */
+          .map-view {
+            height: 500px;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 2.5rem;
+          }
+          .list-category-label {
+            margin-right: 4px;
+          }
+          .view-toggle-label {
+            font-size: 0.875rem;
+          }
+
+          /* ===== Compact Grid/List ===== */
           .compact-grid {
             display: grid;
             gap: 10px;
@@ -751,7 +833,6 @@ export default function HomePageClient({ initialListings = [] }) {
             }
           }
 
-          /* ===== Compact Card ===== */
           .compact-card {
             border-radius: 12px;
             overflow: hidden;
@@ -768,11 +849,9 @@ export default function HomePageClient({ initialListings = [] }) {
           .compact-content {
             padding: 10px 10px 8px !important;
           }
-
           .compact-header {
             margin-bottom: 6px;
           }
-
           .compact-title {
             font-size: 13px !important;
             line-height: 1.25 !important;
@@ -782,12 +861,10 @@ export default function HomePageClient({ initialListings = [] }) {
             -webkit-box-orient: vertical;
             overflow: hidden;
           }
-
           .compact-cat {
             padding: 4px 6px !important;
             border-radius: 10px;
           }
-
           .compact-loc {
             font-size: 12px !important;
             opacity: 0.9;
@@ -802,22 +879,15 @@ export default function HomePageClient({ initialListings = [] }) {
             -webkit-box-orient: vertical;
             overflow: hidden;
           }
-
           .compact-desc {
             font-size: 12px !important;
             line-height: 1.45 !important;
             margin: 0 0 8px 0 !important;
             opacity: 0.9;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
           }
-
           .compact-price :global(*) {
             font-size: 13px !important;
           }
-
           .compact-footer {
             font-size: 11px !important;
             opacity: 0.9;
@@ -825,26 +895,22 @@ export default function HomePageClient({ initialListings = [] }) {
             justify-content: space-between;
             gap: 8px;
           }
-
           .compact-badge {
             font-size: 11px !important;
             padding: 5px 8px !important;
             border-radius: 999px;
           }
 
-          /* ===== Compact List ===== */
           .compact-list-view {
             display: flex;
             flex-direction: column;
             gap: 10px;
           }
-
           .compact-list {
             padding: 10px !important;
             border-radius: 12px;
             overflow: hidden;
           }
-
           .compact-list-img {
             width: 110px;
             min-width: 110px;
@@ -852,22 +918,86 @@ export default function HomePageClient({ initialListings = [] }) {
             border-radius: 10px;
             overflow: hidden;
           }
-
           .compact-list-content {
-            padding: 0 0 0 0 !important;
+            padding: 0 !important;
           }
-
           .compact-list-header {
             gap: 10px;
             align-items: flex-start;
           }
+          .compact-list-cat {
+            font-size: 12px;
+          }
 
-          /* ===== Map view ===== */
-          .map-view {
-            height: 500px;
-            border-radius: 12px;
+          /* ===== Footer Categories ===== */
+          .homeCatsFooter {
+            margin-top: 18px;
+            padding: 14px 0 6px;
+            border-top: 1px solid rgba(0, 0, 0, 0.06);
+          }
+          .homeCatsFooterHead {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 10px;
+          }
+          .homeCatsFooterTitle {
+            font-size: 1rem;
+            font-weight: 800;
+          }
+          .homeCatsFooterHint {
+            font-size: 0.85rem;
+            opacity: 0.7;
+          }
+          .homeCatsFooterGrid {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 10px;
+          }
+          .homeCatsChip {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px;
+            border-radius: 14px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            text-align: right;
+          }
+          .homeCatsIcon {
+            width: 26px;
+            height: 26px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 14px;
+            flex: 0 0 auto;
+          }
+          .homeCatsLabel {
+            font-size: 0.9rem;
+            font-weight: 750;
+            white-space: nowrap;
             overflow: hidden;
-            margin-bottom: 2.5rem;
+            text-overflow: ellipsis;
+            flex: 1 1 auto;
+          }
+          .homeCatsCount {
+            font-size: 0.85rem;
+            font-weight: 850;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.85);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            flex: 0 0 auto;
+          }
+
+          @media (max-width: 1024px) {
+            .homeCatsFooterGrid {
+              grid-template-columns: repeat(4, minmax(0, 1fr));
+            }
           }
           @media (max-width: 768px) {
             .map-view {
@@ -879,8 +1009,11 @@ export default function HomePageClient({ initialListings = [] }) {
             .view-toggle-button {
               padding: 0.5rem;
             }
-            .compact-img {
-              height: 122px;
+            .homeCatsFooterGrid {
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .homeCatsFooterHint {
+              display: none;
             }
           }
         `}</style>
