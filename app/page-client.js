@@ -1,3 +1,5 @@
+[file name]: page-client.js
+[file content begin]
 'use client';
 
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
@@ -359,7 +361,9 @@ export default function HomePageClient({ initialListings = [] }) {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [viewMode, setViewMode] = useState('grid');
+  
+  // ✅ تغيير: الخريطة كعرض افتراضي
+  const [viewMode, setViewMode] = useState('map');
 
   useEffect(() => {
     aliveRef.current = true;
@@ -402,7 +406,12 @@ export default function HomePageClient({ initialListings = [] }) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const saved = window.localStorage.getItem('preferredViewMode');
-    if (saved === 'grid' || saved === 'list' || saved === 'map') setViewMode(saved);
+    if (saved === 'grid' || saved === 'list' || saved === 'map') {
+      setViewMode(saved);
+    } else {
+      // ✅ إذا لم يكن هناك تفضيل محفوظ، استخدم الخريطة كافتراضي
+      setViewMode('map');
+    }
   }, []);
 
   // ✅ جلب أول صفحة (مرة واحدة) بدل onSnapshot + limit(100)
@@ -703,9 +712,20 @@ export default function HomePageClient({ initialListings = [] }) {
                 actionUrl="/add"
               />
             ) : viewMode === 'map' ? (
-              <div className="map-view">
-                <HomeMapView listings={filteredListings} />
-              </div>
+              <>
+                {/* ✅ خريطة كعرض افتراضي */}
+                <div className="map-view" style={{ marginBottom: '1rem' }}>
+                  <HomeMapView listings={filteredListings} />
+                </div>
+                
+                {/* ✅ إضافة رسالة توجيهية للمستخدم */}
+                <div className="map-guide">
+                  <p className="map-guide-text">
+                    <span className="map-guide-icon">🗺️</span>
+                    أنت حالياً في <strong>وضع الخريطة</strong>. استخدم أزرار العرض أعلاه للتبديل إلى <strong>الشبكة</strong> أو <strong>القائمة</strong>.
+                  </p>
+                </div>
+              </>
             ) : viewMode === 'grid' ? (
               <>
                 <div className="grid-view compact-grid" role="list" aria-label="قائمة الإعلانات">
@@ -806,8 +826,31 @@ export default function HomePageClient({ initialListings = [] }) {
             height: 500px;
             border-radius: 12px;
             overflow: hidden;
-            margin-bottom: 2.5rem;
+            margin-bottom: 1rem;
           }
+          
+          /* ✅ رسالة توجيهية لوضع الخريطة */
+          .map-guide {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border: 1px solid #7dd3fc;
+            border-radius: 10px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 2rem;
+            text-align: center;
+          }
+          .map-guide-text {
+            margin: 0;
+            color: #0369a1;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+          }
+          .map-guide-icon {
+            font-size: 1.2rem;
+          }
+          
           .list-category-label {
             margin-right: 4px;
           }
@@ -1003,6 +1046,11 @@ export default function HomePageClient({ initialListings = [] }) {
             .map-view {
               height: 400px;
             }
+            .map-guide-text {
+              font-size: 0.85rem;
+              flex-direction: column;
+              gap: 0.25rem;
+            }
             .view-toggle-label {
               display: none;
             }
@@ -1021,3 +1069,4 @@ export default function HomePageClient({ initialListings = [] }) {
     </>
   );
 }
+[file content end]
