@@ -9,6 +9,7 @@ import Link from 'next/link';
 
 // ✅ Taxonomy (تصنيف هرمي للفروع)
 import {
+  // options
   CAR_MAKES,
   CAR_MODELS_BY_MAKE,
   PHONE_BRANDS,
@@ -26,6 +27,14 @@ import {
   JOB_TYPES,
   SERVICE_TYPES,
   MOTORCYCLE_BRANDS,
+
+  // detection/inference (for "Paste text" importer)
+  inferListingTaxonomy,
+  detectCarMakeFromText,
+  detectPhoneBrandFromText,
+  detectPropertyTypeFromText,
+  detectDealTypeFromText,
+  detectMotorcycleBrandFromText,
 } from '@/lib/taxonomy';
 
 const LocationPicker = dynamic(
@@ -146,6 +155,17 @@ export default function AddPage() {
   const [price, setPrice] = useState('');
 
   const [coords, setCoords] = useState(null); // [lat, lng]
+
+  // ==============================
+  // ✅ Import helper (Paste text / Import URL)
+  // ==============================
+  const [importMode, setImportMode] = useState('text'); // 'text' | 'url'
+  const [importInput, setImportInput] = useState('');
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [importNotes, setImportNotes] = useState([]);
+  const [importedImageUrls, setImportedImageUrls] = useState([]);
+
   const [locationLabel, setLocationLabel] = useState('');
   const [showMap, setShowMap] = useState(false); // ✅ للتحميل عند الطلب
 
@@ -276,9 +296,172 @@ export default function AddPage() {
     setCity(found?.nameAr ? String(found.nameAr) : '');
   }, [govKey, govs]);
 
+  // ==============================
+  // ✅ Import helpers
+  // ==============================
+  const guessRootCategoryFromText = (text) => {
+    const t = String(text || '').trim();
+    if (!t) return '';
+
+    const carMake = detectCarMakeFromText(t);
+    if (carMake && carMake !== 'other') return 'cars';
+
+    const phoneBrand = detectPhoneBrandFromText(t);
+    if (phoneBrand && phoneBrand !== 'other') return 'phones';
+
+    const propType = detectPropertyTypeFromText(t);
+    const dealType = detectDealTypeFromText(t);
+    if (propType || dealType) return 'realestate';
+
+    const motoBrand = detectMotorcycleBrandFromText(t);
+    if (motoBrand && motoBrand !== 'other') return 'motorcycles';
+
+    // fallback by keywords (light)
+    const lower = t.toLowerCase();
+    if (lower.includes('شقة') || lower.includes('فيلا') || lower.includes('ارض') || lower.includes('عمارة')) return 'realestate';
+    if (lower.includes('ايفون') || lower.includes('سامسونج') || lower.includes('جوال')) return 'phones';
+    if (lower.includes('تويوتا') || lower.includes('نيسان') || lower.includes('سيارة')) return 'cars';
+
+    return '';
+  };
+
+  const applyImportedData = (data) => {
+    if (!data) return;
+
+    // clear previous import msgs
+    setImportError('');
+    setImportNotes(Array.isArray(data?.notes) ? data.notes : []);
+
+    // Basic fields
+    if (data.title) setTitle(String(data.title).slice(0, 100));
+    if (data.desc) setDesc(String(data.desc).slice(0, 2000));
+
+    if (data.currency) setCurrency(String(data.currency));
+    if (data.price != null) setPrice(String(data.price || ''));
+
+    if (data.phone) setPhone(String(data.phone));
+
+    if (data.govKey) setGovKey(String(data.govKey));
+    if (Array.isArray(data.coords) && data.coords.length === 2) {
+      // only set if user didn't choose a more precise point yet
+      setCoords((prev) => (Array.isArray(prev) && prev.length === 2 ? prev : data.coords));
+    }
+
+    // Images
+    if (Array.isArray(data.images) && data.images.length) {
+      setImportedImageUrls(data.images.slice(0, 10));
+    } else {
+      setImportedImageUrls([]);
+    }
+
+    // Guess root category + infer taxonomy
+    const text = `${data.title || ''} ${data.desc || ''}`.trim();
+    const root = guessRootCategoryFromText(text);
+    if (root) setCategory(root);
+
+    if (root) {
+      const inferred = inferListingTaxonomy({ title: data.title || '', description: data.desc || '' }, root);
+
+      if (root === 'cars') {
+        setCarMake(inferred.carMake || '');
+        setCarMakeText('');
+        setCarModel(inferred.carModel || '');
+        setCarModelText('');
+      }
+
+      if (root === 'phones') {
+        setPhoneBrand(inferred.phoneBrand || '');
+        setPhoneBrandText('');
+      }
+
+      if (root === 'realestate') {
+        setDealType(inferred.dealType || '');
+        setPropertyType(inferred.propertyType || '');
+        setPropertyTypeText('');
+      }
+
+      if (root === 'motorcycles') {
+        setMotorcycleBrand(inferred.motorcycleBrand || '');
+        setMotorcycleBrandText('');
+        setMotorcycleModel(inferred.motorcycleModel || '');
+        setMotorcycleModelText('');
+      }
+    }
+  };
+
+  const handleImport = async () => {
+    try {
+      setImportLoading(true);
+      setImportError('');
+      setImportNotes([]);
+
+      const res = await fetch('/api/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: importMode, input: importInput }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) {
+        // إذا الرابط غير مدعوم (مثل فيسبوك/انستقرام) حوّل المستخدم تلقائيًا لوضع "نص"
+        if (json?.code === 'UNSUPPORTED_FACEBOOK') {
+          setImportMode('text');
+        }
+        setImportError(String(json?.message || 'فشل الاستيراد.'));
+        return;
+      }
+
+      applyImportedData(json.data || {});
+    } catch (e) {
+      console.error('Import failed:', e);
+      setImportError('فشل الاستيراد. تأكد من الإنترنت أو جرّب لصق النص بدل الرابط.');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const clearImport = () => {
+    setImportInput('');
+    setImportError('');
+    setImportNotes([]);
+    setImportedImageUrls([]);
+  };
+
+  const tryImportImagesFromUrls = async () => {
+    if (!importedImageUrls.length) return;
+
+    // Try to download images as blobs and convert them into File objects
+    // Note: Some sites block CORS, so this is best-effort only.
+    const nextFiles = [];
+    const nextPreviews = [];
+
+    for (const url of importedImageUrls.slice(0, 10)) {
+      try {
+        const r = await fetch(`/api/import-image?url=${encodeURIComponent(url)}`);
+        if (!r.ok) continue;
+        const blob = await r.blob();
+        const ext = (blob.type && blob.type.includes('/')) ? blob.type.split('/')[1] : 'jpg';
+        const file = new File([blob], `imported_${Date.now()}_${Math.random().toString(16).slice(2)}.${ext}`, { type: blob.type || 'image/jpeg' });
+        nextFiles.push(file);
+        nextPreviews.push(URL.createObjectURL(file));
+      } catch (e) {
+        // ignore single image failure
+      }
+    }
+
+    if (!nextFiles.length) {
+      setImportError('تعذر استيراد الصور تلقائياً (موقع المصدر يمنع التحميل). ارفع الصور يدويًا.');
+      return;
+    }
+
+    setImages((prev) => [...prev, ...nextFiles]);
+    setImagePreviews((prev) => [...prev, ...nextPreviews]);
+    setImportNotes((prev) => Array.isArray(prev) ? [...prev, 'تم استيراد بعض الصور بنجاح. راجعها قبل النشر.'] : ['تم استيراد بعض الصور بنجاح.']);
+  };
 
 
-  
+
+
   // ✅ عند تغيير القسم: صفّر الفروع
   useEffect(() => {
     setCarMake('');
@@ -723,6 +906,89 @@ alert('🎉 تم نشر الإعلان بنجاح!');
       <div className="form-grid">
         <div className="form-container">
           <h2 className="form-section-title">معلومات الإعلان</h2>
+
+          {/* ✅ استيراد سريع (نص / رابط) */}
+          <div className="import-box">
+            <div className="import-top">
+              <div>
+                <div className="import-title">استيراد سريع للإعلان</div>
+                <div className="import-subtitle">الصق نص الإعلان من واتساب/فيسبوك أو ضع رابطاً من موقع مفتوح</div>
+              </div>
+
+              <div className="import-mode">
+                <button
+                  type="button"
+                  className={`import-mode-btn ${importMode === 'text' ? 'active' : ''}`}
+                  onClick={() => setImportMode('text')}
+                >
+                  لصق نص
+                </button>
+                <button
+                  type="button"
+                  className={`import-mode-btn ${importMode === 'url' ? 'active' : ''}`}
+                  onClick={() => setImportMode('url')}
+                >
+                  رابط موقع
+                </button>
+              </div>
+            </div>
+
+            {importMode === 'url' ? (
+              <input
+                className="form-input"
+                value={importInput}
+                onChange={(e) => setImportInput(e.target.value)}
+                placeholder="الصق رابط الإعلان من موقعك أو أي موقع (روابط فيسبوك/انستقرام غير مدعومة)"
+              />
+            ) : (
+              <textarea
+                className="form-textarea"
+                value={importInput}
+                onChange={(e) => setImportInput(e.target.value)}
+                placeholder="الصق نص الإعلان هنا (مثال: تويوتا شاص 2014... السعر... التواصل... المحافظة...)"
+                rows={5}
+              />
+            )}
+
+            <div className="import-actions">
+              <button
+                type="button"
+                className="btn btnPrimary"
+                onClick={handleImport}
+                disabled={importLoading || !importInput.trim()}
+              >
+                {importLoading ? 'جاري الاستيراد...' : 'استيراد وملء الحقول'}
+              </button>
+
+              <button type="button" className="btn" onClick={clearImport} disabled={importLoading && !importInput}>
+                مسح
+              </button>
+            </div>
+
+            {importError ? <div className="import-error">{importError}</div> : null}
+
+            {Array.isArray(importNotes) && importNotes.length ? (
+              <div className="import-notes">
+                {importNotes.map((n, idx) => (
+                  <div key={idx} className="import-note">• {n}</div>
+                ))}
+              </div>
+            ) : null}
+
+            {importedImageUrls.length ? (
+              <div className="import-images">
+                <div className="import-images-head">
+                  <div>تم العثور على صور: {importedImageUrls.length}</div>
+                  <button type="button" className="btn" onClick={tryImportImagesFromUrls}>
+                    محاولة استيراد الصور
+                  </button>
+                </div>
+                <div className="import-images-hint">
+                  ملاحظة: بعض المواقع تمنع تحميل الصور تلقائياً، إذا لم تنجح العملية ارفع الصور يدويًا.
+                </div>
+              </div>
+            ) : null}
+          </div>
 
           {/* العنوان */}
           <div className="form-group">
@@ -2353,7 +2619,93 @@ alert('🎉 تم نشر الإعلان بنجاح!');
           .communication-toggle { flex-direction: column; }
           .image-previews { grid-template-columns: repeat(3, 1fr); }
         }
-      `}</style>
+      
+          /* ===== Import box ===== */
+          .import-box{
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 14px;
+            margin: 0 0 16px 0;
+          }
+          .import-top{
+            display:flex;
+            align-items:flex-start;
+            justify-content:space-between;
+            gap: 12px;
+            margin-bottom: 10px;
+          }
+          .import-title{
+            font-weight: 800;
+            font-size: 15px;
+            margin-bottom: 2px;
+          }
+          .import-subtitle{
+            color: #64748b;
+            font-size: 13px;
+          }
+          .import-mode{
+            display:flex;
+            gap: 8px;
+            flex-wrap: wrap;
+          }
+          .import-mode-btn{
+            border: 1px solid #e5e7eb;
+            background: #f8fafc;
+            padding: 8px 10px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 13px;
+          }
+          .import-mode-btn.active{
+            background: #0f172a;
+            color: #fff;
+            border-color: #0f172a;
+          }
+          .import-actions{
+            display:flex;
+            gap: 10px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+          }
+          .import-error{
+            margin-top: 10px;
+            background: #fff1f2;
+            border: 1px solid #fecdd3;
+            color: #9f1239;
+            padding: 10px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+          }
+          .import-notes{
+            margin-top: 10px;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            color: #166534;
+            padding: 10px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+          }
+          .import-note{ margin: 4px 0; }
+          .import-images{
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #e5e7eb;
+          }
+          .import-images-head{
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+            font-size: 13px;
+          }
+          .import-images-hint{
+            margin-top: 6px;
+            color: #64748b;
+            font-size: 12px;
+          }
+`}</style>
     </div>
   );
 }
