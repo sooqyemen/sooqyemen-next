@@ -764,7 +764,7 @@ export default function HomePageClient({ initialListings = [] }) {
                     </div>
                   ) : (
                     <div className="muted" style={{ padding: 10 }}>
-                      لا يوجد المزيد
+                      
                     </div>
                   )}
                 </div>
