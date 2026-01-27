@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -204,6 +204,10 @@ export default function EditListingPage() {
 
   // ✅ لتصفير الفروع فقط عند تغيير القسم "بعد التحميل"
   const [didInitCategory, setDidInitCategory] = useState(false);
+
+  // ✅ نمنع تصفير الفروع عند أول تحميل (يُصفّر فقط عندما يغيّر المستخدم القسم)
+  const categoryResetArmedRef = useRef(false);
+
 
   const [phone, setPhone] = useState('');
   const [isWhatsapp, setIsWhatsapp] = useState(true);
@@ -507,6 +511,12 @@ useEffect(() => {
   // ✅ عند تغيير القسم: صفّر الفروع (بعد التحميل فقط)
   useEffect(() => {
     if (!didInitCategory) return;
+
+    // أول مرة بعد تحميل الإعلان: لا تصفّر
+    if (!categoryResetArmedRef.current) {
+      categoryResetArmedRef.current = true;
+      return;
+    }
 
     setCarMake('');
     setCarMakeText('');
