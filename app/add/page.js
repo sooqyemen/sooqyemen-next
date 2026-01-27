@@ -167,7 +167,8 @@ export default function AddPage() {
   const [importedImageUrls, setImportedImageUrls] = useState([]);
 
   const [locationLabel, setLocationLabel] = useState('');
-  const [showMap, setShowMap] = useState(false); // ✅ للتحميل عند الطلب
+  const [showMap, setShowMap] = useState(true); // ✅ الخريطة مفتوحة دائمًا
+
 
   const [images, setImages] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
