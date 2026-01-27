@@ -1,3 +1,4 @@
+// components/Map/LocationPicker.jsx
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -33,19 +34,19 @@ async function reverseName(lat, lng) {
   const roundedLat = Number(lat.toFixed(COORDINATE_PRECISION));
   const roundedLng = Number(lng.toFixed(COORDINATE_PRECISION));
   const cacheKey = `${roundedLat},${roundedLng}`;
-  
+
   // تحقق من الكاش أولاً
   if (geocodeCache.has(cacheKey)) {
     return geocodeCache.get(cacheKey);
   }
-  
+
   try {
     // استخدم الإحداثيات المقربة للاتساق مع الكاش
     const url =
       `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${roundedLat}&lon=${roundedLng}&accept-language=ar`;
     const res = await fetch(url, {
       headers: {
-        // مهم: بعض الأحيان Nominatim يحتاج User-Agent
+        // ملاحظة: المتصفح قد يمنع User-Agent (مسموح يتجاهله)
         'User-Agent': 'sooqyemen/1.0 (contact: sooqyemen.com)',
       },
     });
@@ -53,20 +54,20 @@ async function reverseName(lat, lng) {
     const data = await res.json();
 
     const a = data.address || {};
-    
+
     // نجمع التفاصيل: الشارع، القرية/الحي، المنطقة/المدينة
     const parts = [];
-    
+
     // الشارع أو الطريق
     if (a.road) parts.push(a.road);
     else if (a.street) parts.push(a.street);
-    
+
     // القرية أو الحي
     if (a.village) parts.push(a.village);
     else if (a.suburb) parts.push(a.suburb);
     else if (a.neighbourhood) parts.push(a.neighbourhood);
     else if (a.hamlet) parts.push(a.hamlet);
-    
+
     // المنطقة أو المدينة
     let cityName = '';
     if (a.city) {
@@ -82,20 +83,20 @@ async function reverseName(lat, lng) {
       cityName = a.state;
       parts.push(a.state);
     }
-    
+
     // إذا ما في أي تفاصيل، نستخدم display_name
     const label = parts.length > 0 ? parts.join('، ') : (data.display_name || '');
-    
+
     const result = { label: label || '', cityName: cityName || '' };
-    
+
     // حفظ النتيجة في الكاش
     if (geocodeCache.size >= MAX_CACHE_SIZE) {
       // إذا امتلأ الكاش، احذف أقدم عنصر
       const firstKey = geocodeCache.keys().next().value;
-      geocodeCache.delete(firstKey); // آمن حتى لو firstKey كان undefined
+      if (firstKey) geocodeCache.delete(firstKey);
     }
     geocodeCache.set(cacheKey, result);
-    
+
     return result;
   } catch (error) {
     // لا نحفظ الأخطاء في الكاش لأن المشاكل الشبكية قد تكون مؤقتة
@@ -105,8 +106,6 @@ async function reverseName(lat, lng) {
 }
 
 function ClickPicker({ value, onChange }) {
-  const [loadingName, setLoadingName] = useState(false);
-
   useMapEvents({
     async click(e) {
       const lat = e.latlng.lat;
@@ -123,15 +122,13 @@ function ClickPicker({ value, onChange }) {
         return;
       }
 
-      setLoadingName(true);
       const result = await reverseName(lat, lng);
-      setLoadingName(false);
 
       // لو ما قدر يجيب اسم، نرجع للإحداثيات
       const label =
         result?.label?.trim() ||
         `Lat: ${lat.toFixed(5)} , Lng: ${lng.toFixed(5)}`;
-      
+
       const cityName = result?.cityName || '';
 
       onChange([lat, lng], label, cityName);
@@ -150,6 +147,59 @@ export default function LocationPicker({ value, onChange }) {
     if (Array.isArray(value) && value.length === 2) return value;
     return DEFAULT_CENTER;
   }, [value]);
+
+  // ✅ حل مشكلة الجوال: السماح بتمرير الصفحة بإصبع واحد داخل الخريطة
+  // وإتاحة تحريك الخريطة بإصبعين (بدون أزرار إضافية)
+  useEffect(() => {
+    if (!map || !wrapRef.current) return;
+
+    const el = wrapRef.current;
+
+    const isTouchDevice =
+      typeof window !== 'undefined' &&
+      (('ontouchstart' in window) || (navigator.maxTouchPoints > 0));
+
+    // على أجهزة غير لمس: لا نغير شيء (خلي الخريطة طبيعية بالماوس)
+    if (!isTouchDevice) return;
+
+    // يساعد iOS/Android كثير لتقليل “تعليق التمرير”
+    el.style.touchAction = 'pan-y';
+    const lc = el.querySelector('.leaflet-container');
+    if (lc) lc.style.touchAction = 'pan-y';
+
+    const updateDragging = (touches) => {
+      try {
+        if (!map.dragging) return;
+        if (touches <= 1) {
+          map.dragging.disable(); // إصبع واحد: خلي الصفحة تسحب
+        } else {
+          map.dragging.enable(); // إصبعين: حرّك الخريطة
+        }
+      } catch {}
+    };
+
+    const onTouchStart = (e) => updateDragging(e.touches?.length || 0);
+    const onTouchMove = (e) => updateDragging(e.touches?.length || 0);
+    const onTouchEnd = (e) => updateDragging(e.touches?.length || 0);
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: true });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', onTouchEnd, { passive: true });
+
+    // ابدأ بوضع “إصبع واحد = تمرير صفحة”
+    updateDragging(0);
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
+      try {
+        map.dragging && map.dragging.enable();
+      } catch {}
+    };
+  }, [map]);
 
   // معالجة الموقع بعد الحصول عليه
   const processLocation = async (lat, lng) => {
@@ -171,11 +221,11 @@ export default function LocationPicker({ value, onChange }) {
       const label =
         result?.label?.trim() ||
         `Lat: ${lat.toFixed(5)} , Lng: ${lng.toFixed(5)}`;
-      
+
       const cityName = result?.cityName || '';
 
       onChange([lat, lng], label, cityName);
-      
+
       // تحريك الخريطة للموقع الجديد
       if (map) {
         map.setView([lat, lng], 15);
@@ -196,7 +246,7 @@ export default function LocationPicker({ value, onChange }) {
     }
 
     setLocatingMe(true);
-    
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const lat = position.coords.latitude;
@@ -206,7 +256,7 @@ export default function LocationPicker({ value, onChange }) {
       (error) => {
         console.error('Geolocation error:', error);
         let message = 'فشل تحديد موقعك';
-        
+
         if (error.code === error.PERMISSION_DENIED) {
           message = 'يرجى السماح للمتصفح بالوصول إلى موقعك';
         } else if (error.code === error.POSITION_UNAVAILABLE) {
@@ -214,7 +264,7 @@ export default function LocationPicker({ value, onChange }) {
         } else if (error.code === error.TIMEOUT) {
           message = 'انتهت مهلة تحديد الموقع';
         }
-        
+
         alert(message);
         setLocatingMe(false);
       },
@@ -231,21 +281,25 @@ export default function LocationPicker({ value, onChange }) {
     if (!map) return;
 
     const fix = () => {
-      // Use requestAnimationFrame for smoother updates
       requestAnimationFrame(() => {
-        map.invalidateSize();
-        // Additional delayed fixes for better reliability
-        setTimeout(() => map.invalidateSize(), 100);
-        setTimeout(() => map.invalidateSize(), 300);
+        try {
+          map.invalidateSize();
+          setTimeout(() => {
+            try { map.invalidateSize(); } catch {}
+          }, 100);
+          setTimeout(() => {
+            try { map.invalidateSize(); } catch {}
+          }, 300);
+        } catch {}
       });
     };
 
     // Initial fix on mount
     fix();
-    
+
     // Additional fix after a short delay to ensure container is visible
-    setTimeout(fix, 50);
-    setTimeout(fix, 200);
+    const t1 = setTimeout(fix, 50);
+    const t2 = setTimeout(fix, 200);
 
     let ro;
     if (wrapRef.current && 'ResizeObserver' in window) {
@@ -256,6 +310,8 @@ export default function LocationPicker({ value, onChange }) {
     window.addEventListener('resize', fix);
 
     return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
       window.removeEventListener('resize', fix);
       if (ro) ro.disconnect();
     };
@@ -263,7 +319,15 @@ export default function LocationPicker({ value, onChange }) {
 
   return (
     <div className="card" style={{ minHeight: 520 }}>
-      <div style={{ fontWeight: 900, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div
+        style={{
+          fontWeight: 900,
+          marginBottom: 8,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
         <span>📍 اختر موقع الإعلان</span>
         <button
           onClick={handleLocateMe}
@@ -285,18 +349,19 @@ export default function LocationPicker({ value, onChange }) {
         >
           {locatingMe ? (
             <>
-              <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⌛</span>
+              <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>
+                ⌛
+              </span>
               جاري التحديد...
             </>
           ) : (
-            <>
-              📍 حدد موقعي
-            </>
+            <>📍 حدد موقعي</>
           )}
         </button>
       </div>
+
       <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-        اضغط على الخريطة لتحديد الموقع (داخل اليمن) أو استخدم زر "حدد موقعي"
+        اضغط على الخريطة لتحديد الموقع (داخل اليمن). على الجوال: اسحب الصفحة بإصبع واحد، وحرك الخريطة بإصبعين.
       </div>
 
       <div
