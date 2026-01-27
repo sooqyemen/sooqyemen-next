@@ -59,6 +59,13 @@ const DEFAULT_CATEGORIES = [
   { slug: 'other', name: 'أخرى' },
 ];
 
+// ✅ أسماء عربية افتراضية للأقسام (إذا كانت بيانات Firestore ناقصة أو ترجع نفس الـ slug)
+// هذا يحل مشكلة ظهور بعض الأقسام بالإنجليزي مثل: phones / home_tools
+const CATEGORY_NAME_FALLBACK = DEFAULT_CATEGORIES.reduce((acc, c) => {
+  acc[c.slug] = c.name;
+  return acc;
+}, {});
+
 const DEFAULT_GOVERNORATES = [
   { key: 'amanat_al_asimah', nameAr: 'أمانة العاصمة', order: 1 },
   { key: 'sanaa', nameAr: 'صنعاء', order: 2 },
@@ -230,7 +237,14 @@ export default function EditListingPage() {
             .map((doc) => {
               const d = doc.data() || {};
               const slug = normalizeCategoryKey(d.slug || d.key || d.id || doc.id);
-              const name = String(d.name || d.label || slug || '').trim();
+              // قد تكون بعض الأقسام في Firestore بدون اسم (أو الاسم = slug)
+              // فنستخدم nameAr أولاً، ثم name/label، ثم fallback عربي حسب الـ slug.
+              const rawName = String(d.nameAr || d.name || d.label || '').trim();
+              const sameAsSlug = rawName && normalizeCategoryKey(rawName) === String(slug || '');
+              const name =
+                !rawName || sameAsSlug || String(rawName).toLowerCase() === String(slug)
+                  ? (CATEGORY_NAME_FALLBACK[slug] || slug)
+                  : rawName;
               const active = d.active !== false;
               if (!slug || !name || !active) return null;
               return { slug, name };
