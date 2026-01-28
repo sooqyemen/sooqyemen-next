@@ -1,3 +1,5 @@
+[file name]: page-client.js
+[file content begin]
 'use client';
 
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
@@ -346,7 +348,7 @@ export default function HomePageClient({ initialListings = [] }) {
   const router = useRouter();
 
   // ✅ Pagination
-  const PAGE_SIZE = 24;
+  const PAGE_SIZE = 12; // ✅ عدل من 24 إلى 12 لجعل التحميل الأولي يتوافق مع SSR
   const lastDocRef = useRef(null);
   const loadMoreSentinelRef = useRef(null);
   const aliveRef = useRef(true);
@@ -360,8 +362,8 @@ export default function HomePageClient({ initialListings = [] }) {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
-  // ✅ الافتراضي: خريطة بدل الشبكة
-  const [viewMode, setViewMode] = useState('map');
+  // ✅ الافتراضي: شبكة بدل الخريطة (تم التعديل هنا)
+  const [viewMode, setViewMode] = useState('grid');
 
   useEffect(() => {
     aliveRef.current = true;
@@ -401,7 +403,7 @@ export default function HomePageClient({ initialListings = [] }) {
     }
   }, []);
 
-  // ✅ قراءة التفضيل: لو ما في شيء محفوظ، نخليه خريطة ونحفظها (أول زيارة)
+  // ✅ قراءة التفضيل: لو ما في شيء محفوظ، نخليه شبكة ونحفظها (أول زيارة) - تم التعديل هنا
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -410,8 +412,8 @@ export default function HomePageClient({ initialListings = [] }) {
       if (saved === 'grid' || saved === 'list' || saved === 'map') {
         setViewMode(saved);
       } else {
-        window.localStorage.setItem('preferredViewMode', 'map');
-        setViewMode('map');
+        window.localStorage.setItem('preferredViewMode', 'grid');
+        setViewMode('grid');
       }
     } catch {}
   }, []);
@@ -462,7 +464,7 @@ export default function HomePageClient({ initialListings = [] }) {
       cancelled = true;
       cancelIdle?.();
     };
-  }, [initialListings.length]);
+  }, [initialListings.length, PAGE_SIZE]);
 
   // ✅ تحميل المزيد (Pagination)
   const fetchMore = useCallback(async () => {
@@ -764,7 +766,7 @@ export default function HomePageClient({ initialListings = [] }) {
                     </div>
                   ) : (
                     <div className="muted" style={{ padding: 10 }}>
-                      
+                      لا يوجد المزيد
                     </div>
                   )}
                 </div>
@@ -1032,3 +1034,4 @@ export default function HomePageClient({ initialListings = [] }) {
     </>
   );
 }
+[file content end]
