@@ -367,6 +367,78 @@ function getCategoryBaseColor(root) {
   return '#475569';
 }
 
+
+const CATEGORY_SEO = {
+  cars: {
+    icon: '🚗',
+    description: 'إعلانات السيارات في اليمن: بيع وشراء وتمويل وتقسيط. فلترة حسب الماركة، الموديل، المدينة والسعر.',
+  },
+  realestate: {
+    icon: '🏠',
+    description: 'عقارات للبيع والإيجار في اليمن: شقق، أراضي، فلل ومحلات. فلترة حسب المدينة ونوع العقار والسعر.',
+  },
+  phones: {
+    icon: '📱',
+    description: 'هواتف للبيع والشراء في اليمن: آيفون، سامسونج وغيرها. فلترة حسب الشركة، الحالة والسعر.',
+  },
+  electronics: {
+    icon: '💻',
+    description: 'إلكترونيات للبيع والشراء في اليمن: لابتوبات، شاشات، أجهزة منزلية وغيرها. فلترة حسب النوع والسعر.',
+  },
+  motorcycles: {
+    icon: '🏍️',
+    description: 'دراجات نارية للبيع والشراء في اليمن. فلترة حسب الماركة، الموديل، المدينة والسعر.',
+  },
+  heavy_equipment: {
+    icon: '🚜',
+    description: 'معدات ثقيلة للبيع والشراء في اليمن: حفارات، شيولات، رافعات وغيرها. فلترة حسب النوع والمدينة والسعر.',
+  },
+  solar: {
+    icon: '☀️',
+    description: 'قسم الطاقة الشمسية في اليمن: ألواح، بطاريات، إنفرترات وملحقات. فلترة حسب النوع والسعر.',
+  },
+  networks: {
+    icon: '📡',
+    description: 'شبكات وإنترنت في اليمن: راوترات، مقويات، أجهزة بث وملحقات. فلترة حسب النوع والسعر.',
+  },
+  maintenance: {
+    icon: '🛠️',
+    description: 'خدمات الصيانة في اليمن: كهرباء، سباكة، تكييف وغيرها. فلترة حسب نوع الخدمة والمدينة.',
+  },
+  furniture: {
+    icon: '🛋️',
+    description: 'أثاث منزلي ومكتبي في اليمن: غرف نوم، مجالس، مطابخ وغيرها. فلترة حسب النوع والسعر.',
+  },
+  home_tools: {
+    icon: '🧰',
+    description: 'أدوات منزلية ومتنوعة للبيع في اليمن. فلترة حسب النوع والسعر.',
+  },
+  clothes: {
+    icon: '👕',
+    description: 'ملابس وإكسسوارات للبيع في اليمن: رجالي/نسائي/أطفال. فلترة حسب النوع والسعر.',
+  },
+  animals: {
+    icon: '🐑',
+    description: 'مواشي وحيوانات للبيع والشراء في اليمن. فلترة حسب النوع والمدينة والسعر.',
+  },
+  jobs: {
+    icon: '💼',
+    description: 'وظائف في اليمن: فرص عمل وإعلانات توظيف. فلترة حسب المجال والمدينة.',
+  },
+  services: {
+    icon: '🧾',
+    description: 'خدمات متنوعة في اليمن: نقل، تعليم، تصميم وغيرها. فلترة حسب نوع الخدمة والمدينة.',
+  },
+};
+
+function getCategorySeo(root) {
+  return CATEGORY_SEO[root] || {
+    icon: '🛒',
+    description: 'تصفّح أحدث الإعلانات في سوق اليمن مع فلترة حسب المدينة والسعر والتفاصيل.',
+  };
+}
+
+
 export default function CategoryListings({ category, initialListings = [] }) {
   const PAGE_SIZE = 24;
 
@@ -1502,6 +1574,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
   };
 
   const categoryLabel = useMemo(() => (single ? getCategoryLabel(single) : ''), [single]);
+  const catSeo = useMemo(() => getCategorySeo(single), [single]);
 
   const applyHashtag = (key) => {
     const k = safeStr(key);
@@ -1615,16 +1688,57 @@ export default function CategoryListings({ category, initialListings = [] }) {
           style={{
             padding: '20px',
             marginBottom: '16px',
-            background: `linear-gradient(135deg, ${CAT_COLOR} 0%, ${CAT_COLOR}80 100%)`,
+            background: `linear-gradient(135deg, #0b1a2a 0%, ${CAT_COLOR} 100%)`,
             color: 'white',
             borderRadius: '16px',
             border: 'none',
+            boxShadow: '0 18px 45px rgba(2,6,23,0.18)',
+            position: 'relative',
+            overflow: 'hidden',
           }}
         >
-          <div style={{ fontWeight: '900', fontSize: '24px', marginBottom: '6px' }}>
-            {categoryLabel || 'قسم'}
+          {/* خط هوية خفيف */}
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 3,
+              background: '#d11f2b',
+              opacity: 0.95,
+            }}
+          />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
+            <div
+              aria-hidden="true"
+              style={{
+                width: 46,
+                height: 46,
+                borderRadius: 16,
+                background: 'rgba(255,255,255,0.18)',
+                display: 'grid',
+                placeItems: 'center',
+                fontSize: 24,
+                boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.16)',
+              }}
+            >
+              {catSeo?.icon || '🛒'}
+            </div>
+
+            <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+              <h1 style={{ fontWeight: 950, fontSize: '24px', margin: 0, lineHeight: 1.1 }}>
+                {categoryLabel || 'قسم'}
+              </h1>
+              <div style={{ fontSize: '14px', opacity: 0.92, marginTop: 6 }}>
+                {catSeo?.description}
+              </div>
+            </div>
           </div>
-          <div style={{ fontSize: '15px', opacity: 0.9 }}>
+
+          <div style={{ fontSize: '14px', opacity: 0.9 }}>
             تصفّح {items.length.toLocaleString('ar-YE')} إعلان مع بحث وعرض شبكة/قائمة/خريطة
           </div>
         </div>

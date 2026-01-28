@@ -107,38 +107,46 @@ export default function Header() {
   };
 
   const Logo = ({ variant = 'desktop' }) => {
-    // ✅ شعار جديد (أيقونة فقط) + نص بالـ HTML
-    // هذا يحل مشكلة "الإطار الكبير" ويخلي الشعار واضح بجميع الأحجام
-    const iconSize = variant === 'mobile' ? 28 : 32;
+  // ✅ شعار الهوية الجديدة
+  // - Desktop: نعرض الشعار الأفقي (أوضح للهوية)
+  // - Mobile: نعرض الأيقونة + الاسم (أخف وأجمل على المساحات الصغيرة)
+  const iconSize = variant === 'mobile' ? 28 : 32;
 
+  if (variant === 'desktop') {
     return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-        {/*
-          ⚠️ كان المسار السابق: /brand/mark-128.png
-          وهذا الملف غير موجود داخل public لذلك يظهر الشعار "مكسّر" في الهيدر.
-          الحل: استخدام الأيقونات الموجودة فعلاً داخل public.
-        */}
+      <span className="sy-logo sy-logo--desktop" aria-label="سوق اليمن">
         <img
-          src="/icon-192.png"
-          srcSet="/icon-192.png 1x, /icon-512.png 2x"
+          src="/logo-horizontal-800.png"
+          srcSet="/logo-horizontal-800.png 1x, /logo-horizontal-1200.png 2x"
           alt="سوق اليمن"
-          width={iconSize}
-          height={iconSize}
-          style={{ display: 'block', borderRadius: 8 }}
+          width={170}
+          height={44}
           loading="eager"
           decoding="async"
         />
-        <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.05 }}>
-          <span style={{ fontWeight: 900, fontSize: variant === 'mobile' ? 16 : 18 }}>
-            سوق اليمن
-          </span>
-          <span className="muted" style={{ fontSize: 12 }}>
-            السوق الشامل
-          </span>
-        </span>
       </span>
     );
-  };
+  }
+
+  return (
+    <span className="sy-logo sy-logo--mobile" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+      <img
+        src="/icon-192.png"
+        srcSet="/icon-192.png 1x, /icon-512.png 2x"
+        alt="سوق اليمن"
+        width={iconSize}
+        height={iconSize}
+        style={{ display: 'block', borderRadius: 10 }}
+        loading="eager"
+        decoding="async"
+      />
+      <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.05 }}>
+        <span style={{ fontWeight: 900, fontSize: 16 }}>سوق اليمن</span>
+        <span className="muted" style={{ fontSize: 12 }}>السوق الشامل</span>
+      </span>
+    </span>
+  );
+};
 
   return (
     <>
@@ -413,6 +421,169 @@ export default function Header() {
           </aside>
         </>
       )}
-    </>
+    
+      <style jsx>{`
+        :global(:root) {
+          --sy-navy: #0b1a2a;
+          --sy-navy-2: #081423;
+          --sy-red: #d11f2b;
+          --sy-surface: #ffffff;
+        }
+
+        /* Header */
+        .header {
+          background: linear-gradient(180deg, var(--sy-navy), var(--sy-navy-2));
+          border-bottom: 3px solid var(--sy-red);
+        }
+
+        .header-inner {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 10px 14px;
+        }
+
+        .sy-logo img {
+          display: block;
+          height: auto;
+        }
+
+        .sy-logo--desktop img {
+          max-width: 200px;
+        }
+
+        .site-title,
+        .user-greeting,
+        .loading-text {
+          color: rgba(255, 255, 255, 0.95);
+        }
+
+        .desktop-nav .nav-link,
+        .mobile-nav .nav-link {
+          color: rgba(255, 255, 255, 0.9);
+          font-weight: 800;
+          position: relative;
+        }
+
+        .desktop-nav .nav-link:hover,
+        .mobile-nav .nav-link:hover {
+          color: #ffffff;
+          text-decoration: none;
+        }
+
+        .desktop-nav .nav-link::after {
+          content: '';
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: -8px;
+          height: 2px;
+          background: var(--sy-red);
+          transform: scaleX(0);
+          transform-origin: right;
+          transition: transform 160ms ease;
+        }
+
+        .desktop-nav .nav-link:hover::after {
+          transform: scaleX(1);
+          transform-origin: left;
+        }
+
+        .add-btn-desktop,
+        .add-btn-mobile {
+          background: var(--sy-red) !important;
+          color: #ffffff !important;
+          border: none !important;
+          border-radius: 14px !important;
+          font-weight: 900 !important;
+          box-shadow: 0 10px 20px rgba(0, 0, 0, 0.22);
+        }
+
+        .add-btn-desktop:hover,
+        .add-btn-mobile:hover {
+          filter: brightness(1.05);
+        }
+
+        .auth-buttons .login-btn {
+          border: 1px solid rgba(255, 255, 255, 0.35);
+          color: #ffffff;
+          border-radius: 14px;
+          font-weight: 800;
+        }
+
+        .auth-buttons .register-btn {
+          background: #ffffff;
+          color: var(--sy-navy);
+          border-radius: 14px;
+          font-weight: 900;
+        }
+
+        .menu-btn {
+          background: rgba(255, 255, 255, 0.12);
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          color: #ffffff;
+          border-radius: 14px;
+        }
+
+        .unread-dot {
+          background: var(--sy-red);
+        }
+
+        /* Dropdown */
+        .dropdown {
+          border: 1px solid rgba(15, 23, 42, 0.08);
+          box-shadow: 0 14px 40px rgba(2, 6, 23, 0.16);
+        }
+
+        .dropdown-item {
+          font-weight: 800;
+        }
+
+        .dropdown-item:hover {
+          background: #f8fafc;
+        }
+
+        .dropdown-item.logout-item {
+          color: var(--sy-red);
+        }
+
+        /* Mobile side menu */
+        .side-menu {
+          background: linear-gradient(180deg, var(--sy-navy), #07101d);
+          color: #ffffff;
+        }
+
+        .side-menu .section-title {
+          color: rgba(255, 255, 255, 0.8);
+        }
+
+        .side-menu .menu-item {
+          color: #ffffff;
+          border-radius: 14px;
+        }
+
+        .side-menu .menu-item:hover {
+          background: rgba(255, 255, 255, 0.08);
+        }
+
+        .side-menu .logout-menu-item {
+          color: #ffd1d1;
+        }
+
+        /* Spacer (لو الهيدر ثابت) */
+        .header-spacer {
+          height: 72px;
+        }
+
+        @media (max-width: 480px) {
+          .sy-logo--desktop img {
+            max-width: 160px;
+          }
+          .header-inner {
+            padding: 10px 10px;
+          }
+        }
+      `}</style>
+
+</>
   );
 }
