@@ -451,26 +451,36 @@ export default function Header() {
           max-width: 200px;
         }
 
+        .sy-logo--desktop {
+          display: inline-flex;
+          align-items: center;
+          padding: 6px 10px;
+          border-radius: 14px;
+          background: rgba(255, 255, 255, 0.92);
+          box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+        }
+
         .site-title,
         .user-greeting,
         .loading-text {
           color: rgba(255, 255, 255, 0.95);
         }
 
-        .desktop-nav .nav-link,
-        .mobile-nav .nav-link {
+        :global(.desktop-nav .nav-link),
+        :global(.mobile-nav .nav-link) {
           color: rgba(255, 255, 255, 0.9);
           font-weight: 800;
           position: relative;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
         }
 
-        .desktop-nav .nav-link:hover,
-        .mobile-nav .nav-link:hover {
+        :global(.desktop-nav .nav-link:hover),
+        :global(.mobile-nav .nav-link:hover) {
           color: #ffffff;
           text-decoration: none;
         }
 
-        .desktop-nav .nav-link::after {
+        :global(.desktop-nav .nav-link::after) {
           content: '';
           position: absolute;
           left: 0;
@@ -483,13 +493,13 @@ export default function Header() {
           transition: transform 160ms ease;
         }
 
-        .desktop-nav .nav-link:hover::after {
+        :global(.desktop-nav .nav-link:hover::after) {
           transform: scaleX(1);
           transform-origin: left;
         }
 
-        .add-btn-desktop,
-        .add-btn-mobile {
+        :global(.add-btn-desktop),
+        :global(.add-btn-mobile) {
           background: var(--sy-red) !important;
           color: #ffffff !important;
           border: none !important;
@@ -498,19 +508,19 @@ export default function Header() {
           box-shadow: 0 10px 20px rgba(0, 0, 0, 0.22);
         }
 
-        .add-btn-desktop:hover,
-        .add-btn-mobile:hover {
+        :global(.add-btn-desktop:hover),
+        :global(.add-btn-mobile:hover) {
           filter: brightness(1.05);
         }
 
-        .auth-buttons .login-btn {
+        :global(.auth-buttons .login-btn) {
           border: 1px solid rgba(255, 255, 255, 0.35);
           color: #ffffff;
           border-radius: 14px;
           font-weight: 800;
         }
 
-        .auth-buttons .register-btn {
+        :global(.auth-buttons .register-btn) {
           background: #ffffff;
           color: var(--sy-navy);
           border-radius: 14px;
@@ -534,15 +544,15 @@ export default function Header() {
           box-shadow: 0 14px 40px rgba(2, 6, 23, 0.16);
         }
 
-        .dropdown-item {
+        :global(.dropdown-item) {
           font-weight: 800;
         }
 
-        .dropdown-item:hover {
+        :global(.dropdown-item:hover) {
           background: #f8fafc;
         }
 
-        .dropdown-item.logout-item {
+        :global(.dropdown-item.logout-item) {
           color: var(--sy-red);
         }
 
@@ -556,16 +566,16 @@ export default function Header() {
           color: rgba(255, 255, 255, 0.8);
         }
 
-        .side-menu .menu-item {
+        :global(.side-menu .menu-item) {
           color: #ffffff;
           border-radius: 14px;
         }
 
-        .side-menu .menu-item:hover {
+        :global(.side-menu .menu-item:hover) {
           background: rgba(255, 255, 255, 0.08);
         }
 
-        .side-menu .logout-menu-item {
+        :global(.side-menu .logout-menu-item) {
           color: #ffd1d1;
         }
 
