@@ -119,8 +119,6 @@ function GridListingCard({ listing, priority = false }) {
   return (
     <Link href={`/listing/${listing.id}`} className="card-link focus-ring">
       <div className="listing-card grid-card compact-card">
-        {listing.urgent && <div className="urgent-badge">🔴 عاجل</div>}
-        {listing.verifiedSeller && <div className="verified-badge">✅ موثّق</div>}
         <div className="image-container compact-img">
           {img ? (
             <Image
@@ -136,7 +134,7 @@ function GridListingCard({ listing, priority = false }) {
               sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
               style={{ objectFit: 'cover', width: '100%', height: '100%' }}
               onError={(e) => {
-                e.currentTarget.style.display = 'none';
+                e.target.style.display = 'none';
                 const container = e.currentTarget.closest('.image-container');
                 const fb = container?.querySelector('.img-fallback');
                 if (fb) fb.style.display = 'flex';
@@ -197,8 +195,6 @@ function ListListingCard({ listing, priority = false }) {
   return (
     <Link href={`/listing/${listing.id}`} className="card-link focus-ring">
       <div className="listing-card list-card compact-list">
-        {listing.urgent && <div className="urgent-badge">🔴 عاجل</div>}
-        {listing.verifiedSeller && <div className="verified-badge">✅ موثّق</div>}
         <div className="list-image-container compact-list-img">
           {img ? (
             <Image
@@ -214,8 +210,8 @@ function ListListingCard({ listing, priority = false }) {
               sizes="(max-width: 768px) 120px, 140px"
               style={{ objectFit: 'cover', width: '100%', height: '100%' }}
               onError={(e) => {
-                e.currentTarget.style.display = 'none';
-                const fb = e.currentTarget.parentElement?.querySelector('.list-img-fallback');
+                e.target.style.display = 'none';
+                const fb = e.target.parentElement?.querySelector('.list-img-fallback');
                 if (fb) fb.style.display = 'flex';
               }}
             />
@@ -364,9 +360,8 @@ export default function HomePageClient({ initialListings = [] }) {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
-  // ✅ الافتراضي: شبكة بدل الخريطة - التغيير هنا
-  const [viewMode, setViewMode] = useState('map');
-  const [userLocation, setUserLocation] = useState(null);
+  // ✅ الافتراضي: شبكة (وليس خريطة)
+  const [viewMode, setViewMode] = useState('grid');
 
   useEffect(() => {
     aliveRef.current = true;
@@ -406,7 +401,7 @@ export default function HomePageClient({ initialListings = [] }) {
     }
   }, []);
 
-  // ✅ قراءة التفضيل: لو ما في شيء محفوظ، نخليه خريطة ونحفظها
+  // ✅ قراءة تفضيل العرض: إذا غير موجود نخليه شبكة ونحفظها
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -415,36 +410,11 @@ export default function HomePageClient({ initialListings = [] }) {
       if (saved === 'grid' || saved === 'list' || saved === 'map') {
         setViewMode(saved);
       } else {
-        window.localStorage.setItem('preferredViewMode', 'map');
-        setViewMode('map');
+        window.localStorage.setItem('preferredViewMode', 'grid');
+        setViewMode('grid');
       }
     } catch {}
   }, []);
-
-  // ✅ جلب موقع المستخدم (فقط عند عرض الخريطة) - بدون ما نزعج المستخدم في باقي الأوضاع
-  useEffect(() => {
-    if (viewMode !== 'map') return;
-    if (userLocation) return;
-    if (typeof window === 'undefined') return;
-    if (!navigator?.geolocation) return;
-
-    let finished = false;
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        if (finished) return;
-        finished = true;
-        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-      },
-      () => {
-        if (finished) return;
-        finished = true;
-        // لو رفض الإذن نخليها null والخريطة تستخدم مركزها الافتراضي
-        setUserLocation(null);
-      },
-      { timeout: 5000, enableHighAccuracy: false, maximumAge: 5 * 60 * 1000 }
-    );
-  }, [viewMode, userLocation]);
 
   // ✅ جلب أول صفحة (مرة واحدة)
   useEffect(() => {
@@ -745,7 +715,7 @@ export default function HomePageClient({ initialListings = [] }) {
               />
             ) : viewMode === 'map' ? (
               <div className="map-view">
-                <HomeMapView listings={filteredListings} userLocation={userLocation} />
+                <HomeMapView listings={filteredListings} />
               </div>
             ) : viewMode === 'grid' ? (
               <>
@@ -841,40 +811,6 @@ export default function HomePageClient({ initialListings = [] }) {
           .hidden {
             display: none !important;
           }
-
-          /* Badges */
-          .listing-card{
-            position: relative;
-          }
-          .urgent-badge{
-            position:absolute;
-            top:10px;
-            left:10px;
-            z-index:3;
-            background:#ef4444;
-            color:#fff;
-            padding:4px 10px;
-            border-radius:999px;
-            font-size:12px;
-            line-height:1;
-            box-shadow:0 2px 8px rgba(0,0,0,.15);
-            pointer-events:none;
-          }
-          .verified-badge{
-            position:absolute;
-            top:10px;
-            right:10px;
-            z-index:3;
-            background:#10b981;
-            color:#fff;
-            padding:4px 10px;
-            border-radius:999px;
-            font-size:12px;
-            line-height:1;
-            box-shadow:0 2px 8px rgba(0,0,0,.15);
-            pointer-events:none;
-          }
-
 
           /* ===== Map view ===== */
           .map-view {
