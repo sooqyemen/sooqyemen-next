@@ -61,7 +61,6 @@ sooqyemen-next/
 │   ├── home_tools/               # فئة أدوات المنزل
 │   ├── clothes/                  # فئة الملابس
 │   ├── animals/                  # فئة الحيوانات
-│   ├── animals-birds/            # فئة الطيور
 │   ├── jobs/                     # فئة الوظائف
 │   ├── services/                 # فئة الخدمات
 │   ├── other/                    # فئة أخرى
