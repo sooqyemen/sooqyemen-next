@@ -13,11 +13,12 @@
 - دعم كامل للعربية (RTL) وتصميم Mobile First.
 
 ## المزايا التقنية
-- Next.js 16 (App Router) مع بنية هجينة SSR + ISR + CSR.
-- React 19 لواجهات تفاعلية.
-- Firebase (Firestore, Auth, Storage) عبر compat SDK + firebase-admin على السيرفر.
+- Next.js 16.1.1 (App Router) مع بنية هجينة SSR + ISR + CSR.
+- React 19.2.3 لواجهات تفاعلية.
+- Firebase 12.7.0 (Firestore, Auth, Storage) عبر compat SDK + firebase-admin 13.6.0 على السيرفر.
 - Firestore REST API لقراءة البيانات في Server Components.
-- Leaflet / React-Leaflet للخرائط.
+- Leaflet ^1.9.4 / React-Leaflet ^5.0.0 للخرائط.
+- Lucide React ^0.562.0 للأيقونات.
 - SEO متقدم: Open Graph، Twitter Cards، JSON-LD، sitemap، robots.txt.
 - تحسين أداء: Lazy Loading للصور، Dynamic Imports للمكونات الثقيلة، Cache/ISR، manifest و PWA-ready.
 
@@ -41,7 +42,7 @@
 **للمزيد:** راجع `PERFORMANCE_SUMMARY_2026.md` و `PERFORMANCE_ENHANCEMENTS_2026.md`
 
 ## هيكل الصفحات والوظائف الأساسية
-- الصفحة الرئيسية، صفحة جميع الإعلانات `/listings`، وصفحات الفئات الـ16 (cars, phones, electronics, realestate, motorcycles, heavy_equipment, solar, networks, maintenance, furniture, home_tools, clothes, animals, jobs, services, other).
+- الصفحة الرئيسية، صفحة جميع الإعلانات `/listings`، وصفحات الفئات الـ16 (cars, realestate, phones, electronics, motorcycles, heavy_equipment, solar, networks, maintenance, furniture, home_tools, clothes, animals, jobs, services, other).
 - صفحة تفاصيل الإعلان مع معرض صور، خريطة، مزاد، وتعليقات.
 - إضافة وتعديل وإدارة الإعلانات (`/add`, `/edit-listing/[id]`, `/my-listings`).
 - المصادقة والملف الشخصي (`/login`, `/register`, `/profile`).
