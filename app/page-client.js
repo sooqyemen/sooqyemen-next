@@ -1,5 +1,3 @@
-[file name]: page-client.js
-[file content begin]
 'use client';
 
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
@@ -348,7 +346,7 @@ export default function HomePageClient({ initialListings = [] }) {
   const router = useRouter();
 
   // ✅ Pagination
-  const PAGE_SIZE = 12; // ✅ عدل من 24 إلى 12 لجعل التحميل الأولي يتوافق مع SSR
+  const PAGE_SIZE = 12; // ✅ تغيير من 24 إلى 12
   const lastDocRef = useRef(null);
   const loadMoreSentinelRef = useRef(null);
   const aliveRef = useRef(true);
@@ -362,7 +360,7 @@ export default function HomePageClient({ initialListings = [] }) {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
-  // ✅ الافتراضي: شبكة بدل الخريطة (تم التعديل هنا)
+  // ✅ الافتراضي: شبكة بدل الخريطة - التغيير هنا
   const [viewMode, setViewMode] = useState('grid');
 
   useEffect(() => {
@@ -403,7 +401,7 @@ export default function HomePageClient({ initialListings = [] }) {
     }
   }, []);
 
-  // ✅ قراءة التفضيل: لو ما في شيء محفوظ، نخليه شبكة ونحفظها (أول زيارة) - تم التعديل هنا
+  // ✅ قراءة التفضيل: لو ما في شيء محفوظ، نخليه شبكة ونحفظها - التغيير هنا
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -418,7 +416,7 @@ export default function HomePageClient({ initialListings = [] }) {
     } catch {}
   }, []);
 
-  // ✅ جلب أول صفحة (مرة واحدة) بدل onSnapshot + limit(100)
+  // ✅ جلب أول صفحة (مرة واحدة)
   useEffect(() => {
     let cancelled = false;
 
@@ -1034,4 +1032,3 @@ export default function HomePageClient({ initialListings = [] }) {
     </>
   );
 }
-[file content end]
