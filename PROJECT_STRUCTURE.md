@@ -61,7 +61,6 @@ sooqyemen-next/
 │   ├── home_tools/               # فئة أدوات المنزل
 │   ├── clothes/                  # فئة الملابس
 │   ├── animals/                  # فئة الحيوانات
-│   ├── animals-birds/            # فئة الطيور
 │   ├── jobs/                     # فئة الوظائف
 │   ├── services/                 # فئة الخدمات
 │   ├── other/                    # فئة أخرى
@@ -230,8 +229,8 @@ sooqyemen-next/
 ### Frontend
 - **Next.js 16.1.1**: إطار React مع App Router
 - **React 19.2.3**: مكتبة واجهة المستخدم
-- **Leaflet & React-Leaflet**: مكتبة الخرائط التفاعلية
-- **Lucide React**: مكتبة الأيقونات
+- **Leaflet ^1.9.4 & React-Leaflet ^5.0.0**: مكتبة الخرائط التفاعلية
+- **Lucide React ^0.562.0**: مكتبة الأيقونات
 
 ### Backend & Database
 - **Firebase 12.7.0**: قاعدة البيانات والمصادقة
@@ -242,7 +241,7 @@ sooqyemen-next/
 - **Firestore REST API**: لجلب البيانات في Server Components
 
 ### Development Tools
-- **ESLint**: للتحقق من جودة الكود
+- **ESLint 9.39.2**: للتحقق من جودة الكود
 - **Next.js Bundle Analyzer**: لتحليل حجم الحزم
 
 ### Styling
@@ -299,10 +298,9 @@ sooqyemen-next/
 11. **home_tools** - أدوات المنزل
 12. **clothes** - الملابس
 13. **animals** - الحيوانات
-14. **animals-birds** - الطيور
-15. **jobs** - الوظائف
-16. **services** - الخدمات
-17. **other** - أخرى
+14. **jobs** - الوظائف
+15. **services** - الخدمات
+16. **other** - أخرى
 
 ---
 
@@ -421,5 +419,5 @@ NEXT_PUBLIC_SITE_URL=http://localhost:3000
 
 ---
 
-**آخر تحديث**: يناير 2026
+**آخر تحديث**: يناير 2026  
 **الإصدار**: 0.1.0

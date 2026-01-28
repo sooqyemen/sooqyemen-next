@@ -494,7 +494,8 @@ Mobile PageSpeed Insights score improvement from **75 to 90+** (+20% improvement
 
 ---
 
-**Date:** January 10, 2026  
+**Date:** يناير 2026  
+**Version:** 0.1.0  
 **Status:** ✅ Completed  
 **Build:** ✅ Successful  
 **Tests:** ✅ All pages render correctly  
