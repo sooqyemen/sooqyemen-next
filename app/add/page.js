@@ -88,6 +88,12 @@ const DEFAULT_GOVERNORATES = [
   { key: 'socotra', nameAr: 'سقطرى', order: 22, enabled: true },
 ];
 
+const YEMEN_BOUNDS = [
+  [12.0, 41.0],
+  [19.5, 54.7],
+];
+
+
 
 export default function AddPage() {
   const { user, loading } = useAuth();
@@ -155,6 +161,7 @@ export default function AddPage() {
   const [price, setPrice] = useState('');
 
   const [coords, setCoords] = useState(null); // [lat, lng]
+  const [locatingMe, setLocatingMe] = useState(false);
 
   // ==============================
   // ✅ Import helper (Paste text / Import URL)
@@ -655,6 +662,95 @@ export default function AddPage() {
     setCoords(c);
     setLocationLabel(lbl || '');
     if (errors.location) setErrors((prev) => ({ ...prev, location: undefined }));
+  };
+
+  const handleLocateMe = () => {
+    if (typeof window === 'undefined') return;
+
+    if (!navigator.geolocation) {
+      alert('المتصفح لا يدعم تحديد الموقع');
+      return;
+    }
+
+    // إذا كانت الخريطة مخفية (placeholder) افتحها أولاً
+    if (!showMap) setShowMap(true);
+
+    setLocatingMe(true);
+
+    const reverseLabel = async (lat, lng) => {
+      try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(
+          lat
+        )}&lon=${encodeURIComponent(lng)}&accept-language=ar`;
+
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('reverse failed');
+        const data = await res.json();
+        const a = data?.address || {};
+
+        const parts = [];
+        if (a.road) parts.push(a.road);
+        else if (a.street) parts.push(a.street);
+
+        if (a.village) parts.push(a.village);
+        else if (a.suburb) parts.push(a.suburb);
+        else if (a.neighbourhood) parts.push(a.neighbourhood);
+        else if (a.hamlet) parts.push(a.hamlet);
+
+        if (a.city) parts.push(a.city);
+        else if (a.town) parts.push(a.town);
+        else if (a.county) parts.push(a.county);
+        else if (a.state) parts.push(a.state);
+
+        const label = parts.length ? parts.join('، ') : (data?.display_name || '');
+        return String(label || '').trim();
+      } catch {
+        return '';
+      }
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const lat = Number(position?.coords?.latitude);
+          const lng = Number(position?.coords?.longitude);
+
+          const inYemen =
+            lat >= YEMEN_BOUNDS[0][0] &&
+            lat <= YEMEN_BOUNDS[1][0] &&
+            lng >= YEMEN_BOUNDS[0][1] &&
+            lng <= YEMEN_BOUNDS[1][1];
+
+          if (!inYemen) {
+            alert('موقعك الحالي خارج اليمن 🇾🇪');
+            return;
+          }
+
+          const label =
+            (await reverseLabel(lat, lng)) || `Lat: ${lat.toFixed(5)} , Lng: ${lng.toFixed(5)}`;
+
+          onPick([lat, lng], label);
+        } finally {
+          setLocatingMe(false);
+        }
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        let message = 'فشل تحديد موقعك';
+
+        if (error?.code === error.PERMISSION_DENIED) {
+          message = 'يرجى السماح للمتصفح بالوصول إلى موقعك';
+        } else if (error?.code === error.POSITION_UNAVAILABLE) {
+          message = 'موقعك غير متاح حالياً';
+        } else if (error?.code === error.TIMEOUT) {
+          message = 'انتهت مهلة تحديد الموقع';
+        }
+
+        alert(message);
+        setLocatingMe(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
   };
 
   const uploadImages = async () => {
@@ -1935,11 +2031,25 @@ alert('🎉 تم نشر الإعلان بنجاح!');
         {/* الخريطة */}
         <div className="map-container">
           <div className="map-header">
-            <h2 className="form-section-title">
-              <span className="map-icon">📍</span>
-              موقع الإعلان
-            </h2>
-            <p className="map-subtitle">اسحب المؤشر لتحديد الموقع الدقيق</p>
+            <div className="map-header-text">
+              <h2 className="form-section-title">
+                <span className="map-icon">📍</span>
+                موقع الإعلان
+              </h2>
+              <p className="map-subtitle">اسحب المؤشر لتحديد الموقع الدقيق</p>
+            </div>
+
+            <div className="map-header-actions">
+              <button
+                type="button"
+                className="btn btnPrimary locate-me-btn"
+                onClick={handleLocateMe}
+                disabled={locatingMe}
+                aria-label="تحديد موقعي الحالي"
+              >
+                {locatingMe ? '⌛ جاري التحديد...' : '📍 تحديد موقعي'}
+              </button>
+            </div>
           </div>
 
           <div className="map-wrapper">
@@ -1970,7 +2080,7 @@ alert('🎉 تم نشر الإعلان بنجاح!');
                 </p>
               </div>
             ) : (
-              <LocationPicker value={coords} onChange={onPick} />
+              <LocationPicker value={coords} onChange={onPick} showLocateButton={false} />
             )}
           </div>
 
@@ -2706,6 +2816,29 @@ alert('🎉 تم نشر الإعلان بنجاح!');
             color: #64748b;
             font-size: 12px;
           }
+
+
+        /* ✅ زر تحديد موقعي في صفحة إضافة الإعلان */
+        .map-header{
+          display:flex;
+          align-items:flex-start;
+          justify-content:space-between;
+          gap: 16px;
+          margin-bottom: 16px;
+        }
+        .map-header-text{ flex: 1; min-width: 0; }
+        .map-header-actions{ display:flex; align-items:center; }
+        .locate-me-btn{
+          padding: 12px 18px;
+          border-radius: 12px;
+          font-weight: 900;
+          white-space: nowrap;
+        }
+        @media (max-width: 640px) {
+          .map-header{ flex-direction: column; align-items: stretch; }
+          .map-header-actions{ justify-content: stretch; }
+          .locate-me-btn{ width: 100%; }
+        }
 `}</style>
     </div>
   );
