@@ -138,7 +138,7 @@ function ClickPicker({ value, onChange }) {
   return value ? <Marker position={value} /> : null;
 }
 
-export default function LocationPicker({ value, onChange }) {
+export default function LocationPicker({ value, onChange, showLocateButton = true }) {
   const wrapRef = useRef(null);
   const [map, setMap] = useState(null);
   const [locatingMe, setLocatingMe] = useState(false);
@@ -329,6 +329,7 @@ export default function LocationPicker({ value, onChange }) {
         }}
       >
         <span>📍 اختر موقع الإعلان</span>
+        {showLocateButton && (
         <button
           onClick={handleLocateMe}
           disabled={locatingMe}
@@ -358,6 +359,7 @@ export default function LocationPicker({ value, onChange }) {
             <>📍 حدد موقعي</>
           )}
         </button>
+        )}
       </div>
 
       <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
