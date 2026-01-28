@@ -1,48 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
+
 import { db, firebase, storage } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
 import { toYER, useRates } from '@/lib/rates';
-import Link from 'next/link';
 
-// ✅ Taxonomy (تصنيف هرمي للفروع)
-import {
-  // options
-  CAR_MAKES,
-  CAR_MODELS_BY_MAKE,
-  PHONE_BRANDS,
-  DEAL_TYPES,
-  PROPERTY_TYPES,
-  ELECTRONICS_TYPES,
-  HEAVY_EQUIPMENT_TYPES,
-  SOLAR_TYPES,
-  NETWORK_TYPES,
-  MAINTENANCE_TYPES,
-  FURNITURE_TYPES,
-  HOME_TOOLS_TYPES,
-  CLOTHES_TYPES,
-  ANIMAL_TYPES,
-  JOB_TYPES,
-  SERVICE_TYPES,
-  MOTORCYCLE_BRANDS,
+// ✅ نستورد taxonomy بشكل آمن (لتجنب أخطاء build إذا اختلفت بعض الصادرات)
+import * as taxonomy from '@/lib/taxonomy';
 
-  // detection/inference (for "Paste text" importer)
-  inferListingTaxonomy,
-  detectCarMakeFromText,
-  detectPhoneBrandFromText,
-  detectPropertyTypeFromText,
-  detectDealTypeFromText,
-  detectMotorcycleBrandFromText,
-} from '@/lib/taxonomy';
+const LocationPicker = dynamic(() => import('@/components/Map/LocationPicker'), { ssr: false });
 
-const LocationPicker = dynamic(
-  () => import('@/components/Map/LocationPicker'),
-  { ssr: false }
-);
-
-// ✅ الأقسام الافتراضية (مطابقة تمامًا لمفاتيح Firestore عندك)
 const DEFAULT_CATEGORIES = [
   { slug: 'cars', name: 'سيارات' },
   { slug: 'realestate', name: 'عقارات' },
@@ -61,7 +31,6 @@ const DEFAULT_CATEGORIES = [
   { slug: 'services', name: 'خدمات' },
   { slug: 'other', name: 'أخرى / غير مصنف' },
 ];
-
 
 const DEFAULT_GOVERNORATES = [
   { key: 'amanat_al_asimah', nameAr: 'أمانة العاصمة', order: 1, enabled: true },
@@ -88,30 +57,59 @@ const DEFAULT_GOVERNORATES = [
   { key: 'socotra', nameAr: 'سقطرى', order: 22, enabled: true },
 ];
 
+function slugKey(v) {
+  return String(v || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/-+/g, '_')
+    .replace(/__+/g, '_')
+    .replace(/[^a-z0-9_\u0600-\u06FF]/g, '')
+    .slice(0, 60);
+}
+
+function getArray(x) {
+  return Array.isArray(x) ? x : [];
+}
+
+function gateNextHref(path) {
+  const next = encodeURIComponent(path || '/add');
+  return {
+    login: `/login?next=${next}`,
+    register: `/register?next=${next}`,
+  };
+}
 
 export default function AddPage() {
   const { user, loading } = useAuth();
   const rates = useRates();
 
+  // basic
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
-  const [city, setCity] = useState('');
+
+  // location
   const [govKey, setGovKey] = useState('');
-  // ✅ مهم: لا يوجد قسم افتراضي
+  const [city, setCity] = useState('');
+  const [coords, setCoords] = useState(null); // [lat,lng]
+  const [locationLabel, setLocationLabel] = useState('');
+
+  // category
   const [category, setCategory] = useState('');
-  // ✅ فروع الأقسام (هرمية)
-  const [carMake, setCarMake] = useState(''); // cars
+
+  // taxonomy (sub-fields)
+  const [carMake, setCarMake] = useState('');
   const [carMakeText, setCarMakeText] = useState('');
   const [carModel, setCarModel] = useState('');
   const [carModelText, setCarModelText] = useState('');
 
-  const [phoneBrand, setPhoneBrand] = useState(''); // phones
+  const [phoneBrand, setPhoneBrand] = useState('');
   const [phoneBrandText, setPhoneBrandText] = useState('');
-  const [dealType, setDealType] = useState(''); // realestate: sale/rent
-  const [propertyType, setPropertyType] = useState(''); // realestate: land/house...
+
+  const [dealType, setDealType] = useState('');
+  const [propertyType, setPropertyType] = useState('');
   const [propertyTypeText, setPropertyTypeText] = useState('');
 
-  // ✅ بقية الأقسام (اختياري، لكن يُحسّن البحث والفلترة)
   const [electronicsType, setElectronicsType] = useState('');
   const [electronicsTypeText, setElectronicsTypeText] = useState('');
 
@@ -148,105 +146,73 @@ export default function AddPage() {
   const [serviceType, setServiceType] = useState('');
   const [serviceTypeText, setServiceTypeText] = useState('');
 
+  // price/contact
+  const [currency, setCurrency] = useState('YER');
+  const [price, setPrice] = useState('');
   const [phone, setPhone] = useState('');
   const [isWhatsapp, setIsWhatsapp] = useState(true);
 
-  const [currency, setCurrency] = useState('YER');
-  const [price, setPrice] = useState('');
-
-  const [coords, setCoords] = useState(null); // [lat, lng]
-
-  // ==============================
-  // ✅ Import helper (Paste text / Import URL)
-  // ==============================
-  const [importMode, setImportMode] = useState('text'); // 'text' | 'url'
-  const [importInput, setImportInput] = useState('');
-  const [importLoading, setImportLoading] = useState(false);
-  const [importError, setImportError] = useState('');
-  const [importNotes, setImportNotes] = useState([]);
-  const [importedImageUrls, setImportedImageUrls] = useState([]);
-
-  const [locationLabel, setLocationLabel] = useState('');
-  const [showMap, setShowMap] = useState(true); // ✅ الخريطة مفتوحة دائمًا
-
-
-  const [images, setImages] = useState([]);
-  const [imagePreviews, setImagePreviews] = useState([]);
-
+  // auction (optional)
   const [auctionEnabled, setAuctionEnabled] = useState(false);
   const [auctionMinutes, setAuctionMinutes] = useState('60');
 
+  // images
+  const [images, setImages] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
+  const fileInputRef = useRef(null);
+
+  // catalogs
+  const [cats, setCats] = useState(DEFAULT_CATEGORIES);
+  const [catsLoading, setCatsLoading] = useState(true);
+
+  const [govs, setGovs] = useState(DEFAULT_GOVERNORATES);
+  const [govsLoading, setGovsLoading] = useState(true);
+
+  // state
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
-  const [cats, setCats] = useState(DEFAULT_CATEGORIES);
-  const [catsLoading, setCatsLoading] = useState(true);
-  const [catsSource, setCatsSource] = useState('loading'); // loading | firestore | fallback
-
-  // ✅ المحافظات (المدن) - تحميلها من Firestore أو استخدام fallback
-  const [govs, setGovs] = useState(DEFAULT_GOVERNORATES);
-  const [govsLoading, setGovsLoading] = useState(true);
-  const [govsSource, setGovsSource] = useState('loading'); // loading | firestore | fallback
-
-
-
-  // ✅ تحميل الأقسام من Firestore
+  // ===== Load categories (once) =====
   useEffect(() => {
-    const unsub = db.collection('categories').onSnapshot(
-      (snap) => {
+    let mounted = true;
+    (async () => {
+      try {
+        const snap = await db.collection('categories').get();
         const arr = snap.docs
           .map((d) => {
             const data = d.data() || {};
             return {
-              slug: d.id, // ✅ مفتاح القسم = id
+              slug: d.id,
               name: String(data.name || '').trim(),
               active: data.active,
             };
           })
           .filter((c) => c.slug && c.name && c.active !== false);
 
-        // ترتيب عربي لطيف
         arr.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
-        if (arr.length) {
-          setCats(arr);
-          setCatsSource('firestore');
-
-          // ✅ إذا القسم الحالي غير موجود، صفّره
-          if (category && !arr.some((x) => x.slug === category)) {
-            setCategory('');
-          }
-        } else {
-          setCats(DEFAULT_CATEGORIES);
-          setCatsSource('fallback');
-          if (category && !DEFAULT_CATEGORIES.some((x) => x.slug === category)) {
-            setCategory('');
-          }
-        }
-
-        setCatsLoading(false);
-      },
-      (err) => {
-        console.error('Failed to load categories:', err);
+        if (!mounted) return;
+        setCats(arr.length ? arr : DEFAULT_CATEGORIES);
+      } catch (e) {
+        if (!mounted) return;
         setCats(DEFAULT_CATEGORIES);
-        setCatsLoading(false);
-        setCatsSource('fallback');
-
-        if (category && !DEFAULT_CATEGORIES.some((x) => x.slug === category)) {
-          setCategory('');
-        }
+      } finally {
+        if (mounted) setCatsLoading(false);
       }
-    );
+    })();
 
-    return () => unsub();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  // ✅ تحميل المحافظات (taxonomy_governorates) من Firestore
+  // ===== Load governorates (once) =====
   useEffect(() => {
-    const unsub = db.collection('taxonomy_governorates').onSnapshot(
-      (snap) => {
+    let mounted = true;
+    (async () => {
+      try {
+        const snap = await db.collection('taxonomy_governorates').get();
         const arr = snap.docs
           .map((d) => {
             const data = d.data() || {};
@@ -266,28 +232,22 @@ export default function AddPage() {
           return String(a.nameAr || '').localeCompare(String(b.nameAr || ''), 'ar');
         });
 
-        if (arr.length) {
-          setGovs(arr);
-          setGovsSource('firestore');
-        } else {
-          setGovs(DEFAULT_GOVERNORATES);
-          setGovsSource('fallback');
-        }
-
-        setGovsLoading(false);
-      },
-      (err) => {
-        console.error('Failed to load taxonomy_governorates:', err);
+        if (!mounted) return;
+        setGovs(arr.length ? arr : DEFAULT_GOVERNORATES);
+      } catch (e) {
+        if (!mounted) return;
         setGovs(DEFAULT_GOVERNORATES);
-        setGovsLoading(false);
-        setGovsSource('fallback');
+      } finally {
+        if (mounted) setGovsLoading(false);
       }
-    );
+    })();
 
-    return () => unsub();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  // ✅ اجعل city مشتقة من govKey (حتى ما يصير اختلاف أسماء)
+  // derive city from govKey
   useEffect(() => {
     if (!govKey) {
       setCity('');
@@ -297,173 +257,7 @@ export default function AddPage() {
     setCity(found?.nameAr ? String(found.nameAr) : '');
   }, [govKey, govs]);
 
-  // ==============================
-  // ✅ Import helpers
-  // ==============================
-  const guessRootCategoryFromText = (text) => {
-    const t = String(text || '').trim();
-    if (!t) return '';
-
-    const carMake = detectCarMakeFromText(t);
-    if (carMake && carMake !== 'other') return 'cars';
-
-    const phoneBrand = detectPhoneBrandFromText(t);
-    if (phoneBrand && phoneBrand !== 'other') return 'phones';
-
-    const propType = detectPropertyTypeFromText(t);
-    const dealType = detectDealTypeFromText(t);
-    if (propType || dealType) return 'realestate';
-
-    const motoBrand = detectMotorcycleBrandFromText(t);
-    if (motoBrand && motoBrand !== 'other') return 'motorcycles';
-
-    // fallback by keywords (light)
-    const lower = t.toLowerCase();
-    if (lower.includes('شقة') || lower.includes('فيلا') || lower.includes('ارض') || lower.includes('عمارة')) return 'realestate';
-    if (lower.includes('ايفون') || lower.includes('سامسونج') || lower.includes('جوال')) return 'phones';
-    if (lower.includes('تويوتا') || lower.includes('نيسان') || lower.includes('سيارة')) return 'cars';
-
-    return '';
-  };
-
-  const applyImportedData = (data) => {
-    if (!data) return;
-
-    // clear previous import msgs
-    setImportError('');
-    setImportNotes(Array.isArray(data?.notes) ? data.notes : []);
-
-    // Basic fields
-    if (data.title) setTitle(String(data.title).slice(0, 100));
-    if (data.desc) setDesc(String(data.desc).slice(0, 2000));
-
-    if (data.currency) setCurrency(String(data.currency));
-    if (data.price != null) setPrice(String(data.price || ''));
-
-    if (data.phone) setPhone(String(data.phone));
-
-    if (data.govKey) setGovKey(String(data.govKey));
-    if (Array.isArray(data.coords) && data.coords.length === 2) {
-      // only set if user didn't choose a more precise point yet
-      setCoords((prev) => (Array.isArray(prev) && prev.length === 2 ? prev : data.coords));
-    }
-
-    // Images
-    if (Array.isArray(data.images) && data.images.length) {
-      setImportedImageUrls(data.images.slice(0, 10));
-    } else {
-      setImportedImageUrls([]);
-    }
-
-    // Guess root category + infer taxonomy
-    const text = `${data.title || ''} ${data.desc || ''}`.trim();
-    const root = guessRootCategoryFromText(text);
-    if (root) setCategory(root);
-
-    if (root) {
-      const inferred = inferListingTaxonomy({ title: data.title || '', description: data.desc || '' }, root);
-
-      if (root === 'cars') {
-        setCarMake(inferred.carMake || '');
-        setCarMakeText('');
-        setCarModel(inferred.carModel || '');
-        setCarModelText('');
-      }
-
-      if (root === 'phones') {
-        setPhoneBrand(inferred.phoneBrand || '');
-        setPhoneBrandText('');
-      }
-
-      if (root === 'realestate') {
-        setDealType(inferred.dealType || '');
-        setPropertyType(inferred.propertyType || '');
-        setPropertyTypeText('');
-      }
-
-      if (root === 'motorcycles') {
-        setMotorcycleBrand(inferred.motorcycleBrand || '');
-        setMotorcycleBrandText('');
-        setMotorcycleModel(inferred.motorcycleModel || '');
-        setMotorcycleModelText('');
-      }
-    }
-  };
-
-  const handleImport = async () => {
-    try {
-      setImportLoading(true);
-      setImportError('');
-      setImportNotes([]);
-
-      const res = await fetch('/api/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: importMode, input: importInput }),
-      });
-
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json?.ok) {
-        // إذا الرابط غير مدعوم (مثل فيسبوك/انستقرام) حوّل المستخدم تلقائيًا لوضع "نص"
-        if (json?.code === 'UNSUPPORTED_FACEBOOK') {
-          setImportMode('text');
-        }
-        setImportError(String(json?.message || 'فشل الاستيراد.'));
-        return;
-      }
-
-      applyImportedData(json.data || {});
-    } catch (e) {
-      console.error('Import failed:', e);
-      setImportError('فشل الاستيراد. تأكد من الإنترنت أو جرّب لصق النص بدل الرابط.');
-    } finally {
-      setImportLoading(false);
-    }
-  };
-
-  const clearImport = () => {
-    setImportInput('');
-    setImportError('');
-    setImportNotes([]);
-    setImportedImageUrls([]);
-  };
-
-  const tryImportImagesFromUrls = async () => {
-    if (!importedImageUrls.length) return;
-
-    // Try to download images as blobs and convert them into File objects
-    // Note: Some sites block CORS, so this is best-effort only.
-    const nextFiles = [];
-    const nextPreviews = [];
-
-    for (const url of importedImageUrls.slice(0, 10)) {
-      try {
-        const r = await fetch(`/api/import-image?url=${encodeURIComponent(url)}`);
-        if (!r.ok) continue;
-        const blob = await r.blob();
-        const ext = (blob.type && blob.type.includes('/')) ? blob.type.split('/')[1] : 'jpg';
-        const file = new File([blob], `imported_${Date.now()}_${Math.random().toString(16).slice(2)}.${ext}`, { type: blob.type || 'image/jpeg' });
-        nextFiles.push(file);
-        nextPreviews.push(URL.createObjectURL(file));
-      } catch (e) {
-        // ignore single image failure
-      }
-    }
-
-    if (!nextFiles.length) {
-      setImportError('تعذر استيراد الصور تلقائياً (موقع المصدر يمنع التحميل). ارفع الصور يدويًا.');
-      return;
-    }
-
-    setImages((prev) => [...prev, ...nextFiles]);
-    setImagePreviews((prev) => [...prev, ...nextPreviews]);
-    setImportNotes((prev) => Array.isArray(prev) ? [...prev, 'تم استيراد بعض الصور بنجاح. راجعها قبل النشر.'] : ['تم استيراد بعض الصور بنجاح.']);
-  };
-
-
-
-
-  // ✅ عند تغيير القسم: صفّر الفروع
+  // reset sub fields when category changes
   useEffect(() => {
     setCarMake('');
     setCarMakeText('');
@@ -512,58 +306,77 @@ export default function AddPage() {
 
     setServiceType('');
     setServiceTypeText('');
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category]);
 
-// ✅ معاينة الصور
+  // image previews
   useEffect(() => {
-    if (images.length === 0) {
+    // cleanup old previews
+    imagePreviews.forEach((u) => {
+      try { URL.revokeObjectURL(u); } catch (e) {}
+    });
+
+    if (!images.length) {
       setImagePreviews([]);
       return;
     }
 
-    const previews = [];
-    images.forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        previews.push(reader.result);
-        if (previews.length === images.length) {
-          setImagePreviews([...previews]);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+    const urls = images.map((f) => URL.createObjectURL(f));
+    setImagePreviews(urls);
+
+    return () => {
+      urls.forEach((u) => {
+        try { URL.revokeObjectURL(u); } catch (e) {}
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [images]);
 
-  // ✅ Helpers for rates (fallback إذا rates ما وصل)
-  const getYerPerUSD = () => {
-    const r = rates || {};
-    return Number(r.USD || r.usd || r.usdRate || r.usdToYer || r.usd_yer || 1632);
-  };
-
-  const getYerPerSAR = () => {
-    const r = rates || {};
-    return Number(r.SAR || r.sar || r.sarRate || r.sarToYer || r.sar_yer || 425);
-  };
-
-  // ✅ موديلات السيارة حسب الماركة (لواجهة الإضافة)
   const carModelsForMake = useMemo(() => {
     const mk = String(carMake || '').trim();
     if (!mk || mk === 'other') return [];
-    return Array.isArray(CAR_MODELS_BY_MAKE?.[mk]) ? CAR_MODELS_BY_MAKE[mk] : [];
+    const map = taxonomy.CAR_MODELS_BY_MAKE || {};
+    return Array.isArray(map?.[mk]) ? map[mk] : [];
   }, [carMake]);
 
-  const slugKey = (v) =>
-    String(v || '')
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, '_')
-      .replace(/-+/g, '_')
-      .replace(/__+/g, '_')
-      .replace(/[^a-z0-9_\u0600-\u06FF]/g, '')
-      .slice(0, 60);
+  const convertedPrice = useMemo(() => {
+    if (!price || isNaN(price)) return null;
+    const yer = Number(toYER(price, currency, rates));
+    if (!isFinite(yer) || yer <= 0) return null;
 
-  // ✅ التحقق من الأخطاء
+    const r = rates || {};
+    const yerPerUSD = Number(r.USD || r.usd || r.usdRate || r.usdToYer || r.usd_yer || 1632);
+    const yerPerSAR = Number(r.SAR || r.sar || r.sarRate || r.sarToYer || r.sar_yer || 425);
+
+    const sar = yerPerSAR > 0 ? yer / yerPerSAR : null;
+    const usd = yerPerUSD > 0 ? yer / yerPerUSD : null;
+
+    return {
+      YER: Math.round(yer).toLocaleString('ar-YE'),
+      SAR: sar ? sar.toFixed(2) : null,
+      USD: usd ? usd.toFixed(2) : null,
+      rawYER: yer,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [price, currency, rates]);
+
+  const onPick = (c, lbl) => {
+    setCoords(c);
+    setLocationLabel(lbl || '');
+    if (errors.location) setErrors((prev) => ({ ...prev, location: undefined }));
+  };
+
+  const onPickImages = (files) => {
+    const arr = Array.from(files || []);
+    const imgs = arr.filter((f) => f && String(f.type || '').startsWith('image/'));
+    setImages(imgs.slice(0, 12));
+  };
+
+  const removeImage = (idx) => {
+    setImages((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const validateForm = () => {
     const newErrors = {};
 
@@ -574,20 +387,15 @@ export default function AddPage() {
     else if (desc.trim().length < 10) newErrors.desc = 'الوصف يجب أن يكون 10 أحرف على الأقل';
 
     if (!govKey) newErrors.govKey = 'الرجاء اختيار المحافظة';
-
-    // ✅ القسم إجباري
     if (!category) newErrors.category = 'الرجاء اختيار القسم';
 
     if (!price || isNaN(price) || Number(price) <= 0) newErrors.price = 'الرجاء إدخال سعر صحيح';
 
-    const phoneDigits = phone.replace(/\D/g, '');
-    if (!phoneDigits) {
-      newErrors.phone = 'رقم التواصل مطلوب';
-    } else if (!/^[0-9]{9,15}$/.test(phoneDigits)) {
-      newErrors.phone = 'رقم الهاتف غير صحيح';
-    }
+    const phoneDigits = String(phone || '').replace(/\D/g, '');
+    if (!phoneDigits) newErrors.phone = 'رقم التواصل مطلوب';
+    else if (!/^[0-9]{9,15}$/.test(phoneDigits)) newErrors.phone = 'رقم الهاتف غير صحيح';
 
-    // ✅ فروع الأقسام (للمستقبل + الخريطة)
+    // category-specific
     if (category === 'cars') {
       if (!carMake) newErrors.carMake = 'اختر ماركة السيارة';
       if (carMake === 'other' && !carMakeText.trim()) newErrors.carMakeText = 'اكتب ماركة السيارة';
@@ -605,56 +413,41 @@ export default function AddPage() {
       if (propertyType === 'other' && !propertyTypeText.trim()) newErrors.propertyTypeText = 'اكتب نوع العقار';
     }
 
-    // ✅ بقية الأقسام (نطلب وصف فقط إذا اختار المستخدم "أخرى")
-    if (category === 'electronics') {
-      if (electronicsType === 'other' && !electronicsTypeText.trim()) newErrors.electronicsTypeText = 'اكتب نوع الإلكترونيات';
-    }
-    if (category === 'motorcycles') {
-      if (motorcycleBrand === 'other' && !motorcycleBrandText.trim()) newErrors.motorcycleBrandText = 'اكتب ماركة الدراجة';
-    }
-    if (category === 'heavy_equipment') {
-      if (heavyEquipmentType === 'other' && !heavyEquipmentTypeText.trim()) newErrors.heavyEquipmentTypeText = 'اكتب نوع المعدة';
-    }
-    if (category === 'solar') {
-      if (solarType === 'other' && !solarTypeText.trim()) newErrors.solarTypeText = 'اكتب نوع الطاقة الشمسية';
-    }
-    if (category === 'networks') {
-      if (networkType === 'other' && !networkTypeText.trim()) newErrors.networkTypeText = 'اكتب نوع الشبكات';
-    }
-    if (category === 'maintenance') {
-      if (maintenanceType === 'other' && !maintenanceTypeText.trim()) newErrors.maintenanceTypeText = 'اكتب نوع الصيانة';
-    }
-    if (category === 'furniture') {
-      if (furnitureType === 'other' && !furnitureTypeText.trim()) newErrors.furnitureTypeText = 'اكتب نوع الأثاث';
-    }
-    if (category === 'home_tools') {
-      if (homeToolsType === 'other' && !homeToolsTypeText.trim()) newErrors.homeToolsTypeText = 'اكتب نوع الأدوات المنزلية';
-    }
-    if (category === 'clothes') {
-      if (clothesType === 'other' && !clothesTypeText.trim()) newErrors.clothesTypeText = 'اكتب نوع الملابس';
-    }
-    if (category === 'animals') {
-      if (animalType === 'other' && !animalTypeText.trim()) newErrors.animalTypeText = 'اكتب نوع الحيوانات';
-    }
-    if (category === 'jobs') {
-      if (jobType === 'other' && !jobTypeText.trim()) newErrors.jobTypeText = 'اكتب نوع الوظيفة';
-    }
-    if (category === 'services') {
-      if (serviceType === 'other' && !serviceTypeText.trim()) newErrors.serviceTypeText = 'اكتب نوع الخدمة';
-    }
+    const otherTextNeeded = (k, txtKey) => {
+      if (k === 'other' && !String(txtKey || '').trim()) return true;
+      return false;
+    };
 
-    if (auctionEnabled && (!auctionMinutes || Number(auctionMinutes) < 1)) {
+    if (category === 'electronics' && otherTextNeeded(electronicsType, electronicsTypeText))
+      newErrors.electronicsTypeText = 'اكتب نوع الإلكترونيات';
+    if (category === 'motorcycles' && otherTextNeeded(motorcycleBrand, motorcycleBrandText))
+      newErrors.motorcycleBrandText = 'اكتب ماركة الدراجة';
+    if (category === 'heavy_equipment' && otherTextNeeded(heavyEquipmentType, heavyEquipmentTypeText))
+      newErrors.heavyEquipmentTypeText = 'اكتب نوع المعدة';
+    if (category === 'solar' && otherTextNeeded(solarType, solarTypeText))
+      newErrors.solarTypeText = 'اكتب نوع الطاقة الشمسية';
+    if (category === 'networks' && otherTextNeeded(networkType, networkTypeText))
+      newErrors.networkTypeText = 'اكتب نوع الشبكات';
+    if (category === 'maintenance' && otherTextNeeded(maintenanceType, maintenanceTypeText))
+      newErrors.maintenanceTypeText = 'اكتب نوع الصيانة';
+    if (category === 'furniture' && otherTextNeeded(furnitureType, furnitureTypeText))
+      newErrors.furnitureTypeText = 'اكتب نوع الأثاث';
+    if (category === 'home_tools' && otherTextNeeded(homeToolsType, homeToolsTypeText))
+      newErrors.homeToolsTypeText = 'اكتب نوع الأدوات المنزلية';
+    if (category === 'clothes' && otherTextNeeded(clothesType, clothesTypeText))
+      newErrors.clothesTypeText = 'اكتب نوع الملابس';
+    if (category === 'animals' && otherTextNeeded(animalType, animalTypeText))
+      newErrors.animalTypeText = 'اكتب نوع الحيوانات';
+    if (category === 'jobs' && otherTextNeeded(jobType, jobTypeText))
+      newErrors.jobTypeText = 'اكتب نوع الوظيفة';
+    if (category === 'services' && otherTextNeeded(serviceType, serviceTypeText))
+      newErrors.serviceTypeText = 'اكتب نوع الخدمة';
+
+    if (auctionEnabled && (!auctionMinutes || Number(auctionMinutes) < 1))
       newErrors.auctionMinutes = 'مدة المزاد يجب أن تكون دقيقة واحدة على الأقل';
-    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
-
-  const onPick = (c, lbl) => {
-    setCoords(c);
-    setLocationLabel(lbl || '');
-    if (errors.location) setErrors((prev) => ({ ...prev, location: undefined }));
   };
 
   const uploadImages = async () => {
@@ -673,22 +466,10 @@ export default function AddPage() {
     return out;
   };
 
-  const handleRemoveImage = (index) => {
-    const newImages = [...images];
-    const newPreviews = [...imagePreviews];
-    newImages.splice(index, 1);
-    newPreviews.splice(index, 1);
-    setImages(newImages);
-    setImagePreviews(newPreviews);
-  };
-
   const submit = async () => {
     setSubmitAttempted(true);
 
-    if (!user) {
-      alert('يرجى تسجيل الدخول أولاً');
-      return;
-    }
+    if (!user) return;
 
     if (!validateForm()) {
       alert('يرجى تصحيح الأخطاء قبل المتابعة');
@@ -697,7 +478,7 @@ export default function AddPage() {
 
     setBusy(true);
     try {
-      const priceYER = toYER(price, currency, rates);
+      const priceYER = Number(toYER(price, currency, rates));
       const imageUrls = await uploadImages();
 
       const endAt = auctionEnabled
@@ -713,119 +494,128 @@ export default function AddPage() {
       const cityToSave = selectedGov ? selectedGov.nameAr : String(city || '').trim();
 
       const payload = {
-title: title.trim(),
-    description: desc.trim(),
-    city: cityToSave,
-    governorateKey: String(govKey || '').trim(),
+        title: title.trim(),
+        description: desc.trim(),
 
-    // ✅ مهم جدًا: نخزّن key الإنجليزي المطابق لـ Firestore
-    category: String(category || '').trim(),
+        city: cityToSave,
+        governorateKey: String(govKey || '').trim(),
 
-    // ✅ فروع الأقسام (Taxonomy)
-    carMake: category === 'cars' ? (carMake || null) : null,
-    carMakeText: category === 'cars' && carMake === 'other' ? (carMakeText.trim() || null) : null,
+        category: String(category || '').trim(),
 
-    // carModel: نخزّن key موحد + نص عند اختيار "أخرى" أو عند عدم توفر preset
-    carModel:
-      category === 'cars'
-        ? (carModel && carModel !== 'other'
-            ? carModel
-            : (carModelText.trim() ? slugKey(carModelText) : null))
-        : null,
-    carModelText:
-      category === 'cars' && (carModel === 'other' || (carModelText.trim() && carModel !== 'other'))
-        ? (carModelText.trim() || null)
-        : null,
+        // cars
+        carMake: category === 'cars' ? (carMake || null) : null,
+        carMakeText: category === 'cars' && carMake === 'other' ? (carMakeText.trim() || null) : null,
+        carModel:
+          category === 'cars'
+            ? (carModel && carModel !== 'other'
+                ? carModel
+                : (carModelText.trim() ? slugKey(carModelText) : null))
+            : null,
+        carModelText:
+          category === 'cars' && (carModel === 'other' || carModelText.trim())
+            ? (carModelText.trim() || null)
+            : null,
 
-    // بقية الأقسام
-    electronicsType: category === 'electronics' ? (electronicsType || null) : null,
-    electronicsTypeText: category === 'electronics' && electronicsType === 'other' ? (electronicsTypeText.trim() || null) : null,
+        // phones
+        phoneBrand: category === 'phones' ? (phoneBrand || null) : null,
+        phoneBrandText: category === 'phones' && phoneBrand === 'other' ? (phoneBrandText.trim() || null) : null,
 
-    motorcycleBrand: category === 'motorcycles' ? (motorcycleBrand || null) : null,
-    motorcycleBrandText: category === 'motorcycles' && motorcycleBrand === 'other' ? (motorcycleBrandText.trim() || null) : null,
+        // realestate
+        dealType: category === 'realestate' ? (dealType || null) : null,
+        propertyType: category === 'realestate' ? (propertyType || null) : null,
+        propertyTypeText:
+          category === 'realestate' && propertyType === 'other' ? (propertyTypeText.trim() || null) : null,
 
-    heavyEquipmentType: category === 'heavy_equipment' ? (heavyEquipmentType || null) : null,
-    heavyEquipmentTypeText:
-      category === 'heavy_equipment' && heavyEquipmentType === 'other' ? (heavyEquipmentTypeText.trim() || null) : null,
+        // other categories
+        electronicsType: category === 'electronics' ? (electronicsType || null) : null,
+        electronicsTypeText:
+          category === 'electronics' && electronicsType === 'other' ? (electronicsTypeText.trim() || null) : null,
 
-    solarType: category === 'solar' ? (solarType || null) : null,
-    solarTypeText: category === 'solar' && solarType === 'other' ? (solarTypeText.trim() || null) : null,
+        motorcycleBrand: category === 'motorcycles' ? (motorcycleBrand || null) : null,
+        motorcycleBrandText:
+          category === 'motorcycles' && motorcycleBrand === 'other' ? (motorcycleBrandText.trim() || null) : null,
 
-    networkType: category === 'networks' ? (networkType || null) : null,
-    networkTypeText: category === 'networks' && networkType === 'other' ? (networkTypeText.trim() || null) : null,
+        heavyEquipmentType: category === 'heavy_equipment' ? (heavyEquipmentType || null) : null,
+        heavyEquipmentTypeText:
+          category === 'heavy_equipment' && heavyEquipmentType === 'other'
+            ? (heavyEquipmentTypeText.trim() || null)
+            : null,
 
-    maintenanceType: category === 'maintenance' ? (maintenanceType || null) : null,
-    maintenanceTypeText:
-      category === 'maintenance' && maintenanceType === 'other' ? (maintenanceTypeText.trim() || null) : null,
+        solarType: category === 'solar' ? (solarType || null) : null,
+        solarTypeText: category === 'solar' && solarType === 'other' ? (solarTypeText.trim() || null) : null,
 
-    furnitureType: category === 'furniture' ? (furnitureType || null) : null,
-    furnitureTypeText: category === 'furniture' && furnitureType === 'other' ? (furnitureTypeText.trim() || null) : null,
+        networkType: category === 'networks' ? (networkType || null) : null,
+        networkTypeText:
+          category === 'networks' && networkType === 'other' ? (networkTypeText.trim() || null) : null,
 
-    homeToolsType: category === 'home_tools' ? (homeToolsType || null) : null,
-    homeToolsTypeText:
-      category === 'home_tools' && homeToolsType === 'other' ? (homeToolsTypeText.trim() || null) : null,
+        maintenanceType: category === 'maintenance' ? (maintenanceType || null) : null,
+        maintenanceTypeText:
+          category === 'maintenance' && maintenanceType === 'other' ? (maintenanceTypeText.trim() || null) : null,
 
-    clothesType: category === 'clothes' ? (clothesType || null) : null,
-    clothesTypeText: category === 'clothes' && clothesType === 'other' ? (clothesTypeText.trim() || null) : null,
+        furnitureType: category === 'furniture' ? (furnitureType || null) : null,
+        furnitureTypeText:
+          category === 'furniture' && furnitureType === 'other' ? (furnitureTypeText.trim() || null) : null,
 
-    animalType: category === 'animals' ? (animalType || null) : null,
-    animalTypeText: category === 'animals' && animalType === 'other' ? (animalTypeText.trim() || null) : null,
+        homeToolsType: category === 'home_tools' ? (homeToolsType || null) : null,
+        homeToolsTypeText:
+          category === 'home_tools' && homeToolsType === 'other' ? (homeToolsTypeText.trim() || null) : null,
 
-    jobType: category === 'jobs' ? (jobType || null) : null,
-    jobTypeText: category === 'jobs' && jobType === 'other' ? (jobTypeText.trim() || null) : null,
+        clothesType: category === 'clothes' ? (clothesType || null) : null,
+        clothesTypeText: category === 'clothes' && clothesType === 'other' ? (clothesTypeText.trim() || null) : null,
 
-    serviceType: category === 'services' ? (serviceType || null) : null,
-    serviceTypeText: category === 'services' && serviceType === 'other' ? (serviceTypeText.trim() || null) : null,
+        animalType: category === 'animals' ? (animalType || null) : null,
+        animalTypeText: category === 'animals' && animalType === 'other' ? (animalTypeText.trim() || null) : null,
 
-    phoneBrand: category === 'phones' ? (phoneBrand || null) : null,
-    phoneBrandText: category === 'phones' && phoneBrand === 'other' ? (phoneBrandText.trim() || null) : null,
+        jobType: category === 'jobs' ? (jobType || null) : null,
+        jobTypeText: category === 'jobs' && jobType === 'other' ? (jobTypeText.trim() || null) : null,
 
-    dealType: category === 'realestate' ? (dealType || null) : null,
-    propertyType: category === 'realestate' ? (propertyType || null) : null,
-    propertyTypeText:
-      category === 'realestate' && propertyType === 'other' ? (propertyTypeText.trim() || null) : null,
+        serviceType: category === 'services' ? (serviceType || null) : null,
+        serviceTypeText:
+          category === 'services' && serviceType === 'other' ? (serviceTypeText.trim() || null) : null,
 
-    phone: phone.trim() || null,
-    isWhatsapp: !!isWhatsapp,
+        // contact
+        phone: String(phone || '').trim() || null,
+        isWhatsapp: !!isWhatsapp,
 
-    priceYER: Number(priceYER),
-    originalPrice: Number(price),
-    originalCurrency: currency,
-    currencyBase: 'YER',
+        // pricing
+        priceYER: Number(priceYER),
+        originalPrice: Number(price),
+        originalCurrency: currency,
+        currencyBase: 'YER',
 
-    // ✅ نخزّن أكثر من صيغة لتضمن عمل الخريطة في كل مكان
-    coords: lat != null && lng != null ? [lat, lng] : null,
-    lat: lat != null ? lat : null,
-    lng: lng != null ? lng : null,
+        // geo
+        coords: lat != null && lng != null ? [lat, lng] : null,
+        lat: lat != null ? lat : null,
+        lng: lng != null ? lng : null,
+        locationLabel: locationLabel || null,
 
-    locationLabel: locationLabel || null,
+        // media
+        images: imageUrls,
 
-    images: imageUrls,
+        // user/meta
+        userId: user.uid,
+        userEmail: user.email || null,
+        userName: user.displayName || null,
 
-    userId: user.uid,
-    userEmail: user.email || null,
-    userName: user.displayName || null,
+        views: 0,
+        likes: 0,
+        isActive: true,
 
-    views: 0,
-    likes: 0,
-    isActive: true,
+        auctionEnabled: !!auctionEnabled,
+        auctionEndAt: endAt,
 
-    auctionEnabled: !!auctionEnabled,
-    auctionEndAt: endAt,
-
-    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       };
 
-      // ✅ لا نضيف حقول المزاد إلا إذا كان الإعلان مزاد فعلاً
+      // only include bids fields when auction
       if (auctionEnabled) {
-        payload.auctionEnabled = true;
-        payload.auctionEndAt = auctionEndAt || null;
         payload.currentBidYER = Number(priceYER);
         payload.bidsCount = 0;
       }
 
-      const docRef = await db.collection('listings').add(payload);
-alert('🎉 تم نشر الإعلان بنجاح!');
+      await db.collection('listings').add(payload);
+
+      alert('🎉 تم نشر الإعلان بنجاح!');
       window.location.href = '/';
     } catch (e) {
       console.error(e);
@@ -835,1878 +625,940 @@ alert('🎉 تم نشر الإعلان بنجاح!');
     }
   };
 
-  // ✅ السعر المحول
-  const convertedPrice = useMemo(() => {
-    if (!price || isNaN(price)) return null;
-
-    const yer = Number(toYER(price, currency, rates));
-    if (!isFinite(yer) || yer <= 0) return null;
-
-    const yerPerSAR = getYerPerSAR();
-    const yerPerUSD = getYerPerUSD();
-
-    const sar = yerPerSAR > 0 ? yer / yerPerSAR : null;
-    const usd = yerPerUSD > 0 ? yer / yerPerUSD : null;
-
-    return {
-      YER: Math.round(yer).toLocaleString('ar-YE'),
-      SAR: sar ? sar.toFixed(2) : null,
-      USD: usd ? usd.toFixed(2) : null,
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [price, currency, rates]);
-
+  // ===== UI: loading / gate =====
   if (loading) {
     return (
-      <div className="add-page-layout">
-        <div className="loading-container">
-          <div className="loading-spinner-large" />
-          <p>جاري تحميل الصفحة...</p>
+      <div className="addWrap">
+        <div className="card loadingCard">
+          <div className="spinner" />
+          <div style={{ fontWeight: 800, marginTop: 10 }}>جاري تحميل الصفحة...</div>
         </div>
+
+        <style jsx>{`
+          .addWrap{ padding: 18px 12px; min-height: calc(100vh - 90px); display:flex; align-items:center; justify-content:center; background:#f8fafc;}
+          .loadingCard{ padding: 26px; text-align:center; max-width: 520px; width:100%; }
+          .spinner{ width: 34px; height: 34px; border-radius: 999px; border: 3px solid rgba(0,0,0,.12); border-top-color: #C2410C; animation: spin 1s linear infinite; margin: 0 auto;}
+          @keyframes spin{ to { transform: rotate(360deg); } }
+        `}</style>
       </div>
     );
   }
 
   if (!loading && !user) {
+    const { login, register } = gateNextHref('/add');
     return (
-      <div className="add-page-layout">
-        <div className="auth-required-card">
-          <div className="lock-icon-large">🔒</div>
-          <h2>تسجيل الدخول مطلوب</h2>
-          <p>يجب عليك تسجيل الدخول لإضافة إعلان جديد</p>
-          <div className="auth-actions">
-            <Link href="/login" className="btn-primary auth-btn">
-              تسجيل الدخول
-            </Link>
-            <Link href="/register" className="btn-secondary auth-btn">
-              إنشاء حساب جديد
-            </Link>
-            <Link href="/" className="back-home-btn">
-              ← العودة للرئيسية
-            </Link>
+      <div className="gateWrap" dir="rtl">
+        <div className="gateCard">
+          <div className="gateTop">
+            <div className="gateIcon" aria-hidden="true">🔒</div>
+            <div className="gateHead">
+              <h1 className="gateTitle">تسجيل الدخول مطلوب</h1>
+              <p className="gateMsg">لاستكمال إضافة إعلان جديد، سجّل دخولك أو أنشئ حسابًا خلال دقيقة.</p>
+            </div>
+          </div>
+
+          <div className="gateBenefits">
+            <div className="bItem"><span className="bDot" aria-hidden="true">✅</span><span>سنُعيدك تلقائيًا إلى صفحة إضافة الإعلان بعد تسجيل الدخول</span></div>
+            <div className="bItem"><span className="bDot" aria-hidden="true">⚡</span><span>إضافة إعلان في دقائق مع الصور وتحديد الموقع</span></div>
+            <div className="bItem"><span className="bDot" aria-hidden="true">🛡️</span><span>حماية أفضل وتقليل المحتوى المزعج</span></div>
+          </div>
+
+          <div className="gateActions">
+            <Link className="gateBtnPrimary" href={login}>تسجيل الدخول</Link>
+            <Link className="gateBtn" href={register}>إنشاء حساب</Link>
+          </div>
+
+          <div className="gateLinks">
+            <Link className="gateLink" href="/listings">تصفّح الإعلانات</Link>
+            <span className="sep" aria-hidden="true">•</span>
+            <Link className="gateLink" href="/">العودة للرئيسية</Link>
           </div>
         </div>
+
+        <style jsx>{`
+          .gateWrap{
+            min-height: calc(100vh - 90px);
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            padding: 28px 14px;
+            background:
+              radial-gradient(900px 450px at 80% 10%, rgba(194,65,12,.18), transparent 60%),
+              radial-gradient(700px 420px at 10% 90%, rgba(2,132,199,.10), transparent 55%),
+              #f8fafc;
+          }
+          .gateCard{
+            width: 100%;
+            max-width: 760px;
+            background: #fff;
+            border: 1px solid rgba(0,0,0,.08);
+            border-radius: 18px;
+            box-shadow: 0 18px 60px rgba(0,0,0,.08);
+            padding: 18px;
+          }
+          .gateTop{ display:flex; gap: 12px; align-items:flex-start; }
+          .gateIcon{
+            width: 44px; height: 44px; border-radius: 14px;
+            display:flex; align-items:center; justify-content:center;
+            background: rgba(194,65,12,.10);
+            border: 1px solid rgba(194,65,12,.18);
+            font-size: 20px;
+            flex: 0 0 auto;
+          }
+          .gateTitle{ margin: 0; font-size: 20px; line-height: 1.2; font-weight: 900; color: #0f172a; }
+          .gateMsg{ margin: 6px 0 0; color: #475569; font-size: 14px; line-height: 1.7; }
+          .gateBenefits{
+            margin-top: 14px; padding: 12px; border-radius: 14px;
+            background: rgba(15,23,42,.03);
+            border: 1px dashed rgba(0,0,0,.10);
+            display: grid; gap: 8px;
+          }
+          .bItem{ display:flex; gap: 8px; align-items:flex-start; color:#0f172a; font-size: 13.5px; line-height: 1.7; }
+          .bDot{ margin-top: 1px; flex: 0 0 auto; }
+          .gateActions{ display:flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+          .gateBtnPrimary, .gateBtn{
+            display:inline-flex; align-items:center; justify-content:center;
+            padding: 12px 14px; border-radius: 14px; font-weight: 900; text-decoration:none;
+            transition: transform .08s ease, box-shadow .18s ease, background .18s ease;
+            min-width: 160px;
+          }
+          .gateBtnPrimary{ background: #C2410C; color:#fff; box-shadow: 0 10px 24px rgba(194,65,12,.24); }
+          .gateBtnPrimary:hover{ transform: translateY(-1px); }
+          .gateBtn{ background: #fff; color:#0f172a; border: 1px solid rgba(0,0,0,.10); }
+          .gateBtn:hover{ transform: translateY(-1px); }
+          .gateLinks{
+            margin-top: 12px; display:flex; gap: 8px; align-items:center; justify-content:center;
+            color:#64748b; font-size: 13px;
+          }
+          .gateLink{ color:#2563eb; text-decoration:none; font-weight: 800; }
+          .gateLink:hover{ text-decoration: underline; }
+          .sep{ opacity:.7; }
+          @media (max-width: 520px){
+            .gateCard{ padding: 14px; }
+            .gateBtnPrimary, .gateBtn{ width: 100%; }
+            .gateLinks{ flex-wrap: wrap; }
+          }
+        `}</style>
       </div>
     );
   }
 
+  // ===== Form =====
+  const CAR_MAKES = getArray(taxonomy.CAR_MAKES);
+  const PHONE_BRANDS = getArray(taxonomy.PHONE_BRANDS);
+  const DEAL_TYPES = getArray(taxonomy.DEAL_TYPES);
+  const PROPERTY_TYPES = getArray(taxonomy.PROPERTY_TYPES);
+
+  const ELECTRONICS_TYPES = getArray(taxonomy.ELECTRONICS_TYPES);
+  const MOTORCYCLE_BRANDS = getArray(taxonomy.MOTORCYCLE_BRANDS);
+  const HEAVY_EQUIPMENT_TYPES = getArray(taxonomy.HEAVY_EQUIPMENT_TYPES);
+  const SOLAR_TYPES = getArray(taxonomy.SOLAR_TYPES);
+  const NETWORK_TYPES = getArray(taxonomy.NETWORK_TYPES);
+  const MAINTENANCE_TYPES = getArray(taxonomy.MAINTENANCE_TYPES);
+  const FURNITURE_TYPES = getArray(taxonomy.FURNITURE_TYPES);
+  const HOME_TOOLS_TYPES = getArray(taxonomy.HOME_TOOLS_TYPES);
+  const CLOTHES_TYPES = getArray(taxonomy.CLOTHES_TYPES);
+  const ANIMAL_TYPES = getArray(taxonomy.ANIMAL_TYPES);
+  const JOB_TYPES = getArray(taxonomy.JOB_TYPES);
+  const SERVICE_TYPES = getArray(taxonomy.SERVICE_TYPES);
+
   return (
-    <div className="add-page-layout">
-      <div className="page-header add-page-header">
-        <h1>إضافة إعلان جديد</h1>
-        <p className="page-subtitle">أضف إعلانك ليجده الآلاف من المشترين</p>
-      </div>
+    <div className="addWrap">
+      <div className="container">
+        <div className="headerCard">
+          <h1 className="h1">إضافة إعلان جديد</h1>
+          <p className="muted">أضف إعلانك ليجده الآلاف من المشترين</p>
+        </div>
 
-      <div className="form-tips">
-        <div className="tip-item"><span className="tip-icon">📸</span><span>أضف صور واضحة وجودة عالية</span></div>
-        <div className="tip-item"><span className="tip-icon">📝</span><span>اكتب وصفاً مفصلاً ودقيقاً</span></div>
-        <div className="tip-item"><span className="tip-icon">💰</span><span>حدد سعراً مناسباً ومنافساً</span></div>
-        <div className="tip-item"><span className="tip-icon">📍</span><span>اختر الموقع الدقيق لإعلانك</span></div>
-      </div>
+        <div className="grid">
+          <div className="card formCard">
+            <div className="sectionTitle">معلومات الإعلان</div>
 
-      <div className="form-grid">
-        <div className="form-container">
-          <h2 className="form-section-title">معلومات الإعلان</h2>
-
-          {/* ✅ استيراد سريع (نص / رابط) */}
-          <div className="import-box">
-            <div className="import-top">
-              <div>
-                <div className="import-title">استيراد سريع للإعلان</div>
-                <div className="import-subtitle">الصق نص الإعلان من واتساب/فيسبوك أو ضع رابطاً من موقع مفتوح</div>
-              </div>
-
-              <div className="import-mode">
-                <button
-                  type="button"
-                  className={`import-mode-btn ${importMode === 'text' ? 'active' : ''}`}
-                  onClick={() => setImportMode('text')}
-                >
-                  لصق نص
-                </button>
-                <button
-                  type="button"
-                  className={`import-mode-btn ${importMode === 'url' ? 'active' : ''}`}
-                  onClick={() => setImportMode('url')}
-                >
-                  رابط موقع
-                </button>
-              </div>
-            </div>
-
-            {importMode === 'url' ? (
+            <div className="field">
+              <label className="label">عنوان الإعلان <span className="req">*</span></label>
               <input
-                className="form-input"
-                value={importInput}
-                onChange={(e) => setImportInput(e.target.value)}
-                placeholder="الصق رابط الإعلان من موقعك أو أي موقع (روابط فيسبوك/انستقرام غير مدعومة)"
+                className={`input ${errors.title ? 'err' : ''}`}
+                value={title}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  if (submitAttempted) setErrors((p) => ({ ...p, title: undefined }));
+                }}
+                placeholder="مثال: تويوتا شاص 2014 نظيف"
+                maxLength={100}
               />
-            ) : (
+              <div className="helper">
+                <span>اكتب عنواناً واضحاً</span>
+                <span>{title.length}/100</span>
+              </div>
+              {errors.title ? <div className="error">{errors.title}</div> : null}
+            </div>
+
+            <div className="field">
+              <label className="label">وصف الإعلان <span className="req">*</span></label>
               <textarea
-                className="form-textarea"
-                value={importInput}
-                onChange={(e) => setImportInput(e.target.value)}
-                placeholder="الصق نص الإعلان هنا (مثال: تويوتا شاص 2014... السعر... التواصل... المحافظة...)"
-                rows={5}
+                className={`textarea ${errors.desc ? 'err' : ''}`}
+                value={desc}
+                onChange={(e) => {
+                  setDesc(e.target.value);
+                  if (submitAttempted) setErrors((p) => ({ ...p, desc: undefined }));
+                }}
+                placeholder="اكتب كل التفاصيل: الحالة، المواصفات، سبب البيع..."
+                rows={6}
+                maxLength={2000}
               />
-            )}
-
-            <div className="import-actions">
-              <button
-                type="button"
-                className="btn btnPrimary"
-                onClick={handleImport}
-                disabled={importLoading || !importInput.trim()}
-              >
-                {importLoading ? 'جاري الاستيراد...' : 'استيراد وملء الحقول'}
-              </button>
-
-              <button type="button" className="btn" onClick={clearImport} disabled={importLoading && !importInput}>
-                مسح
-              </button>
-            </div>
-
-            {importError ? <div className="import-error">{importError}</div> : null}
-
-            {Array.isArray(importNotes) && importNotes.length ? (
-              <div className="import-notes">
-                {importNotes.map((n, idx) => (
-                  <div key={idx} className="import-note">• {n}</div>
-                ))}
+              <div className="helper">
+                <span>التفاصيل تزيد فرص البيع</span>
+                <span>{desc.length}/2000</span>
               </div>
-            ) : null}
+              {errors.desc ? <div className="error">{errors.desc}</div> : null}
+            </div>
 
-            {importedImageUrls.length ? (
-              <div className="import-images">
-                <div className="import-images-head">
-                  <div>تم العثور على صور: {importedImageUrls.length}</div>
-                  <button type="button" className="btn" onClick={tryImportImagesFromUrls}>
-                    محاولة استيراد الصور
-                  </button>
-                </div>
-                <div className="import-images-hint">
-                  ملاحظة: بعض المواقع تمنع تحميل الصور تلقائياً، إذا لم تنجح العملية ارفع الصور يدويًا.
-                </div>
+            <div className="row2">
+              <div className="field">
+                <label className="label">المحافظة <span className="req">*</span></label>
+                <select
+                  className={`input ${errors.govKey ? 'err' : ''}`}
+                  value={govKey}
+                  onChange={(e) => {
+                    setGovKey(e.target.value);
+                    if (submitAttempted) setErrors((p) => ({ ...p, govKey: undefined }));
+                  }}
+                  disabled={govsLoading}
+                >
+                  <option value="">{govsLoading ? 'جاري التحميل...' : 'اختر المحافظة'}</option>
+                  {(govs || []).map((g) => (
+                    <option key={g.key} value={g.key}>{g.nameAr}</option>
+                  ))}
+                </select>
+                {errors.govKey ? <div className="error">{errors.govKey}</div> : null}
               </div>
-            ) : null}
-          </div>
 
-          {/* العنوان */}
-          <div className="form-group">
-            <label className="form-label required">عنوان الإعلان</label>
-            <input
-              className={`form-input ${errors.title ? 'error' : ''}`}
-              value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                if (submitAttempted) setErrors((prev) => ({ ...prev, title: undefined }));
-              }}
-              placeholder="مثال: لابتوب ماك بوك برو 2023 بحالة ممتازة"
-              maxLength={100}
-            />
-            <div className="form-helper">
-              <span>أكتب عنواناً واضحاً وجذاباً</span>
-              <span className="char-count">{title.length}/100</span>
-            </div>
-            {errors.title && <div className="form-error">{errors.title}</div>}
-          </div>
-
-          {/* الوصف */}
-          <div className="form-group">
-            <label className="form-label required">وصف الإعلان</label>
-            <textarea
-              className={`form-textarea ${errors.desc ? 'error' : ''}`}
-              value={desc}
-              onChange={(e) => {
-                setDesc(e.target.value);
-                if (submitAttempted) setErrors((prev) => ({ ...prev, desc: undefined }));
-              }}
-              placeholder="صف إعلانك بالتفصيل: الحالة، المواصفات، السبب البيع، إلخ..."
-              rows={6}
-              maxLength={2000}
-            />
-            <div className="form-helper">
-              <span>التفاصيل تساعد على زيادة المبيعات</span>
-              <span className="char-count">{desc.length}/2000</span>
-            </div>
-            {errors.desc && <div className="form-error">{errors.desc}</div>}
-          </div>
-
-          {/* المحافظة والقسم */}
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label required">
-                المحافظة {govsSource === 'fallback' ? '(Fallback)' : ''}
-              </label>
-              <select
-                className={`form-select ${errors.govKey ? 'error' : ''}`}
-                value={govKey}
-                onChange={(e) => {
-                  setGovKey(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, govKey: undefined }));
-                }}
-                disabled={govsLoading}
-              >
-                <option value="">{govsLoading ? 'جاري تحميل المحافظات...' : 'اختر المحافظة'}</option>
-                {(govs || []).map((g) => (
-                  <option key={g.key} value={g.key}>
-                    {g.nameAr}
-                  </option>
-                ))}
-              </select>
-              {errors.govKey && <div className="form-error">{errors.govKey}</div>}
+              <div className="field">
+                <label className="label">القسم <span className="req">*</span></label>
+                <select
+                  className={`input ${errors.category ? 'err' : ''}`}
+                  value={category}
+                  onChange={(e) => {
+                    setCategory(e.target.value);
+                    if (submitAttempted) setErrors((p) => ({ ...p, category: undefined }));
+                  }}
+                  disabled={catsLoading}
+                >
+                  <option value="">{catsLoading ? 'جاري التحميل...' : 'اختر القسم'}</option>
+                  {(cats || []).map((c) => (
+                    <option key={c.slug} value={c.slug}>{c.name}</option>
+                  ))}
+                </select>
+                {errors.category ? <div className="error">{errors.category}</div> : null}
+              </div>
             </div>
 
-            <div className="form-group">
-              <label className="form-label required">
-                القسم {catsSource === 'fallback' ? '(Fallback)' : ''}
-              </label>
-              <select
-                className={`form-select ${errors.category ? 'error' : ''}`}
-                value={category}
-                onChange={(e) => {
-                  setCategory(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, category: undefined }));
-                }}
-                disabled={catsLoading}
-              >
-                <option value="" disabled>
-                  اختر القسم
-                </option>
+            {/* ===== Category details ===== */}
+            {category === 'cars' && (
+              <div className="subCard">
+                <div className="subTitle">تفاصيل السيارة</div>
 
-                {catsLoading ? (
-                  <option>جاري تحميل الأقسام...</option>
-                ) : (
-                  cats.map((c) => (
-                    <option key={c.slug} value={c.slug}>
-                      {c.name}
-                    </option>
-                  ))
-                )}
-              </select>
-
-              {errors.category && <div className="form-error">{errors.category}</div>}
-            </div>
-          </div>
-
-
-          {/* ✅ فرع القسم (هرمي) */}
-          {category === 'cars' && (
-            <div className="card" style={{ padding: 12, marginBottom: 12, border: '1px solid #e2e8f0' }}>
-              <div style={{ fontWeight: 900, marginBottom: 10 }}>تفاصيل السيارة</div>
-
-              <div className="form-row" style={{ marginBottom: 0 }}>
-                <div className="form-group">
-                  <label className="form-label required">ماركة السيارة</label>
-                  <select
-                    className={`form-select ${errors.carMake ? 'error' : ''}`}
-                    value={carMake}
-                    onChange={(e) => {
-                      setCarMake(e.target.value);
-                      setCarModel('');
-                      setCarModelText('');
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, carMake: undefined, carMakeText: undefined, carModelText: undefined }));
-                    }}
-                  >
-                    <option value="" disabled>
-                      اختر الماركة
-                    </option>
-                    {CAR_MAKES.map((m) => (
-                      <option key={m.key} value={m.key}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.carMake && <div className="form-error">{errors.carMake}</div>}
-
-                  {carMake === 'other' && (
-                    <div style={{ marginTop: 10 }}>
-                      <input
-                        className={`form-input ${errors.carMakeText ? 'error' : ''}`}
-                        value={carMakeText}
-                        onChange={(e) => {
-                          setCarMakeText(e.target.value);
-                          if (submitAttempted) setErrors((prev) => ({ ...prev, carMakeText: undefined }));
-                        }}
-                        placeholder="اكتب الماركة"
-                        maxLength={40}
-                      />
-                      {errors.carMakeText && <div className="form-error">{errors.carMakeText}</div>}
-                    </div>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">موديل السيارة (اختياري)</label>
-
-                  {carMake && carMake !== 'other' && carModelsForMake.length > 0 ? (
+                <div className="row2">
+                  <div className="field">
+                    <label className="label">الماركة <span className="req">*</span></label>
                     <select
-                      className="form-select"
-                      value={carModel}
+                      className={`input ${errors.carMake ? 'err' : ''}`}
+                      value={carMake}
                       onChange={(e) => {
-                        setCarModel(e.target.value);
-                        if (submitAttempted) setErrors((prev) => ({ ...prev, carModelText: undefined }));
+                        setCarMake(e.target.value);
+                        setCarModel('');
+                        setCarModelText('');
+                        if (submitAttempted) setErrors((p) => ({ ...p, carMake: undefined, carMakeText: undefined, carModelText: undefined }));
                       }}
                     >
-                      <option value="">كل الموديلات</option>
-                      {carModelsForMake.map((mm) => (
-                        <option key={mm.key} value={mm.key}>
-                          {mm.label}
-                        </option>
+                      <option value="">اختر الماركة</option>
+                      {CAR_MAKES.map((m) => (
+                        <option key={m.key} value={m.key}>{m.label}</option>
                       ))}
-                      <option value="other">أخرى</option>
+                      {!CAR_MAKES.length ? <option value="other">أخرى</option> : null}
                     </select>
-                  ) : (
-                    <input
-                      className={`form-input ${errors.carModelText ? 'error' : ''}`}
-                      value={carModelText}
-                      onChange={(e) => {
-                        setCarModelText(e.target.value);
-                        setCarModel(e.target.value ? 'other' : '');
-                        if (submitAttempted) setErrors((prev) => ({ ...prev, carModelText: undefined }));
-                      }}
-                      placeholder={carMake ? 'اكتب الموديل (مثال: هايلوكس)' : 'اختر الماركة أولاً'}
-                      disabled={!carMake}
-                      maxLength={50}
-                    />
-                  )}
+                    {errors.carMake ? <div className="error">{errors.carMake}</div> : null}
 
-                  {carMake && carMake !== 'other' && carModelsForMake.length > 0 && carModel === 'other' && (
-                    <div style={{ marginTop: 10 }}>
+                    {carMake === 'other' && (
+                      <div style={{ marginTop: 8 }}>
+                        <input
+                          className={`input ${errors.carMakeText ? 'err' : ''}`}
+                          value={carMakeText}
+                          onChange={(e) => {
+                            setCarMakeText(e.target.value);
+                            if (submitAttempted) setErrors((p) => ({ ...p, carMakeText: undefined }));
+                          }}
+                          placeholder="اكتب الماركة"
+                          maxLength={40}
+                        />
+                        {errors.carMakeText ? <div className="error">{errors.carMakeText}</div> : null}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="field">
+                    <label className="label">الموديل (اختياري)</label>
+
+                    {carMake && carMake !== 'other' && carModelsForMake.length ? (
+                      <select
+                        className="input"
+                        value={carModel}
+                        onChange={(e) => {
+                          setCarModel(e.target.value);
+                          if (submitAttempted) setErrors((p) => ({ ...p, carModelText: undefined }));
+                        }}
+                      >
+                        <option value="">كل الموديلات</option>
+                        {carModelsForMake.map((mm) => (
+                          <option key={mm.key} value={mm.key}>{mm.label}</option>
+                        ))}
+                        <option value="other">أخرى</option>
+                      </select>
+                    ) : (
                       <input
-                        className={`form-input ${errors.carModelText ? 'error' : ''}`}
+                        className={`input ${errors.carModelText ? 'err' : ''}`}
                         value={carModelText}
                         onChange={(e) => {
                           setCarModelText(e.target.value);
-                          if (submitAttempted) setErrors((prev) => ({ ...prev, carModelText: undefined }));
+                          setCarModel(e.target.value ? 'other' : '');
+                          if (submitAttempted) setErrors((p) => ({ ...p, carModelText: undefined }));
                         }}
-                        placeholder="اكتب الموديل"
+                        placeholder={carMake ? 'اكتب الموديل (مثال: هايلوكس)' : 'اختر الماركة أولاً'}
+                        disabled={!carMake}
                         maxLength={50}
                       />
-                      {errors.carModelText && <div className="form-error">{errors.carModelText}</div>}
-                    </div>
-                  )}
+                    )}
+
+                    {carMake && carMake !== 'other' && carModelsForMake.length && carModel === 'other' && (
+                      <div style={{ marginTop: 8 }}>
+                        <input
+                          className={`input ${errors.carModelText ? 'err' : ''}`}
+                          value={carModelText}
+                          onChange={(e) => {
+                            setCarModelText(e.target.value);
+                            if (submitAttempted) setErrors((p) => ({ ...p, carModelText: undefined }));
+                          }}
+                          placeholder="اكتب الموديل"
+                          maxLength={50}
+                        />
+                        {errors.carModelText ? <div className="error">{errors.carModelText}</div> : null}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {category === 'phones' && (
-            <div className="form-group">
-              <label className="form-label required">ماركة الجوال</label>
-              <select
-                className={`form-select ${errors.phoneBrand ? 'error' : ''}`}
-                value={phoneBrand}
-                onChange={(e) => {
-                  setPhoneBrand(e.target.value);
-                  if (submitAttempted)
-                    setErrors((prev) => ({ ...prev, phoneBrand: undefined, phoneBrandText: undefined }));
-                }}
-              >
-                <option value="" disabled>
-                  اختر الماركة
-                </option>
-                {PHONE_BRANDS.map((m) => (
-                  <option key={m.key} value={m.key}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-              {errors.phoneBrand && <div className="form-error">{errors.phoneBrand}</div>}
+            {category === 'phones' && (
+              <div className="subCard">
+                <div className="subTitle">تفاصيل الجوال</div>
 
-              {phoneBrand === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.phoneBrandText ? 'error' : ''}`}
-                    value={phoneBrandText}
-                    onChange={(e) => {
-                      setPhoneBrandText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, phoneBrandText: undefined }));
-                    }}
-                    placeholder="اكتب ماركة الجوال"
-                    maxLength={40}
-                  />
-                  {errors.phoneBrandText && <div className="form-error">{errors.phoneBrandText}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {category === 'realestate' && (
-            <div className="card" style={{ padding: 12, marginBottom: 12, border: '1px solid #e2e8f0' }}>
-              <div style={{ fontWeight: 900, marginBottom: 10 }}>تفاصيل العقار</div>
-
-              {/* بيع / إيجار */}
-              <div className="form-row" style={{ marginBottom: 0 }}>
-                <div className="form-group">
-                  <label className="form-label required">نوع العملية</label>
+                <div className="field">
+                  <label className="label">الماركة <span className="req">*</span></label>
                   <select
-                    className={`form-select ${errors.dealType ? 'error' : ''}`}
-                    value={dealType}
+                    className={`input ${errors.phoneBrand ? 'err' : ''}`}
+                    value={phoneBrand}
                     onChange={(e) => {
-                      setDealType(e.target.value);
-                      setPropertyType('');
-                      setPropertyTypeText('');
-                      if (submitAttempted)
-                        setErrors((prev) => ({ ...prev, dealType: undefined, propertyType: undefined, propertyTypeText: undefined }));
+                      setPhoneBrand(e.target.value);
+                      if (submitAttempted) setErrors((p) => ({ ...p, phoneBrand: undefined, phoneBrandText: undefined }));
                     }}
                   >
-                    <option value="" disabled>
-                      اختر (بيع / إيجار)
-                    </option>
-                    {DEAL_TYPES.map((d) => (
-                      <option key={d.key} value={d.key}>
-                        {d.label}
-                      </option>
+                    <option value="">اختر الماركة</option>
+                    {PHONE_BRANDS.map((m) => (
+                      <option key={m.key} value={m.key}>{m.label}</option>
                     ))}
+                    {!PHONE_BRANDS.length ? <option value="other">أخرى</option> : null}
                   </select>
-                  {errors.dealType && <div className="form-error">{errors.dealType}</div>}
-                </div>
+                  {errors.phoneBrand ? <div className="error">{errors.phoneBrand}</div> : null}
 
-                <div className="form-group">
-                  <label className="form-label required">نوع العقار</label>
-                  <select
-                    className={`form-select ${errors.propertyType ? 'error' : ''}`}
-                    value={propertyType}
-                    onChange={(e) => {
-                      setPropertyType(e.target.value);
-                      if (submitAttempted)
-                        setErrors((prev) => ({ ...prev, propertyType: undefined, propertyTypeText: undefined }));
-                    }}
-                    disabled={!dealType}
-                    title={!dealType ? 'اختر بيع/إيجار أولاً' : ''}
-                  >
-                    <option value="" disabled>
-                      اختر نوع العقار
-                    </option>
-                    {PROPERTY_TYPES.map((p) => (
-                      <option key={p.key} value={p.key}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.propertyType && <div className="form-error">{errors.propertyType}</div>}
-
-                  {propertyType === 'other' && (
-                    <div style={{ marginTop: 10 }}>
+                  {phoneBrand === 'other' && (
+                    <div style={{ marginTop: 8 }}>
                       <input
-                        className={`form-input ${errors.propertyTypeText ? 'error' : ''}`}
-                        value={propertyTypeText}
+                        className={`input ${errors.phoneBrandText ? 'err' : ''}`}
+                        value={phoneBrandText}
                         onChange={(e) => {
-                          setPropertyTypeText(e.target.value);
-                          if (submitAttempted) setErrors((prev) => ({ ...prev, propertyTypeText: undefined }));
+                          setPhoneBrandText(e.target.value);
+                          if (submitAttempted) setErrors((p) => ({ ...p, phoneBrandText: undefined }));
                         }}
-                        placeholder="اكتب نوع العقار"
-                        maxLength={50}
+                        placeholder="اكتب ماركة الجوال"
+                        maxLength={40}
                       />
-                      {errors.propertyTypeText && <div className="form-error">{errors.propertyTypeText}</div>}
+                      {errors.phoneBrandText ? <div className="error">{errors.phoneBrandText}</div> : null}
                     </div>
                   )}
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* ✅ فروع الأقسام الأخرى (اختياري) */}
-          {category === 'electronics' && (
-            <div className="form-group">
-              <label className="form-label">نوع الإلكترونيات</label>
-              <select
-                className="form-select"
-                value={electronicsType}
-                onChange={(e) => {
-                  setElectronicsType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, electronicsTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر النوع (اختياري)</option>
-                {ELECTRONICS_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
+            {category === 'realestate' && (
+              <div className="subCard">
+                <div className="subTitle">تفاصيل العقار</div>
 
-              {electronicsType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.electronicsTypeText ? 'error' : ''}`}
-                    value={electronicsTypeText}
-                    onChange={(e) => {
-                      setElectronicsTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, electronicsTypeText: undefined }));
-                    }}
-                    placeholder="اكتب النوع"
-                    maxLength={60}
-                  />
-                  {errors.electronicsTypeText && <div className="form-error">{errors.electronicsTypeText}</div>}
+                <div className="row2">
+                  <div className="field">
+                    <label className="label">نوع العملية <span className="req">*</span></label>
+                    <select
+                      className={`input ${errors.dealType ? 'err' : ''}`}
+                      value={dealType}
+                      onChange={(e) => {
+                        setDealType(e.target.value);
+                        setPropertyType('');
+                        setPropertyTypeText('');
+                        if (submitAttempted) setErrors((p) => ({ ...p, dealType: undefined, propertyType: undefined, propertyTypeText: undefined }));
+                      }}
+                    >
+                      <option value="">اختر (بيع / إيجار)</option>
+                      {DEAL_TYPES.map((d) => (
+                        <option key={d.key} value={d.key}>{d.label}</option>
+                      ))}
+                    </select>
+                    {errors.dealType ? <div className="error">{errors.dealType}</div> : null}
+                  </div>
+
+                  <div className="field">
+                    <label className="label">نوع العقار <span className="req">*</span></label>
+                    <select
+                      className={`input ${errors.propertyType ? 'err' : ''}`}
+                      value={propertyType}
+                      onChange={(e) => {
+                        setPropertyType(e.target.value);
+                        if (submitAttempted) setErrors((p) => ({ ...p, propertyType: undefined, propertyTypeText: undefined }));
+                      }}
+                      disabled={!dealType}
+                      title={!dealType ? 'اختر بيع/إيجار أولاً' : ''}
+                    >
+                      <option value="">{!dealType ? 'اختر العملية أولاً' : 'اختر نوع العقار'}</option>
+                      {PROPERTY_TYPES.map((p) => (
+                        <option key={p.key} value={p.key}>{p.label}</option>
+                      ))}
+                      <option value="other">أخرى</option>
+                    </select>
+                    {errors.propertyType ? <div className="error">{errors.propertyType}</div> : null}
+
+                    {propertyType === 'other' && (
+                      <div style={{ marginTop: 8 }}>
+                        <input
+                          className={`input ${errors.propertyTypeText ? 'err' : ''}`}
+                          value={propertyTypeText}
+                          onChange={(e) => {
+                            setPropertyTypeText(e.target.value);
+                            if (submitAttempted) setErrors((p) => ({ ...p, propertyTypeText: undefined }));
+                          }}
+                          placeholder="اكتب نوع العقار"
+                          maxLength={50}
+                        />
+                        {errors.propertyTypeText ? <div className="error">{errors.propertyTypeText}</div> : null}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
 
-          {category === 'motorcycles' && (
-            <div className="form-group">
-              <label className="form-label">ماركة الدراجة</label>
-              <select
-                className="form-select"
-                value={motorcycleBrand}
-                onChange={(e) => {
-                  setMotorcycleBrand(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, motorcycleBrandText: undefined }));
-                }}
-              >
-                <option value="">اختر الماركة (اختياري)</option>
-                {MOTORCYCLE_BRANDS.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
+            {/* Optional details for other categories */}
+            {category === 'electronics' && (
+              <div className="subCard">
+                <div className="subTitle">تفاصيل الإلكترونيات (اختياري)</div>
+                <select className="input" value={electronicsType} onChange={(e)=>setElectronicsType(e.target.value)}>
+                  <option value="">اختر النوع</option>
+                  {ELECTRONICS_TYPES.map((x)=> <option key={x.key} value={x.key}>{x.label}</option>)}
+                  <option value="other">أخرى</option>
+                </select>
+                {electronicsType === 'other' && (
+                  <div style={{ marginTop: 8 }}>
+                    <input className={`input ${errors.electronicsTypeText ? 'err':''}`} value={electronicsTypeText} onChange={(e)=>setElectronicsTypeText(e.target.value)} placeholder="اكتب النوع" maxLength={60}/>
+                    {errors.electronicsTypeText ? <div className="error">{errors.electronicsTypeText}</div> : null}
+                  </div>
+                )}
+              </div>
+            )}
 
-              {motorcycleBrand === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.motorcycleBrandText ? 'error' : ''}`}
-                    value={motorcycleBrandText}
-                    onChange={(e) => {
-                      setMotorcycleBrandText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, motorcycleBrandText: undefined }));
-                    }}
-                    placeholder="اكتب الماركة"
-                    maxLength={60}
-                  />
-                  {errors.motorcycleBrandText && <div className="form-error">{errors.motorcycleBrandText}</div>}
-                </div>
-              )}
-            </div>
-          )}
+            {category === 'motorcycles' && (
+              <div className="subCard">
+                <div className="subTitle">تفاصيل الدراجة (اختياري)</div>
+                <select className="input" value={motorcycleBrand} onChange={(e)=>setMotorcycleBrand(e.target.value)}>
+                  <option value="">اختر الماركة</option>
+                  {MOTORCYCLE_BRANDS.map((x)=> <option key={x.key} value={x.key}>{x.label}</option>)}
+                  <option value="other">أخرى</option>
+                </select>
+                {motorcycleBrand === 'other' && (
+                  <div style={{ marginTop: 8 }}>
+                    <input className={`input ${errors.motorcycleBrandText ? 'err':''}`} value={motorcycleBrandText} onChange={(e)=>setMotorcycleBrandText(e.target.value)} placeholder="اكتب الماركة" maxLength={60}/>
+                    {errors.motorcycleBrandText ? <div className="error">{errors.motorcycleBrandText}</div> : null}
+                  </div>
+                )}
+              </div>
+            )}
 
-          {category === 'heavy_equipment' && (
-            <div className="form-group">
-              <label className="form-label">نوع المعدة</label>
-              <select
-                className="form-select"
-                value={heavyEquipmentType}
-                onChange={(e) => {
-                  setHeavyEquipmentType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, heavyEquipmentTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر النوع (اختياري)</option>
-                {HEAVY_EQUIPMENT_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
+            {category === 'heavy_equipment' && (
+              <div className="subCard">
+                <div className="subTitle">تفاصيل المعدات (اختياري)</div>
+                <select className="input" value={heavyEquipmentType} onChange={(e)=>setHeavyEquipmentType(e.target.value)}>
+                  <option value="">اختر النوع</option>
+                  {HEAVY_EQUIPMENT_TYPES.map((x)=> <option key={x.key} value={x.key}>{x.label}</option>)}
+                  <option value="other">أخرى</option>
+                </select>
+                {heavyEquipmentType === 'other' && (
+                  <div style={{ marginTop: 8 }}>
+                    <input className={`input ${errors.heavyEquipmentTypeText ? 'err':''}`} value={heavyEquipmentTypeText} onChange={(e)=>setHeavyEquipmentTypeText(e.target.value)} placeholder="اكتب النوع" maxLength={60}/>
+                    {errors.heavyEquipmentTypeText ? <div className="error">{errors.heavyEquipmentTypeText}</div> : null}
+                  </div>
+                )}
+              </div>
+            )}
 
-              {heavyEquipmentType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.heavyEquipmentTypeText ? 'error' : ''}`}
-                    value={heavyEquipmentTypeText}
-                    onChange={(e) => {
-                      setHeavyEquipmentTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, heavyEquipmentTypeText: undefined }));
-                    }}
-                    placeholder="اكتب النوع"
-                    maxLength={60}
-                  />
-                  {errors.heavyEquipmentTypeText && <div className="form-error">{errors.heavyEquipmentTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
+            {category === 'solar' && (
+              <div className="subCard">
+                <div className="subTitle">تفاصيل الطاقة (اختياري)</div>
+                <select className="input" value={solarType} onChange={(e)=>setSolarType(e.target.value)}>
+                  <option value="">اختر الفئة</option>
+                  {SOLAR_TYPES.map((x)=> <option key={x.key} value={x.key}>{x.label}</option>)}
+                  <option value="other">أخرى</option>
+                </select>
+                {solarType === 'other' && (
+                  <div style={{ marginTop: 8 }}>
+                    <input className={`input ${errors.solarTypeText ? 'err':''}`} value={solarTypeText} onChange={(e)=>setSolarTypeText(e.target.value)} placeholder="اكتب الفئة" maxLength={60}/>
+                    {errors.solarTypeText ? <div className="error">{errors.solarTypeText}</div> : null}
+                  </div>
+                )}
+              </div>
+            )}
 
-          {category === 'solar' && (
-            <div className="form-group">
-              <label className="form-label">فئة الطاقة الشمسية</label>
-              <select
-                className="form-select"
-                value={solarType}
-                onChange={(e) => {
-                  setSolarType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, solarTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر الفئة (اختياري)</option>
-                {SOLAR_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
+            {category === 'networks' && (
+              <div className="subCard">
+                <div className="subTitle">تفاصيل الشبكات (اختياري)</div>
+                <select className="input" value={networkType} onChange={(e)=>setNetworkType(e.target.value)}>
+                  <option value="">اختر الفئة</option>
+                  {NETWORK_TYPES.map((x)=> <option key={x.key} value={x.key}>{x.label}</option>)}
+                  <option value="other">أخرى</option>
+                </select>
+                {networkType === 'other' && (
+                  <div style={{ marginTop: 8 }}>
+                    <input className={`input ${errors.networkTypeText ? 'err':''}`} value={networkTypeText} onChange={(e)=>setNetworkTypeText(e.target.value)} placeholder="اكتب الفئة" maxLength={60}/>
+                    {errors.networkTypeText ? <div className="error">{errors.networkTypeText}</div> : null}
+                  </div>
+                )}
+              </div>
+            )}
 
-              {solarType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.solarTypeText ? 'error' : ''}`}
-                    value={solarTypeText}
-                    onChange={(e) => {
-                      setSolarTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, solarTypeText: undefined }));
-                    }}
-                    placeholder="اكتب الفئة"
-                    maxLength={60}
-                  />
-                  {errors.solarTypeText && <div className="form-error">{errors.solarTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
+            {category === 'maintenance' && (
+              <div className="subCard">
+                <div className="subTitle">تفاصيل الصيانة (اختياري)</div>
+                <select className="input" value={maintenanceType} onChange={(e)=>setMaintenanceType(e.target.value)}>
+                  <option value="">اختر النوع</option>
+                  {MAINTENANCE_TYPES.map((x)=> <option key={x.key} value={x.key}>{x.label}</option>)}
+                  <option value="other">أخرى</option>
+                </select>
+                {maintenanceType === 'other' && (
+                  <div style={{ marginTop: 8 }}>
+                    <input className={`input ${errors.maintenanceTypeText ? 'err':''}`} value={maintenanceTypeText} onChange={(e)=>setMaintenanceTypeText(e.target.value)} placeholder="اكتب النوع" maxLength={60}/>
+                    {errors.maintenanceTypeText ? <div className="error">{errors.maintenanceTypeText}</div> : null}
+                  </div>
+                )}
+              </div>
+            )}
 
-          {category === 'networks' && (
-            <div className="form-group">
-              <label className="form-label">فئة الشبكات</label>
-              <select
-                className="form-select"
-                value={networkType}
-                onChange={(e) => {
-                  setNetworkType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, networkTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر الفئة (اختياري)</option>
-                {NETWORK_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
+            {category === 'furniture' && (
+              <div className="subCard">
+                <div className="subTitle">تفاصيل الأثاث (اختياري)</div>
+                <select className="input" value={furnitureType} onChange={(e)=>setFurnitureType(e.target.value)}>
+                  <option value="">اختر النوع</option>
+                  {FURNITURE_TYPES.map((x)=> <option key={x.key} value={x.key}>{x.label}</option>)}
+                  <option value="other">أخرى</option>
+                </select>
+                {furnitureType === 'other' && (
+                  <div style={{ marginTop: 8 }}>
+                    <input className={`input ${errors.furnitureTypeText ? 'err':''}`} value={furnitureTypeText} onChange={(e)=>setFurnitureTypeText(e.target.value)} placeholder="اكتب النوع" maxLength={60}/>
+                    {errors.furnitureTypeText ? <div className="error">{errors.furnitureTypeText}</div> : null}
+                  </div>
+                )}
+              </div>
+            )}
 
-              {networkType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.networkTypeText ? 'error' : ''}`}
-                    value={networkTypeText}
-                    onChange={(e) => {
-                      setNetworkTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, networkTypeText: undefined }));
-                    }}
-                    placeholder="اكتب الفئة"
-                    maxLength={60}
-                  />
-                  {errors.networkTypeText && <div className="form-error">{errors.networkTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
+            {category === 'home_tools' && (
+              <div className="subCard">
+                <div className="subTitle">تفاصيل الأدوات (اختياري)</div>
+                <select className="input" value={homeToolsType} onChange={(e)=>setHomeToolsType(e.target.value)}>
+                  <option value="">اختر النوع</option>
+                  {HOME_TOOLS_TYPES.map((x)=> <option key={x.key} value={x.key}>{x.label}</option>)}
+                  <option value="other">أخرى</option>
+                </select>
+                {homeToolsType === 'other' && (
+                  <div style={{ marginTop: 8 }}>
+                    <input className={`input ${errors.homeToolsTypeText ? 'err':''}`} value={homeToolsTypeText} onChange={(e)=>setHomeToolsTypeText(e.target.value)} placeholder="اكتب النوع" maxLength={60}/>
+                    {errors.homeToolsTypeText ? <div className="error">{errors.homeToolsTypeText}</div> : null}
+                  </div>
+                )}
+              </div>
+            )}
 
-          {category === 'maintenance' && (
-            <div className="form-group">
-              <label className="form-label">نوع الصيانة</label>
-              <select
-                className="form-select"
-                value={maintenanceType}
-                onChange={(e) => {
-                  setMaintenanceType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, maintenanceTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر النوع (اختياري)</option>
-                {MAINTENANCE_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
+            {category === 'clothes' && (
+              <div className="subCard">
+                <div className="subTitle">تفاصيل الملابس (اختياري)</div>
+                <select className="input" value={clothesType} onChange={(e)=>setClothesType(e.target.value)}>
+                  <option value="">اختر النوع</option>
+                  {CLOTHES_TYPES.map((x)=> <option key={x.key} value={x.key}>{x.label}</option>)}
+                  <option value="other">أخرى</option>
+                </select>
+                {clothesType === 'other' && (
+                  <div style={{ marginTop: 8 }}>
+                    <input className={`input ${errors.clothesTypeText ? 'err':''}`} value={clothesTypeText} onChange={(e)=>setClothesTypeText(e.target.value)} placeholder="اكتب النوع" maxLength={60}/>
+                    {errors.clothesTypeText ? <div className="error">{errors.clothesTypeText}</div> : null}
+                  </div>
+                )}
+              </div>
+            )}
 
-              {maintenanceType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.maintenanceTypeText ? 'error' : ''}`}
-                    value={maintenanceTypeText}
-                    onChange={(e) => {
-                      setMaintenanceTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, maintenanceTypeText: undefined }));
-                    }}
-                    placeholder="اكتب النوع"
-                    maxLength={60}
-                  />
-                  {errors.maintenanceTypeText && <div className="form-error">{errors.maintenanceTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
+            {category === 'animals' && (
+              <div className="subCard">
+                <div className="subTitle">تفاصيل الحيوانات (اختياري)</div>
+                <select className="input" value={animalType} onChange={(e)=>setAnimalType(e.target.value)}>
+                  <option value="">اختر النوع</option>
+                  {ANIMAL_TYPES.map((x)=> <option key={x.key} value={x.key}>{x.label}</option>)}
+                  <option value="other">أخرى</option>
+                </select>
+                {animalType === 'other' && (
+                  <div style={{ marginTop: 8 }}>
+                    <input className={`input ${errors.animalTypeText ? 'err':''}`} value={animalTypeText} onChange={(e)=>setAnimalTypeText(e.target.value)} placeholder="اكتب النوع" maxLength={60}/>
+                    {errors.animalTypeText ? <div className="error">{errors.animalTypeText}</div> : null}
+                  </div>
+                )}
+              </div>
+            )}
 
-          {category === 'furniture' && (
-            <div className="form-group">
-              <label className="form-label">نوع الأثاث</label>
-              <select
-                className="form-select"
-                value={furnitureType}
-                onChange={(e) => {
-                  setFurnitureType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, furnitureTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر النوع (اختياري)</option>
-                {FURNITURE_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
+            {category === 'jobs' && (
+              <div className="subCard">
+                <div className="subTitle">تفاصيل الوظيفة (اختياري)</div>
+                <select className="input" value={jobType} onChange={(e)=>setJobType(e.target.value)}>
+                  <option value="">اختر النوع</option>
+                  {JOB_TYPES.map((x)=> <option key={x.key} value={x.key}>{x.label}</option>)}
+                  <option value="other">أخرى</option>
+                </select>
+                {jobType === 'other' && (
+                  <div style={{ marginTop: 8 }}>
+                    <input className={`input ${errors.jobTypeText ? 'err':''}`} value={jobTypeText} onChange={(e)=>setJobTypeText(e.target.value)} placeholder="اكتب النوع" maxLength={60}/>
+                    {errors.jobTypeText ? <div className="error">{errors.jobTypeText}</div> : null}
+                  </div>
+                )}
+              </div>
+            )}
 
-              {furnitureType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.furnitureTypeText ? 'error' : ''}`}
-                    value={furnitureTypeText}
-                    onChange={(e) => {
-                      setFurnitureTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, furnitureTypeText: undefined }));
-                    }}
-                    placeholder="اكتب النوع"
-                    maxLength={60}
-                  />
-                  {errors.furnitureTypeText && <div className="form-error">{errors.furnitureTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
+            {category === 'services' && (
+              <div className="subCard">
+                <div className="subTitle">تفاصيل الخدمة (اختياري)</div>
+                <select className="input" value={serviceType} onChange={(e)=>setServiceType(e.target.value)}>
+                  <option value="">اختر النوع</option>
+                  {SERVICE_TYPES.map((x)=> <option key={x.key} value={x.key}>{x.label}</option>)}
+                  <option value="other">أخرى</option>
+                </select>
+                {serviceType === 'other' && (
+                  <div style={{ marginTop: 8 }}>
+                    <input className={`input ${errors.serviceTypeText ? 'err':''}`} value={serviceTypeText} onChange={(e)=>setServiceTypeText(e.target.value)} placeholder="اكتب النوع" maxLength={60}/>
+                    {errors.serviceTypeText ? <div className="error">{errors.serviceTypeText}</div> : null}
+                  </div>
+                )}
+              </div>
+            )}
 
-          {category === 'home_tools' && (
-            <div className="form-group">
-              <label className="form-label">نوع الأدوات المنزلية</label>
-              <select
-                className="form-select"
-                value={homeToolsType}
-                onChange={(e) => {
-                  setHomeToolsType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, homeToolsTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر النوع (اختياري)</option>
-                {HOME_TOOLS_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
+            {/* ===== Price & contact ===== */}
+            <div className="sectionTitle" style={{ marginTop: 18 }}>السعر والتواصل</div>
 
-              {homeToolsType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.homeToolsTypeText ? 'error' : ''}`}
-                    value={homeToolsTypeText}
-                    onChange={(e) => {
-                      setHomeToolsTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, homeToolsTypeText: undefined }));
-                    }}
-                    placeholder="اكتب النوع"
-                    maxLength={60}
-                  />
-                  {errors.homeToolsTypeText && <div className="form-error">{errors.homeToolsTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
+            <div className="row2">
+              <div className="field">
+                <label className="label">السعر <span className="req">*</span></label>
+                <input
+                  className={`input ${errors.price ? 'err' : ''}`}
+                  value={price}
+                  onChange={(e) => {
+                    setPrice(e.target.value);
+                    if (submitAttempted) setErrors((p) => ({ ...p, price: undefined }));
+                  }}
+                  placeholder="مثال: 3500000"
+                  inputMode="numeric"
+                />
+                {errors.price ? <div className="error">{errors.price}</div> : null}
+              </div>
 
-          {category === 'clothes' && (
-            <div className="form-group">
-              <label className="form-label">نوع الملابس</label>
-              <select
-                className="form-select"
-                value={clothesType}
-                onChange={(e) => {
-                  setClothesType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, clothesTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر النوع (اختياري)</option>
-                {CLOTHES_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
-
-              {clothesType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.clothesTypeText ? 'error' : ''}`}
-                    value={clothesTypeText}
-                    onChange={(e) => {
-                      setClothesTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, clothesTypeText: undefined }));
-                    }}
-                    placeholder="اكتب النوع"
-                    maxLength={60}
-                  />
-                  {errors.clothesTypeText && <div className="form-error">{errors.clothesTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {category === 'animals' && (
-            <div className="form-group">
-              <label className="form-label">نوع الحيوانات</label>
-              <select
-                className="form-select"
-                value={animalType}
-                onChange={(e) => {
-                  setAnimalType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, animalTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر النوع (اختياري)</option>
-                {ANIMAL_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
-
-              {animalType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.animalTypeText ? 'error' : ''}`}
-                    value={animalTypeText}
-                    onChange={(e) => {
-                      setAnimalTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, animalTypeText: undefined }));
-                    }}
-                    placeholder="اكتب النوع"
-                    maxLength={60}
-                  />
-                  {errors.animalTypeText && <div className="form-error">{errors.animalTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {category === 'jobs' && (
-            <div className="form-group">
-              <label className="form-label">نوع الوظيفة</label>
-              <select
-                className="form-select"
-                value={jobType}
-                onChange={(e) => {
-                  setJobType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, jobTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر النوع (اختياري)</option>
-                {JOB_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
-
-              {jobType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.jobTypeText ? 'error' : ''}`}
-                    value={jobTypeText}
-                    onChange={(e) => {
-                      setJobTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, jobTypeText: undefined }));
-                    }}
-                    placeholder="اكتب النوع"
-                    maxLength={60}
-                  />
-                  {errors.jobTypeText && <div className="form-error">{errors.jobTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {category === 'services' && (
-            <div className="form-group">
-              <label className="form-label">نوع الخدمة</label>
-              <select
-                className="form-select"
-                value={serviceType}
-                onChange={(e) => {
-                  setServiceType(e.target.value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, serviceTypeText: undefined }));
-                }}
-              >
-                <option value="">اختر النوع (اختياري)</option>
-                {SERVICE_TYPES.map((x) => (
-                  <option key={x.key} value={x.key}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
-
-              {serviceType === 'other' && (
-                <div style={{ marginTop: 10 }}>
-                  <input
-                    className={`form-input ${errors.serviceTypeText ? 'error' : ''}`}
-                    value={serviceTypeText}
-                    onChange={(e) => {
-                      setServiceTypeText(e.target.value);
-                      if (submitAttempted) setErrors((prev) => ({ ...prev, serviceTypeText: undefined }));
-                    }}
-                    placeholder="اكتب النوع"
-                    maxLength={60}
-                  />
-                  {errors.serviceTypeText && <div className="form-error">{errors.serviceTypeText}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* السعر والعملة */}
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label required">السعر</label>
-              <input
-                className={`form-input ${errors.price ? 'error' : ''}`}
-                value={price}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/[^0-9.]/g, '');
-                  setPrice(value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, price: undefined }));
-                }}
-                placeholder="مثال: 100000"
-                inputMode="decimal"
-              />
-              {errors.price && <div className="form-error">{errors.price}</div>}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label required">العملة</label>
-              <div className="currency-selector">
-                {['YER', 'SAR', 'USD'].map((curr) => (
-                  <button
-                    key={curr}
-                    type="button"
-                    className={`currency-btn ${currency === curr ? 'active' : ''}`}
-                    onClick={() => setCurrency(curr)}
-                  >
-                    {curr}
-                  </button>
-                ))}
+              <div className="field">
+                <label className="label">العملة</label>
+                <select className="input" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                  <option value="YER">ريال يمني</option>
+                  <option value="SAR">ريال سعودي</option>
+                  <option value="USD">دولار</option>
+                </select>
               </div>
             </div>
-          </div>
 
-          {/* السعر المحول */}
-          {convertedPrice && (
-            <div className="price-conversion">
-              <span className="conversion-label">السعر المحول:</span>
-              <div className="converted-prices">
-                <span className="converted-price">
-                  <strong>{convertedPrice.YER}</strong> ريال يمني
-                </span>
-                <span className="converted-price">≈ {convertedPrice.SAR} ريال سعودي</span>
-                <span className="converted-price">≈ ${convertedPrice.USD} دولار أمريكي</span>
+            {convertedPrice ? (
+              <div className="priceBox">
+                <div><b>المعادِل (تقريباً):</b></div>
+                <div className="pRow">
+                  <span>YER</span><span>{convertedPrice.YER}</span>
+                </div>
+                <div className="pRow">
+                  <span>SAR</span><span>{convertedPrice.SAR || '-'}</span>
+                </div>
+                <div className="pRow">
+                  <span>USD</span><span>{convertedPrice.USD || '-'}</span>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="row2">
+              <div className="field">
+                <label className="label">رقم التواصل <span className="req">*</span></label>
+                <input
+                  className={`input ${errors.phone ? 'err' : ''}`}
+                  value={phone}
+                  onChange={(e) => {
+                    setPhone(e.target.value);
+                    if (submitAttempted) setErrors((p) => ({ ...p, phone: undefined }));
+                  }}
+                  placeholder="مثال: 771234567"
+                  inputMode="tel"
+                />
+                {errors.phone ? <div className="error">{errors.phone}</div> : null}
+              </div>
+
+              <div className="field">
+                <label className="label">واتساب</label>
+                <div className="toggleRow">
+                  <input
+                    id="whats"
+                    type="checkbox"
+                    checked={isWhatsapp}
+                    onChange={(e) => setIsWhatsapp(e.target.checked)}
+                  />
+                  <label htmlFor="whats">نفس الرقم واتساب</label>
+                </div>
               </div>
             </div>
-          )}
 
-          {/* رقم الهاتف وواتساب */}
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label required">رقم التواصل</label>
+            {/* ===== Images ===== */}
+            <div className="sectionTitle" style={{ marginTop: 18 }}>الصور</div>
+
+            <div className="field">
               <input
-                className={`form-input ${errors.phone ? 'error' : ''}`}
-                value={phone}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, '');
-                  setPhone(value);
-                  if (submitAttempted) setErrors((prev) => ({ ...prev, phone: undefined }));
-                }}
-                placeholder="مثال: 770000000"
-                inputMode="tel"
-                maxLength={15}
-              />
-              {errors.phone && <div className="form-error">{errors.phone}</div>}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">طريقة التواصل</label>
-              <div className="communication-toggle">
-                <button
-                  type="button"
-                  className={`toggle-btn ${isWhatsapp ? 'active' : ''}`}
-                  onClick={() => setIsWhatsapp(true)}
-                >
-                  <span className="toggle-icon">💬</span>
-                  واتساب
-                </button>
-                <button
-                  type="button"
-                  className={`toggle-btn ${!isWhatsapp ? 'active' : ''}`}
-                  onClick={() => setIsWhatsapp(false)}
-                >
-                  <span className="toggle-icon">📞</span>
-                  مكالمة
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* الصور */}
-          <div className="form-group">
-            <label className="form-label">صور الإعلان (اختياري)</label>
-            <div className="image-upload-area">
-              <input
+                ref={fileInputRef}
                 type="file"
                 accept="image/*"
                 multiple
-                onChange={(e) => {
-                  const files = Array.from(e.target.files || []);
-                  if (images.length + files.length > 10) {
-                    alert('يمكنك رفع 10 صور كحد أقصى');
-                    return;
-                  }
-                  setImages((prev) => [...prev, ...files]);
-                }}
-                id="image-upload"
-                className="image-upload-input"
+                onChange={(e) => onPickImages(e.target.files)}
               />
-              <label htmlFor="image-upload" className="image-upload-label">
-                <span className="upload-icon">📷</span>
-                <span>اختر الصور</span>
-                <span className="upload-hint">يمكنك رفع حتى 10 صور</span>
-              </label>
-            </div>
+              <div className="helper">يمكنك رفع حتى 12 صورة.</div>
 
-            {imagePreviews.length > 0 && (
-              <div className="image-previews">
-                {imagePreviews.map((preview, index) => (
-                  <div key={index} className="image-preview">
-                    <img src={preview} alt={`معاينة ${index + 1}`} className="preview-img" />
-                    <button
-                      type="button"
-                      className="remove-image-btn"
-                      onClick={() => handleRemoveImage(index)}
-                      aria-label="حذف الصورة"
-                    >
-                      ×
-                    </button>
-                    <span className="image-number">{index + 1}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* المزاد */}
-          <div className="auction-section">
-            <div className="auction-header">
-              <div className="auction-title">
-                <span className="auction-icon">⚡</span>
-                <span>تفعيل نظام المزاد</span>
-              </div>
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  checked={auctionEnabled}
-                  onChange={(e) => setAuctionEnabled(e.target.checked)}
-                />
-                <span className="slider"></span>
-              </label>
-            </div>
-
-            {auctionEnabled && (
-              <div className="auction-details">
-                <div className="form-group">
-                  <label className="form-label">مدة المزاد</label>
-                  <div className="auction-time-input">
-                    <input
-                      className={`form-input ${errors.auctionMinutes ? 'error' : ''}`}
-                      value={auctionMinutes}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/\D/g, '');
-                        setAuctionMinutes(value);
-                        if (submitAttempted) setErrors((prev) => ({ ...prev, auctionMinutes: undefined }));
-                      }}
-                      inputMode="numeric"
-                      maxLength={4}
-                    />
-                    <span className="auction-unit">دقيقة</span>
-                  </div>
-                  {errors.auctionMinutes && <div className="form-error">{errors.auctionMinutes}</div>}
-                  <div className="auction-note">⏱️ سينتهي المزاد بعد {auctionMinutes} دقيقة من النشر</div>
+              {imagePreviews.length ? (
+                <div className="imgs">
+                  {imagePreviews.map((src, idx) => (
+                    <div key={idx} className="imgItem">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={src} alt="" className="imgPrev" />
+                      <button type="button" className="rmImg" onClick={() => removeImage(idx)}>حذف</button>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* الخريطة */}
-        <div className="map-container">
-          <div className="map-header">
-            <h2 className="form-section-title">
-              <span className="map-icon">📍</span>
-              موقع الإعلان
-            </h2>
-            <p className="map-subtitle">اسحب المؤشر لتحديد الموقع الدقيق</p>
-          </div>
-
-          <div className="map-wrapper">
-            {!showMap ? (
-              <div className="map-placeholder" style={{
-                padding: '60px 20px',
-                textAlign: 'center',
-                background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
-                borderRadius: '12px',
-                border: '2px dashed #0ea5e9'
-              }}>
-                <div style={{ fontSize: '48px', marginBottom: '16px' }} role="img" aria-label="أيقونة الخريطة">🗺️</div>
-                <button
-                  type="button"
-                  onClick={() => setShowMap(true)}
-                  className="btn btnPrimary"
-                  style={{
-                    padding: '12px 24px',
-                    fontSize: '16px',
-                    fontWeight: 'bold'
-                  }}
-                  aria-label="تحميل الخريطة لتحديد الموقع"
-                >
-                  <span role="img" aria-label="أيقونة موقع">📍</span> تحميل الخريطة
-                </button>
-                <p style={{ marginTop: '12px', color: '#64748b', fontSize: '14px' }}>
-                  اضغط لتحديد موقع الإعلان على الخريطة
-                </p>
-              </div>
-            ) : (
-              <LocationPicker value={coords} onChange={onPick} />
-            )}
-          </div>
-
-          {locationLabel && (
-            <div className="location-info">
-              <div className="location-label">
-                <span className="location-icon">🏷️</span>
-                {locationLabel}
-              </div>
+              ) : null}
             </div>
-          )}
 
-          {!coords && (
-            <div className="location-hint">
-              <div className="hint-icon">💡</div>
-              <p>تحديد الموقع يساعد المشترين في الوصول إليك بسهولة</p>
+            {/* ===== Map ===== */}
+            <div className="sectionTitle" style={{ marginTop: 18 }}>الموقع على الخريطة</div>
+            <div className="mapWrap">
+              <LocationPicker onPick={onPick} initialCoords={coords} />
+              {locationLabel ? <div className="mapLabel">📍 {locationLabel}</div> : null}
             </div>
-          )}
 
-          <div className="mobile-submit-section">
-            <button className="submit-btn-large" onClick={submit} disabled={!user || busy}>
-              {busy ? (
-                <>
-                  <span className="loading-spinner-small"></span>
-                  جاري النشر...
-                </>
-              ) : (
-                '📢 نشر الإعلان'
-              )}
-            </button>
+            {/* ===== Auction ===== */}
+            <div className="sectionTitle" style={{ marginTop: 18 }}>المزاد (اختياري)</div>
+            <div className="subCard">
+              <div className="toggleRow">
+                <input id="auc" type="checkbox" checked={auctionEnabled} onChange={(e) => setAuctionEnabled(e.target.checked)} />
+                <label htmlFor="auc">تفعيل المزاد لهذا الإعلان</label>
+              </div>
 
-            <div className="form-notes">
-              <p className="note-item">✅ يمكنك تعديل الإعلان لاحقاً</p>
-              <p className="note-item">🛡️ معلوماتك محمية وآمنة</p>
+              {auctionEnabled ? (
+                <div className="row2" style={{ marginTop: 10 }}>
+                  <div className="field">
+                    <label className="label">مدة المزاد بالدقائق <span className="req">*</span></label>
+                    <input
+                      className={`input ${errors.auctionMinutes ? 'err' : ''}`}
+                      value={auctionMinutes}
+                      onChange={(e) => setAuctionMinutes(e.target.value)}
+                      inputMode="numeric"
+                    />
+                    {errors.auctionMinutes ? <div className="error">{errors.auctionMinutes}</div> : null}
+                  </div>
+
+                  <div className="field">
+                    <label className="label">السعر الابتدائي</label>
+                    <div className="muted" style={{ marginTop: 10 }}>سيستخدم نفس سعر الإعلان كسعر ابتدائي للمزاد.</div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="actions">
+              <button
+                type="button"
+                className="btnPrimary"
+                onClick={submit}
+                disabled={busy}
+              >
+                {busy ? 'جاري النشر...' : 'نشر الإعلان'}
+              </button>
+
+              <Link className="btn" href="/">إلغاء</Link>
+            </div>
+          </div>
+
+          <div className="card sideCard">
+            <div className="sectionTitle">نصائح سريعة</div>
+            <ul className="tips">
+              <li>📸 صور واضحة تزيد الاتصالات.</li>
+              <li>📝 اذكر كل التفاصيل المهمة.</li>
+              <li>💰 سعر واقعي = بيع أسرع.</li>
+              <li>📍 تحديد موقع دقيق يساعد المشتري.</li>
+            </ul>
+
+            <div className="divider" />
+
+            <div className="muted">
+              حسابك: <b>{user?.displayName || user?.email || user?.uid}</b>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="desktop-submit-section">
-        <div className="submit-actions">
-          <button className="submit-btn-large" onClick={submit} disabled={!user || busy}>
-            {busy ? (
-              <>
-                <span className="loading-spinner-small"></span>
-                جاري النشر...
-              </>
-            ) : (
-              '📢 نشر الإعلان الآن'
-            )}
-          </button>
-
-          <Link href="/" className="cancel-link">
-            ❌ إلغاء والعودة
-          </Link>
-        </div>
-
-        <div className="final-notes">
-          <p>
-            بعد النشر، يمكنك متابعة إعلانك من قسم <strong>&quot;إعلاناتي&quot;</strong>
-          </p>
-        </div>
-      </div>
-
-      {/* ✅ نفس CSS حقك كما هو */}
       <style jsx>{`
-        /* (نفس الـ CSS الذي أرسلته بدون تغيير) */
-        .add-page-layout {
-          min-height: calc(100vh - 60px);
-          padding: 20px 16px;
-          max-width: 1400px;
-          margin: 0 auto;
-          width: 100%;
-        }
-
-        .cats-note{
-          margin: 10px 0 18px;
-          padding: 12px 14px;
-          border-radius: 12px;
-          border: 1px solid #fde68a;
-          background: #fffbeb;
-          color: #92400e;
-          font-weight: 700;
-          font-size: 13px;
-          line-height: 1.6;
-        }
-
-        .add-page-header {
-          text-align: center;
-          padding: 30px 20px;
-          background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-          color: white;
-          margin-bottom: 20px;
-          border-radius: 20px;
-          box-shadow: 0 8px 25px rgba(79, 70, 229, 0.2);
-        }
-
-        .add-page-header h1 {
-          font-size: 32px;
-          margin-bottom: 10px;
-          font-weight: 900;
-        }
-
-        .form-tips {
-          display: flex;
-          justify-content: center;
-          flex-wrap: wrap;
-          gap: 15px;
-          margin-bottom: 30px;
-          padding: 15px;
+        .addWrap{
+          padding: 16px 0 26px;
           background: #f8fafc;
-          border-radius: 12px;
-          border: 1px solid #e2e8f0;
+          min-height: calc(100vh - 90px);
         }
-
-        .tip-item {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 15px;
-          background: white;
-          border-radius: 8px;
-          font-size: 14px;
-          font-weight: 500;
-          color: #475569;
-          border: 1px solid #e2e8f0;
+        .container{ max-width: 1080px; margin: 0 auto; padding: 0 12px; }
+        .headerCard{
+          background:#fff;
+          border: 1px solid rgba(0,0,0,.08);
+          border-radius: 14px;
+          padding: 14px 14px;
+          margin-bottom: 12px;
         }
-
-        .tip-icon {
-          font-size: 16px;
+        .h1{ margin:0; font-size: 20px; font-weight: 900; }
+        .muted{ color:#64748b; margin: 6px 0 0; }
+        .grid{ display:grid; grid-template-columns: 1.5fr .7fr; gap: 12px; }
+        .card{
+          background:#fff;
+          border: 1px solid rgba(0,0,0,.08);
+          border-radius: 14px;
+          padding: 14px;
         }
-
-        .form-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 30px;
-          margin-bottom: 40px;
-        }
-
-        @media (max-width: 1024px) {
-          .form-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        .form-container {
-          background: white;
-          border-radius: 20px;
-          padding: 30px;
-          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-          border: 1px solid #e2e8f0;
-        }
-
-        .form-section-title {
-          font-size: 22px;
-          color: #1e293b;
-          margin-bottom: 25px;
-          padding-bottom: 15px;
-          border-bottom: 2px solid #f1f5f9;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
-        .form-row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 20px;
-          margin-bottom: 20px;
-        }
-
-        @media (max-width: 768px) {
-          .form-row {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        .form-label {
-          display: block;
-          margin-bottom: 8px;
-          font-weight: 600;
-          color: #1e293b;
-          font-size: 15px;
-        }
-
-        .form-label.required::after {
-          content: ' *';
-          color: #dc2626;
-        }
-
-        .form-input,
-        .form-textarea,
-        .form-select {
+        .formCard{ padding: 14px; }
+        .sideCard{ position: sticky; top: 12px; height: fit-content; }
+        .sectionTitle{ font-weight: 900; margin: 0 0 10px; }
+        .field{ margin-bottom: 12px; }
+        .label{ display:block; font-weight: 800; margin-bottom: 6px; }
+        .req{ color: #C2410C; }
+        .input, .textarea{
           width: 100%;
-          padding: 14px 16px;
-          border: 2px solid #e2e8f0;
-          border-radius: 10px;
-          font-size: 16px;
-          transition: all 0.2s ease;
-          background: #f8fafc;
-          color: #1e293b;
-        }
-
-        .form-input:focus,
-        .form-textarea:focus,
-        .form-select:focus {
+          border: 1px solid rgba(0,0,0,.12);
+          border-radius: 12px;
+          padding: 10px 12px;
           outline: none;
-          border-color: #4f46e5;
-          background: white;
-          box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
-        }
-
-        .form-input.error,
-        .form-textarea.error,
-        .form-select.error {
-          border-color: #dc2626;
-          background: #fef2f2;
-        }
-
-        .form-helper {
-          display: flex;
-          justify-content: space-between;
-          margin-top: 6px;
-          font-size: 13px;
-          color: #64748b;
-        }
-
-        .char-count {
-          font-weight: 500;
-        }
-
-        .form-error {
-          color: #dc2626;
-          font-size: 13px;
-          margin-top: 6px;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-
-        .form-error::before {
-          content: '⚠️';
-        }
-
-        .currency-selector {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
-
-        .currency-btn {
-          padding: 10px 20px;
-          border: 2px solid #e2e8f0;
-          background: #f8fafc;
-          border-radius: 8px;
-          font-weight: 600;
-          color: #64748b;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          flex: 1;
-          text-align: center;
-          min-width: 80px;
-        }
-
-        .currency-btn.active {
-          background: #4f46e5;
-          color: white;
-          border-color: #4f46e5;
-        }
-
-        .price-conversion {
-          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-          padding: 15px 20px;
-          border-radius: 10px;
-          margin: 20px 0;
-          border: 1px solid #e2e8f0;
-        }
-
-        .conversion-label {
-          display: block;
-          font-weight: 600;
-          color: #475569;
-          margin-bottom: 8px;
+          background:#fff;
           font-size: 14px;
         }
-
-        .converted-prices {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
+        .textarea{ resize: vertical; min-height: 120px; }
+        .input:focus, .textarea:focus{ border-color: rgba(194,65,12,.55); box-shadow: 0 0 0 3px rgba(194,65,12,.10); }
+        .err{ border-color: rgba(220,38,38,.65) !important; box-shadow: 0 0 0 3px rgba(220,38,38,.10) !important; }
+        .helper{ display:flex; justify-content: space-between; font-size: 12.5px; color:#64748b; margin-top: 6px; }
+        .error{ color: #dc2626; font-size: 12.5px; margin-top: 6px; font-weight: 700; }
+        .row2{ display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .subCard{
+          border: 1px dashed rgba(0,0,0,.14);
+          border-radius: 14px;
+          padding: 12px;
+          background: rgba(15,23,42,.02);
+          margin: 10px 0 12px;
         }
-
-        .converted-price {
-          color: #1e293b;
-          font-size: 15px;
+        .subTitle{ font-weight: 900; margin-bottom: 10px; }
+        .toggleRow{ display:flex; gap: 8px; align-items:center; font-weight: 800; color:#0f172a; }
+        .actions{ display:flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+        .btnPrimary{
+          background: #C2410C;
+          color: #fff;
+          border: none;
+          border-radius: 12px;
+          padding: 11px 14px;
+          font-weight: 900;
+          cursor: pointer;
+          box-shadow: 0 10px 24px rgba(194,65,12,.18);
         }
-
-        .converted-price strong {
-          color: #4f46e5;
+        .btnPrimary:disabled{ opacity: .7; cursor: not-allowed; }
+        .btn{
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          background: #fff;
+          color:#0f172a;
+          border: 1px solid rgba(0,0,0,.12);
+          border-radius: 12px;
+          padding: 11px 14px;
+          font-weight: 900;
+          text-decoration:none;
         }
-
-        .communication-toggle {
-          display: flex;
-          gap: 10px;
+        .priceBox{
+          border: 1px solid rgba(0,0,0,.08);
+          border-radius: 14px;
+          padding: 10px 12px;
+          background: rgba(2,132,199,.05);
           margin-top: 8px;
         }
-
-        .toggle-btn {
-          flex: 1;
-          padding: 12px 16px;
-          border: 2px solid #e2e8f0;
-          background: #f8fafc;
-          border-radius: 8px;
-          font-weight: 600;
-          color: #64748b;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-        }
-
-        .toggle-btn.active {
-          background: #4f46e5;
-          color: white;
-          border-color: #4f46e5;
-        }
-
-        .toggle-icon {
-          font-size: 18px;
-        }
-
-        .image-upload-input {
-          display: none;
-        }
-
-        .image-upload-label {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 40px 20px;
-          border: 2px dashed #cbd5e1;
-          border-radius: 12px;
-          background: #f8fafc;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          text-align: center;
-        }
-
-        .upload-icon {
-          font-size: 40px;
-          margin-bottom: 10px;
-          opacity: 0.6;
-        }
-
-        .upload-hint {
-          font-size: 13px;
-          color: #94a3b8;
-          margin-top: 5px;
-        }
-
-        .image-previews {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        .pRow{ display:flex; justify-content: space-between; margin-top: 6px; font-weight: 800; }
+        .imgs{
+          display:grid;
+          grid-template-columns: repeat(3, 1fr);
           gap: 10px;
-          margin-top: 15px;
-        }
-
-        .image-preview {
-          position: relative;
-          aspect-ratio: 1;
-          border-radius: 8px;
-          overflow: hidden;
-          border: 2px solid #e2e8f0;
-        }
-
-        .preview-img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-
-        .remove-image-btn {
-          position: absolute;
-          top: 5px;
-          left: 5px;
-          width: 24px;
-          height: 24px;
-          background: rgba(239, 68, 68, 0.9);
-          color: white;
-          border: none;
-          border-radius: 50%;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 16px;
-          font-weight: bold;
-        }
-
-        .image-number {
-          position: absolute;
-          bottom: 5px;
-          left: 5px;
-          background: rgba(0, 0, 0, 0.6);
-          color: white;
-          padding: 2px 8px;
-          border-radius: 10px;
-          font-size: 12px;
-        }
-
-        .auction-section {
-          background: #f8fafc;
-          padding: 20px;
-          border-radius: 12px;
-          margin-top: 30px;
-          border: 1px solid #e2e8f0;
-        }
-
-        .auction-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 15px;
-        }
-
-        .switch {
-          position: relative;
-          display: inline-block;
-          width: 60px;
-          height: 30px;
-        }
-
-        .switch input {
-          opacity: 0;
-          width: 0;
-          height: 0;
-        }
-
-        .slider {
-          position: absolute;
-          cursor: pointer;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background-color: #cbd5e1;
-          transition: 0.4s;
-          border-radius: 34px;
-        }
-
-        .slider:before {
-          position: absolute;
-          content: '';
-          height: 22px;
-          width: 22px;
-          left: 4px;
-          bottom: 4px;
-          background-color: white;
-          transition: 0.4s;
-          border-radius: 50%;
-        }
-
-        input:checked + .slider {
-          background-color: #4f46e5;
-        }
-
-        input:checked + .slider:before {
-          transform: translateX(30px);
-        }
-
-        .map-container {
-          background: white;
-          border-radius: 20px;
-          padding: 30px;
-          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-          border: 1px solid #e2e8f0;
-          display: flex;
-          flex-direction: column;
-        }
-
-        .map-wrapper {
-          flex: 1;
-          min-height: 400px;
-          border-radius: 12px;
-          overflow: hidden;
-          border: 1px solid #e2e8f0;
-          margin-bottom: 20px;
-        }
-
-        .mobile-submit-section {
-          display: none;
-          margin-top: 30px;
-        }
-
-        .desktop-submit-section {
-          margin-top: 40px;
-          padding-top: 30px;
-          border-top: 2px solid #f1f5f9;
-        }
-
-        @media (max-width: 1024px) {
-          .mobile-submit-section { display: block; }
-          .desktop-submit-section { display: none; }
-        }
-
-        .submit-btn-large {
-          width: 100%;
-          max-width: 400px;
-          padding: 18px 30px;
-          background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-          color: white;
-          border: none;
-          border-radius: 12px;
-          font-size: 18px;
-          font-weight: 700;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 10px;
-        }
-
-        .submit-btn-large:disabled {
-          opacity: 0.7;
-          cursor: not-allowed;
-        }
-
-        .cancel-link {
-          color: #64748b;
-          text-decoration: none;
-          font-weight: 700;
-        }
-
-        .final-notes, .form-notes{
-          margin-top: 20px;
-          padding: 15px;
-          background: #f8fafc;
-          border-radius: 10px;
-          border: 1px solid #e2e8f0;
-        }
-
-        .note-item {
-          color: #475569;
-          font-size: 14px;
-          margin: 8px 0;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-
-        .loading-container {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          min-height: 300px;
-          gap: 20px;
-        }
-
-        .loading-spinner-large {
-          width: 60px;
-          height: 60px;
-          border: 4px solid #f1f5f9;
-          border-top-color: #4f46e5;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-        }
-
-        .loading-spinner-small {
-          width: 20px;
-          height: 20px;
-          border: 2px solid rgba(255, 255, 255, 0.3);
-          border-top-color: white;
-          border-radius: 50%;
-          animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-
-        .auth-required-card {
-          max-width: 500px;
-          margin: 50px auto;
-          background: white;
-          padding: 40px;
-          border-radius: 20px;
-          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-          text-align: center;
-          border: 1px solid #e2e8f0;
-        }
-
-        .lock-icon-large {
-          font-size: 70px;
-          margin-bottom: 20px;
-          opacity: 0.7;
-        }
-
-        .auth-actions {
-          display: flex;
-          flex-direction: column;
-          gap: 15px;
-          margin-top: 25px;
-        }
-
-        .auth-btn {
-          padding: 14px;
-          border-radius: 10px;
-          text-decoration: none;
-          font-weight: 700;
-          text-align: center;
-        }
-
-        .btn-primary.auth-btn {
-          background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-          color: white;
-        }
-
-        .btn-secondary.auth-btn {
-          background: #f8fafc;
-          color: #4f46e5;
-          border: 2px solid #e2e8f0;
-        }
-
-        .back-home-btn {
-          color: #64748b;
-          text-decoration: none;
-          font-size: 14px;
           margin-top: 10px;
-          display: inline-block;
         }
+        .imgItem{
+          border: 1px solid rgba(0,0,0,.10);
+          border-radius: 14px;
+          overflow: hidden;
+          background:#fff;
+        }
+        .imgPrev{ width:100%; height: 120px; object-fit: cover; display:block; }
+        .rmImg{
+          width: 100%;
+          border: none;
+          background: rgba(220,38,38,.10);
+          color: #b91c1c;
+          font-weight: 900;
+          padding: 8px 10px;
+          cursor: pointer;
+        }
+        .mapWrap{
+          border: 1px solid rgba(0,0,0,.10);
+          border-radius: 14px;
+          overflow:hidden;
+          background:#fff;
+        }
+        .mapLabel{
+          padding: 10px 12px;
+          border-top: 1px solid rgba(0,0,0,.08);
+          color:#0f172a;
+          font-weight: 800;
+        }
+        .tips{ margin: 0; padding: 0 18px; color:#0f172a; line-height: 1.9; }
+        .divider{ height: 1px; background: rgba(0,0,0,.08); margin: 12px 0; }
 
-        @media (max-width: 768px) {
-          .add-page-header { padding: 25px 15px; border-radius: 16px; }
-          .add-page-header h1 { font-size: 24px; }
-          .form-container, .map-container { padding: 20px; border-radius: 16px; }
-          .form-section-title { font-size: 18px; }
-          .currency-btn { padding: 8px 12px; font-size: 14px; }
+        @media (max-width: 900px){
+          .grid{ grid-template-columns: 1fr; }
+          .sideCard{ position: static; }
         }
-
-        @media (max-width: 480px) {
-          .form-row { grid-template-columns: 1fr; gap: 15px; }
-          .currency-selector { flex-direction: column; }
-          .communication-toggle { flex-direction: column; }
-          .image-previews { grid-template-columns: repeat(3, 1fr); }
+        @media (max-width: 520px){
+          .row2{ grid-template-columns: 1fr; }
+          .imgs{ grid-template-columns: repeat(2, 1fr); }
         }
-      
-          /* ===== Import box ===== */
-          .import-box{
-            background: #fff;
-            border: 1px solid #e5e7eb;
-            border-radius: 14px;
-            padding: 14px;
-            margin: 0 0 16px 0;
-          }
-          .import-top{
-            display:flex;
-            align-items:flex-start;
-            justify-content:space-between;
-            gap: 12px;
-            margin-bottom: 10px;
-          }
-          .import-title{
-            font-weight: 800;
-            font-size: 15px;
-            margin-bottom: 2px;
-          }
-          .import-subtitle{
-            color: #64748b;
-            font-size: 13px;
-          }
-          .import-mode{
-            display:flex;
-            gap: 8px;
-            flex-wrap: wrap;
-          }
-          .import-mode-btn{
-            border: 1px solid #e5e7eb;
-            background: #f8fafc;
-            padding: 8px 10px;
-            border-radius: 12px;
-            cursor: pointer;
-            font-size: 13px;
-          }
-          .import-mode-btn.active{
-            background: #0f172a;
-            color: #fff;
-            border-color: #0f172a;
-          }
-          .import-actions{
-            display:flex;
-            gap: 10px;
-            margin-top: 10px;
-            flex-wrap: wrap;
-          }
-          .import-error{
-            margin-top: 10px;
-            background: #fff1f2;
-            border: 1px solid #fecdd3;
-            color: #9f1239;
-            padding: 10px 12px;
-            border-radius: 12px;
-            font-size: 13px;
-          }
-          .import-notes{
-            margin-top: 10px;
-            background: #f0fdf4;
-            border: 1px solid #bbf7d0;
-            color: #166534;
-            padding: 10px 12px;
-            border-radius: 12px;
-            font-size: 13px;
-          }
-          .import-note{ margin: 4px 0; }
-          .import-images{
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px dashed #e5e7eb;
-          }
-          .import-images-head{
-            display:flex;
-            align-items:center;
-            justify-content:space-between;
-            gap: 10px;
-            flex-wrap: wrap;
-            font-size: 13px;
-          }
-          .import-images-hint{
-            margin-top: 6px;
-            color: #64748b;
-            font-size: 12px;
-          }
-`}</style>
+      `}</style>
     </div>
   );
 }
