@@ -6,6 +6,9 @@ import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useUserProfile } from '@/lib/useUserProfile';
 
+// إشعارات فورية + عدّادات (الجرس + رسائل)
+import RealtimeAlerts from '@/components/Notifications/RealtimeAlerts';
+
 // إيميلات المدراء
 const ADMIN_EMAILS = ['mansouralbarout@gmail.com', 'aboramez965@gmail.com'];
 
@@ -20,11 +23,17 @@ export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
+  const [notifUnread, setNotifUnread] = useState(0);
+  const [chatUnread, setChatUnread] = useState(0);
+
+  const [bellOpen, setBellOpen] = useState(false);
 
   const closeTimerRef = useRef(null);
+  const bellRefMobile = useRef(null);
+  const bellRefDesktop = useRef(null);
 
   const isAdmin = user?.email && ADMIN_EMAILS.includes(String(user.email).toLowerCase());
+  const uid = user?.uid ? String(user.uid) : '';
 
   const getDisplayName = () => {
     if (error === 'timeout') return 'مستخدم';
@@ -42,11 +51,15 @@ export default function Header() {
   };
 
   useEffect(() => {
-    if (user) setHasUnreadMessages(false);
+    if (!user) {
+      setNotifUnread(0);
+      setChatUnread(0);
+    }
   }, [user]);
 
   useEffect(() => {
     if (menuMounted) closeMenu(true);
+    setBellOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
@@ -71,6 +84,24 @@ export default function Header() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [menuOpen]);
+
+  useEffect(() => {
+    if (!bellOpen) return;
+    const onDown = (e) => {
+      const elM = bellRefMobile.current;
+      const elD = bellRefDesktop.current;
+      const t = e.target;
+      if (elM && elM.contains(t)) return;
+      if (elD && elD.contains(t)) return;
+      setBellOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('touchstart', onDown);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('touchstart', onDown);
+    };
+  }, [bellOpen]);
 
   const openMenu = () => {
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
@@ -148,8 +179,27 @@ export default function Header() {
   );
 };
 
+  const bellCount = Math.max(0, Number(notifUnread || 0)) + Math.max(0, Number(chatUnread || 0));
+
+  const formatBadge = (n) => {
+    const v = Number(n || 0);
+    if (!v) return '';
+    if (v > 99) return '99+';
+    return String(v);
+  };
+
   return (
     <>
+      {/* ✅ إشعارات فورية + عدادات (يحدث notifUnread / chatUnread) */}
+      <RealtimeAlerts
+        uid={uid}
+        onCounts={(c) => {
+          if (!c) return;
+          if (typeof c.notifUnread === 'number') setNotifUnread(c.notifUnread);
+          if (typeof c.chatUnread === 'number') setChatUnread(c.chatUnread);
+        }}
+      />
+
       <header className="header">
         <div className="header-inner">
           {/* Mobile */}
@@ -161,6 +211,33 @@ export default function Header() {
             <Link href="/" className="site-title" aria-label="الذهاب للرئيسية">
               <Logo variant="mobile" />
             </Link>
+
+            {user ? (
+              <div className="bell-wrap" ref={bellRefMobile}>
+                <button
+                  type="button"
+                  className="bell-btn"
+                  aria-label="الإشعارات"
+                  onClick={() => setBellOpen((v) => !v)}
+                >
+                  🔔
+                  {bellCount > 0 ? <span className="bell-badge">{formatBadge(bellCount)}</span> : null}
+                </button>
+
+                {bellOpen ? (
+                  <div className="bell-menu" role="menu" aria-label="قائمة الإشعارات">
+                    <Link href="/notifications" className="bell-item" onClick={() => setBellOpen(false)}>
+                      <span>الإشعارات</span>
+                      {notifUnread > 0 ? <span className="pill">{formatBadge(notifUnread)}</span> : <span className="muted">0</span>}
+                    </Link>
+                    <Link href="/my-chats" className="bell-item" onClick={() => setBellOpen(false)}>
+                      <span>الرسائل</span>
+                      {chatUnread > 0 ? <span className="pill">{formatBadge(chatUnread)}</span> : <span className="muted">0</span>}
+                    </Link>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             <Link href="/add" className="add-btn-mobile" aria-label="أضف إعلان جديد">
               + إعلان
@@ -194,6 +271,31 @@ export default function Header() {
                 <div className="loading-text">جاري التحميل…</div>
               ) : user ? (
                 <>
+                  <div className="bell-wrap" ref={bellRefDesktop}>
+                    <button
+                      type="button"
+                      className="bell-btn"
+                      aria-label="الإشعارات"
+                      onClick={() => setBellOpen((v) => !v)}
+                    >
+                      🔔
+                      {bellCount > 0 ? <span className="bell-badge">{formatBadge(bellCount)}</span> : null}
+                    </button>
+
+                    {bellOpen ? (
+                      <div className="bell-menu" role="menu" aria-label="قائمة الإشعارات">
+                        <Link href="/notifications" className="bell-item" onClick={() => setBellOpen(false)}>
+                          <span>الإشعارات</span>
+                          {notifUnread > 0 ? <span className="pill">{formatBadge(notifUnread)}</span> : <span className="muted">0</span>}
+                        </Link>
+                        <Link href="/my-chats" className="bell-item" onClick={() => setBellOpen(false)}>
+                          <span>الرسائل</span>
+                          {chatUnread > 0 ? <span className="pill">{formatBadge(chatUnread)}</span> : <span className="muted">0</span>}
+                        </Link>
+                      </div>
+                    ) : null}
+                  </div>
+
                   <Link href="/add" className="add-btn-desktop">
                     + أضف إعلان
                   </Link>
@@ -208,11 +310,12 @@ export default function Header() {
 
                       <Link href="/notifications" className="dropdown-item">
                         🔔 الإشعارات
+                        {notifUnread > 0 ? <span className="pill">{formatBadge(notifUnread)}</span> : null}
                       </Link>
 
                       <Link href="/my-chats" className="dropdown-item">
                         💬 محادثاتي
-                        {hasUnreadMessages && <span className="unread-dot" />}
+                        {chatUnread > 0 ? <span className="pill">{formatBadge(chatUnread)}</span> : null}
                       </Link>
 
                       <Link href="/profile" className="dropdown-item">
@@ -349,14 +452,17 @@ export default function Header() {
 
                     <Link href="/notifications" className="menu-item" onClick={() => closeMenu(true)}>
                       <span className="item-icon">🔔</span>
-                      <span className="item-text">الإشعارات</span>
+                      <span className="item-text">
+                        الإشعارات
+                        {notifUnread > 0 ? <span className="pill">{formatBadge(notifUnread)}</span> : null}
+                      </span>
                     </Link>
 
                     <Link href="/my-chats" className="menu-item" onClick={() => closeMenu(true)}>
                       <span className="item-icon">💬</span>
                       <span className="item-text">
                         محادثاتي
-                        {hasUnreadMessages && <span className="unread-dot" />}
+                        {chatUnread > 0 ? <span className="pill">{formatBadge(chatUnread)}</span> : null}
                       </span>
                     </Link>
 
@@ -554,6 +660,90 @@ export default function Header() {
 
         .unread-dot {
           background: var(--sy-red);
+        }
+
+        /* Bell (جرس الإشعارات + عداد) */
+        .bell-wrap {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+        }
+
+        .bell-btn {
+          position: relative;
+          border: 1px solid rgba(15, 23, 42, 0.12);
+          background: rgba(255, 255, 255, 0.7);
+          color: #0f172a;
+          border-radius: 14px;
+          padding: 8px 10px;
+          cursor: pointer;
+          font-size: 18px;
+          line-height: 1;
+        }
+
+        .bell-btn:hover {
+          background: rgba(255, 255, 255, 0.92);
+        }
+
+        .bell-badge {
+          position: absolute;
+          top: -6px;
+          left: -6px;
+          background: var(--sy-red);
+          color: #ffffff;
+          font-weight: 900;
+          font-size: 11px;
+          height: 20px;
+          min-width: 20px;
+          padding: 0 6px;
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border: 2px solid rgba(255, 255, 255, 0.95);
+        }
+
+        .bell-menu {
+          position: absolute;
+          top: 44px;
+          right: 0;
+          min-width: 210px;
+          background: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.1);
+          border-radius: 14px;
+          box-shadow: 0 18px 60px rgba(2, 6, 23, 0.18);
+          overflow: hidden;
+          z-index: 50;
+        }
+
+        .bell-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 10px 12px;
+          text-decoration: none;
+          color: #0f172a;
+          font-weight: 900;
+        }
+
+        .bell-item:hover {
+          background: #f8fafc;
+        }
+
+        .pill {
+          background: var(--sy-red);
+          color: #ffffff;
+          border-radius: 999px;
+          padding: 0 8px;
+          height: 22px;
+          min-width: 24px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 900;
+          font-size: 12px;
+          line-height: 1;
         }
 
         /* Dropdown */
