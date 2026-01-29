@@ -4,19 +4,26 @@
 
 /* ===== Tokens ===== */
 :root{
-  /* ✅ Contrast-safe brand colors (stronger for text/buttons) */
-  --brand: #C2410C;
-  --brand2:#9A3412;
+  /* Brand (SooqYemen) */
+  --brand:#CE1126;   /* red */
+  --brand2:#B30E21;  /* darker red */
+  --navy:#0F172A;
+  --navy2:#111827;
 
-  --dark:#1A1A2E;
+  /* Theme (Light) */
   --bg:#f8fafc;
+  --surface:#ffffff;
   --card:#ffffff;
   --border:#e5e7eb;
+  --border2:#cbd5e1;
 
-  /* ✅ Darker muted for readability */
+  --text:#0f172a;
+  --text2:#111827;
   --muted:#475569;
-  
-  /* Performance optimizations */
+
+  /* Back-compat */
+  --dark: var(--navy2);
+
   color-scheme: light dark;
 }
 
@@ -42,7 +49,7 @@ body{
   direction:rtl;
   text-align:right;
   background:var(--bg);
-  color:#0f172a;
+  color:var(--text);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -128,7 +135,7 @@ img{
   padding:12px 14px;
   border:1px solid var(--border);
   border-radius:12px;
-  background:#fff;
+  background:var(--surface);
   outline:none;
 }
 .input:focus{
@@ -144,10 +151,10 @@ img{
   padding:10px 14px;
   border-radius:12px;
   border:1px solid var(--border);
-  background:#fff;
+  background:var(--surface);
   cursor:pointer;
   font-weight:800;
-  color:#0f172a;
+  color:var(--text2);
   transition: all 0.2s ease;
   /* Mobile performance */
   touch-action: manipulation;
@@ -183,7 +190,7 @@ img{
 
 /* ===== Header (fixed) ===== */
 .header{
-  background:white;
+  background:var(--surface);
   border-bottom:1px solid var(--border);
   position:fixed;
   top:0; left:0; right:0;
@@ -209,7 +216,7 @@ img{
   border:none;
   font-size:1.5rem;
   cursor:pointer;
-  color:var(--dark);
+  color:var(--text);
   padding:0.5rem;
   border-radius:12px;
 }
@@ -219,7 +226,7 @@ img{
 .site-title{
   font-size:1.25rem;
   font-weight:900;
-  color:var(--brand);
+  color:var(--text2);
 }
 
 .add-btn-mobile{
@@ -289,15 +296,14 @@ img{
 .user-name{ font-weight:900; color:var(--dark); }
 
 /* ✅ Contrast fix */
-.user-email, .guest-text{ font-size:0.875rem; color:#475569; }
+.user-email, .guest-text{ font-size:0.875rem; color:var(--muted); }
 
 .close-menu-btn{
   background:none;
   border:none;
   font-size:1.5rem;
   cursor:pointer;
-  /* ✅ Contrast fix */
-  color:#475569;
+  color:var(--muted);
   padding:0.25rem 0.5rem;
   border-radius:10px;
 }
@@ -310,7 +316,7 @@ img{
 /* ✅ Contrast fix */
 .section-title{
   font-size:0.875rem;
-  color:#475569;
+  color:var(--muted);
   font-weight:900;
   margin:0 0 0.75rem;
   padding-bottom:0.5rem;
@@ -380,7 +386,7 @@ img{
   .nav-links{ display:flex; gap:1.25rem; align-items:center; }
 
   /* ✅ Contrast fix */
-  .nav-link{ color:#334155; font-weight:900; }
+  .nav-link{ color:var(--text); font-weight:900; }
   .nav-link:hover{ color:var(--brand); }
 
   .admin-link{ color:var(--brand); }
@@ -389,7 +395,7 @@ img{
 
   /* ✅ Contrast fix */
   .loading-text{
-    color:#475569;
+    color:var(--muted);
     font-weight:900;
   }
 
@@ -408,7 +414,7 @@ img{
   .auth-buttons{ display:flex; gap:0.75rem; align-items:center; }
 
   /* ✅ Contrast fix */
-  .login-btn{ color:#334155; font-weight:900; padding:0.4rem 0.7rem; }
+  .login-btn{ color:var(--text); font-weight:900; padding:0.4rem 0.7rem; }
 
   .register-btn{
     background:var(--dark);
@@ -422,7 +428,7 @@ img{
 
   /* ✅ Contrast fix */
   .user-greeting{
-    color:#334155;
+    color:var(--text);
     font-weight:1000;
     cursor:pointer;
     padding:0.45rem 0.7rem;
@@ -552,11 +558,18 @@ img{
 
 /* Color scheme support */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f172a;
-    --card: #1e293b;
-    --border: #334155;
-    --muted: #94a3b8;
+  :root{
+    --bg:#0b1224;
+    --surface:#0f172a;
+    --card:#111c33;
+    --border:#334155;
+    --border2:#475569;
+
+    --text:#e2e8f0;
+    --text2:#f8fafc;
+    --muted:#94a3b8;
+
+    --dark: var(--text);
   }
 }
 
@@ -772,7 +785,7 @@ img{
 
 .mSheetClose{
   border:1px solid var(--border);
-  background:#fff;
+  background:var(--surface);
   border-radius:10px;
   padding:6px 10px;
   cursor:pointer;
@@ -800,7 +813,7 @@ img{
   padding:12px 12px;
   border-radius:12px;
   border:1px solid var(--border);
-  background:#fff;
+  background:var(--surface);
   font-size:15px;
 }
 
@@ -815,7 +828,7 @@ img{
   padding:12px 12px;
   border-radius:12px;
   border:1px solid var(--border);
-  background:#fff;
+  background:var(--surface);
   color:#334155;
   font-weight:900;
   cursor:pointer;
@@ -848,3 +861,7 @@ img{
     border-bottom-color: rgba(148, 163, 184, 0.18);
   }
 }
+
+
+/* Brand accent helper */
+.site-title strong{ color: var(--brand); }
