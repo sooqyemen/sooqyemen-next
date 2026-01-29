@@ -18,14 +18,14 @@ const HomeMapView = dynamic(() => import('@/components/Map/HomeMapView'), {
       style={{
         padding: '40px 20px',
         textAlign: 'center',
-        background: '#f8f9fa',
+        background: 'var(--soft-bg, #f8f9fa)',
         borderRadius: '12px',
-        border: '2px dashed #dee2e6',
+        border: '2px dashed var(--border, #dee2e6)',
       }}
     >
       <div style={{ fontSize: '48px', marginBottom: '16px' }}>🗺️</div>
       <div style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>جاري تحميل الخريطة...</div>
-      <div style={{ fontSize: '14px', color: '#6c757d' }}>يرجى الانتظار</div>
+      <div style={{ fontSize: '14px', color: 'var(--muted, #6c757d)' }}>يرجى الانتظار</div>
     </div>
   ),
 });
@@ -73,9 +73,9 @@ function ListingRow({ listing }) {
         padding: '16px',
         alignItems: 'center',
         borderRadius: '12px',
-        border: '1px solid #e2e8f0',
+        border: '1px solid var(--border, #e2e8f0)',
         marginBottom: '10px',
-        background: 'white',
+        background: 'var(--surface, #fff)',
         textDecoration: 'none',
         color: 'inherit',
         transition: 'all 0.2s ease',
@@ -83,12 +83,12 @@ function ListingRow({ listing }) {
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-        e.currentTarget.style.borderColor = '#3b82f6';
+        e.currentTarget.style.borderColor = 'var(--accent, #CE1126)';
         e.currentTarget.style.transform = 'translateY(-2px)';
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
-        e.currentTarget.style.borderColor = '#e2e8f0';
+        e.currentTarget.style.borderColor = 'var(--border, #e2e8f0)';
         e.currentTarget.style.transform = 'translateY(0)';
       }}
     >
@@ -100,7 +100,7 @@ function ListingRow({ listing }) {
           height: 140,
           borderRadius: '10px',
           overflow: 'hidden',
-          background: '#f8fafc',
+          background: 'var(--soft-bg, #f8fafc)',
           flexShrink: 0,
           position: 'relative',
         }}
@@ -124,8 +124,8 @@ function ListingRow({ listing }) {
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: '28px',
-              color: '#94a3b8',
-              background: '#f1f5f9',
+              color: 'var(--muted, #94a3b8)',
+              background: 'var(--chip-bg, #f1f5f9)',
             }}
           >
             🖼️
@@ -142,7 +142,7 @@ function ListingRow({ listing }) {
               margin: 0,
               fontSize: '16px',
               fontWeight: 'bold',
-              color: '#1e293b',
+              color: 'var(--text, #1e293b)',
               lineHeight: 1.3,
               flex: 1,
             }}
@@ -157,17 +157,17 @@ function ListingRow({ listing }) {
 
         {/* معلومات */}
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: '#64748b' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: 'var(--muted, #64748b)' }}>
             <span>📍</span>
             <span>{listing.city || listing.locationLabel || 'غير محدد'}</span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: '#64748b' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: 'var(--muted, #64748b)' }}>
             <span>⏱️</span>
             <span>{formatRelative(listing.createdAt)}</span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: '#64748b' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: 'var(--muted, #64748b)' }}>
             <span>👁️</span>
             <span>{Number(listing.views || 0).toLocaleString('ar-YE')}</span>
           </div>
@@ -192,7 +192,7 @@ function ListingRow({ listing }) {
         <p
           style={{
             fontSize: '14px',
-            color: '#475569',
+            color: 'var(--muted, #475569)',
             lineHeight: 1.5,
             margin: 0,
             display: '-webkit-box',
@@ -210,8 +210,8 @@ function ListingRow({ listing }) {
             style={{
               padding: '4px 12px',
               borderRadius: '16px',
-              background: '#f1f5f9',
-              color: '#475569',
+              background: 'var(--chip-bg, #f1f5f9)',
+              color: 'var(--muted, #475569)',
               fontSize: '13px',
               fontWeight: '600',
             }}
@@ -219,7 +219,7 @@ function ListingRow({ listing }) {
             {listing.categoryName || listing.category || 'قسم'}
           </span>
 
-          <div style={{ fontSize: '13px', color: '#64748b', fontWeight: '500' }}>اضغط للتفاصيل →</div>
+          <div style={{ fontSize: '13px', color: 'var(--muted, #64748b)', fontWeight: '500' }}>اضغط للتفاصيل →</div>
         </div>
       </div>
     </Link>
@@ -537,8 +537,8 @@ export default function ListingsPageClient({ initialListings = [] }) {
             padding: '16px',
             marginBottom: '20px',
             borderRadius: '14px',
-            border: '1px solid #e2e8f0',
-            background: 'white',
+            border: '1px solid var(--border, #e2e8f0)',
+            background: 'var(--surface, #fff)',
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -548,10 +548,10 @@ export default function ListingsPageClient({ initialListings = [] }) {
                 style={{
                   display: 'flex',
                   gap: '8px',
-                  background: '#f8fafc',
+                  background: 'var(--soft-bg, #f8fafc)',
                   padding: '6px',
                   borderRadius: '10px',
-                  border: '1px solid #e2e8f0',
+                  border: '1px solid var(--border, #e2e8f0)',
                   flex: 1,
                   minWidth: 220,
                 }}
@@ -635,9 +635,9 @@ export default function ListingsPageClient({ initialListings = [] }) {
                 style={{
                   padding: '10px 18px',
                   borderRadius: '10px',
-                  border: '1px solid #e2e8f0',
+                  border: '1px solid var(--border, #e2e8f0)',
                   background: '#fff',
-                  color: '#475569',
+                  color: 'var(--muted, #475569)',
                   fontWeight: '900',
                   fontSize: '14px',
                   cursor: 'pointer',
@@ -660,9 +660,9 @@ export default function ListingsPageClient({ initialListings = [] }) {
                   width: '100%',
                   padding: '12px 16px 12px 44px',
                   borderRadius: '10px',
-                  border: '1px solid #e2e8f0',
+                  border: '1px solid var(--border, #e2e8f0)',
                   fontSize: '15px',
-                  background: '#f8fafc',
+                  background: 'var(--soft-bg, #f8fafc)',
                   transition: 'all 0.2s ease',
                 }}
                 value={search}
@@ -695,14 +695,14 @@ export default function ListingsPageClient({ initialListings = [] }) {
                 gap: '8px',
               }}
             >
-              <div style={{ fontSize: '14px', color: '#64748b' }}>
+              <div style={{ fontSize: '14px', color: 'var(--muted, #64748b)' }}>
                 <span style={{ fontWeight: '900', color: '#3b82f6' }}>
                   {filteredAndSorted.length.toLocaleString('ar-YE')}
                 </span>{' '}
                 إعلان متاح
               </div>
 
-              <div style={{ fontSize: '13px', color: '#64748b' }}>
+              <div style={{ fontSize: '13px', color: 'var(--muted, #64748b)' }}>
                 {search && (
                   <span>
                     نتائج البحث عن: "<strong>{search}</strong>"
@@ -759,9 +759,9 @@ export default function ListingsPageClient({ initialListings = [] }) {
               alignItems: 'center',
               justifyContent: 'center',
               padding: '60px 20px',
-              background: 'white',
+              background: 'var(--surface, #fff)',
               borderRadius: '12px',
-              border: '1px solid #e2e8f0',
+              border: '1px solid var(--border, #e2e8f0)',
             }}
           >
             <div
@@ -775,10 +775,10 @@ export default function ListingsPageClient({ initialListings = [] }) {
                 marginBottom: '16px',
               }}
             />
-            <div style={{ fontWeight: '900', fontSize: '16px', marginBottom: '8px', color: '#1e293b' }}>
+            <div style={{ fontWeight: '900', fontSize: '16px', marginBottom: '8px', color: 'var(--text, #1e293b)' }}>
               جاري تحميل الإعلانات...
             </div>
-            <div style={{ fontSize: '14px', color: '#64748b' }}>
+            <div style={{ fontSize: '14px', color: 'var(--muted, #64748b)' }}>
               {initialListings.length > 0 ? 'جاري تحديث القائمة' : 'جاري تحميل الإعلانات'}
             </div>
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -796,7 +796,7 @@ export default function ListingsPageClient({ initialListings = [] }) {
           >
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
             <div style={{ fontWeight: '900', fontSize: '18px', color: '#991b1b', marginBottom: '8px' }}>حدث خطأ</div>
-            <div style={{ fontSize: '15px', color: '#64748b', marginBottom: '16px' }}>{err}</div>
+            <div style={{ fontSize: '15px', color: 'var(--muted, #64748b)', marginBottom: '16px' }}>{err}</div>
             <button
               onClick={() => window.location.reload()}
               style={{
@@ -819,14 +819,14 @@ export default function ListingsPageClient({ initialListings = [] }) {
             style={{
               padding: '40px 20px',
               textAlign: 'center',
-              background: 'white',
+              background: 'var(--surface, #fff)',
               borderRadius: '12px',
-              border: '1px solid #e2e8f0',
+              border: '1px solid var(--border, #e2e8f0)',
             }}
           >
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
             <div style={{ fontWeight: '900', fontSize: '18px', marginBottom: '8px' }}>لا توجد نتائج مطابقة</div>
-            <div style={{ fontSize: '15px', color: '#64748b', marginBottom: '24px', maxWidth: 400, margin: '0 auto 24px' }}>
+            <div style={{ fontSize: '15px', color: 'var(--muted, #64748b)', marginBottom: '24px', maxWidth: 400, margin: '0 auto 24px' }}>
               {search ? `لم نعثر على إعلانات تطابق "${search}"` : 'لا توجد إعلانات متاحة حالياً'}
             </div>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -835,9 +835,9 @@ export default function ListingsPageClient({ initialListings = [] }) {
                 style={{
                   padding: '10px 20px',
                   borderRadius: '10px',
-                  border: '1px solid #e2e8f0',
-                  background: 'white',
-                  color: '#475569',
+                  border: '1px solid var(--border, #e2e8f0)',
+                  background: 'var(--surface, #fff)',
+                  color: 'var(--muted, #475569)',
                   fontWeight: '900',
                   fontSize: '14px',
                   cursor: 'pointer',
