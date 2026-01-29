@@ -273,7 +273,7 @@ export default function Price({
         
         .priceBox.grid .priceMain {
           font-size: 14px;
-          color: #059669;
+          color: var(--price-green, #059669);
         }
         
         .priceBox.hero .priceMain {
@@ -304,7 +304,7 @@ export default function Price({
         
         .priceSub {
           font-size: 11px;
-          color: #64748b;
+          color: var(--muted, #64748b);
           line-height: 1.2;
         }
         
