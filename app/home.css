@@ -6,11 +6,11 @@
    ============================================= */
 
 /* ===== 1. متغيرات التصميم الأساسية (آمنة عالميًا) ===== */
-:root {
-  --color-primary: #0F3460;
-  --color-primary-light: #3b82f6;
-  --color-primary-dark: #1A1A2E;
-  --color-accent: #ff6b35;
+.home-page {
+  --color-primary: #0F172A;
+  --color-primary-light: #CE1126;
+  --color-primary-dark: #0B1020;
+  --color-accent: #CE1126;
   --color-success: #10b981;
   --color-danger: #dc2626;
   --color-warning: #f59e0b;
@@ -27,8 +27,8 @@
   --bg-primary: #ffffff;
   --bg-secondary: #f8fafc;
   --bg-tertiary: #f1f5f9;
-  --bg-dark: #0F3460;
-  --bg-gradient: linear-gradient(135deg, #0F3460 0%, #1A1A2E 100%);
+  --bg-dark: #0F172A;
+  --bg-gradient: linear-gradient(135deg, #0F172A 0%, #0B1020 100%);
 
   --border-light: #e2e8f0;
   --border-medium: #cbd5e1;
@@ -38,7 +38,7 @@
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8px 25px rgba(0, 0, 0, 0.1);
   --shadow-xl: 0 12px 30px rgba(0, 0, 0, 0.15);
-  --shadow-primary: 0 8px 25px rgba(59, 130, 246, 0.3);
+  --shadow-primary: 0 8px 25px rgba(206, 17, 38, 0.30);
 
   --space-xs: 0.25rem;
   --space-sm: 0.5rem;
@@ -62,6 +62,30 @@
   --screen-tablet: 1024px;
   --screen-desktop: 1200px;
 }
+
+/* ===== Dark Mode (Scoped to Home) ===== */
+@media (prefers-color-scheme: dark) {
+  .home-page {
+    --bg-primary: #0f172a;
+    --bg-secondary: #0b1220;
+    --bg-tertiary: #111827;
+
+    --text-primary: #e5e7eb;
+    --text-secondary: #cbd5e1;
+    --text-muted: #94a3b8;
+    --text-light: #94a3b8;
+
+    --border-light: rgba(148, 163, 184, 0.16);
+    --border-medium: rgba(148, 163, 184, 0.22);
+    --border-dark: rgba(148, 163, 184, 0.32);
+
+    --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.25);
+    --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.30);
+    --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.35);
+    --shadow-xl: 0 14px 40px rgba(0, 0, 0, 0.40);
+  }
+}
+
 
 /* ===== 2. Reset + Base styles (⚠️ تم تقييدها داخل .home-page فقط) ===== */
 .home-page,
@@ -208,7 +232,7 @@
 
 .home-page .search-container:focus-within {
   border-color: var(--color-primary-light);
-  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.15);
+  box-shadow: 0 4px 15px rgba(206, 17, 38, 0.18);
 }
 
 .home-page .search-input-wrapper {
@@ -255,7 +279,7 @@
 }
 
 .home-page .search-button:hover {
-  background: #2563eb;
+  background: #B30E22;
 }
 
 .home-page .suggestions-dropdown {
@@ -360,7 +384,7 @@
   background: var(--color-primary-light);
   color: var(--text-white);
   border-color: var(--color-primary-light);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+  box-shadow: 0 4px 12px rgba(206, 17, 38, 0.18);
 }
 
 .home-page .category-button-icon {
@@ -512,7 +536,7 @@
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;
-  background: rgba(59, 130, 246, 0.9);
+  background: rgba(206, 17, 38, 0.92);
   color: var(--text-white);
   padding: 0.25rem 0.75rem;
   border-radius: var(--radius-full);
@@ -781,7 +805,7 @@
 
 .home-page .retry-button:hover,
 .home-page .add-listing-link:hover {
-  background: #2563eb;
+  background: #B30E22;
   transform: translateY(-1px);
 }
 
@@ -809,8 +833,8 @@
 
 .home-page .floating-add-button:hover {
   transform: translateY(-3px);
-  background: #2563eb;
-  box-shadow: 0 12px 30px rgba(59, 130, 246, 0.4);
+  background: #B30E22;
+  box-shadow: 0 12px 30px rgba(206, 17, 38, 0.40);
 }
 
 .home-page .floating-add-icon {
@@ -885,12 +909,12 @@
 }
 
 /* ===== Error State Retry Button ===== */
-.error-retry-wrapper {
+.home-page .error-retry-wrapper {
   text-align: center;
   padding: 2rem;
 }
 
-.error-retry-button {
+.home-page .error-retry-button {
   margin-top: 1rem;
   padding: 0.75rem 2rem;
   background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
@@ -904,16 +928,16 @@
   transition: all 0.3s ease;
 }
 
-.error-retry-button:hover {
+.home-page .error-retry-button:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
 }
 
-.error-retry-button:active {
+.home-page .error-retry-button:active {
   transform: translateY(0);
 }
 
-.error-retry-button:focus-visible {
+.home-page .error-retry-button:focus-visible {
   outline: 2px solid #ef4444;
   outline-offset: 2px;
 }
