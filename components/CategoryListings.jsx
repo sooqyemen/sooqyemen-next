@@ -1162,8 +1162,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
                 style={{
                   padding: '8px 12px',
                   borderRadius: '8px',
-                  border: !carMake ? '1px solid #3b82f6' : '1px solid #e2e8f0',
-                  background: !carMake ? '#3b82f6' : 'white',
+                  border: !carMake ? '1px solid var(--accent, #CE1126)' : '1px solid #e2e8f0',
+                  background: !carMake ? 'var(--accent, #CE1126)' : 'white',
                   color: !carMake ? 'white' : '#475569',
                   fontWeight: '600',
                   fontSize: '14px',
@@ -1184,8 +1184,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
                   style={{
                     padding: '8px 12px',
                     borderRadius: '8px',
-                    border: carMake === k ? '1px solid #3b82f6' : '1px solid #e2e8f0',
-                    background: carMake === k ? '#3b82f6' : 'white',
+                    border: carMake === k ? '1px solid var(--accent, #CE1126)' : '1px solid #e2e8f0',
+                    background: carMake === k ? 'var(--accent, #CE1126)' : 'white',
                     color: carMake === k ? 'white' : '#475569',
                     fontWeight: '600',
                     fontSize: '14px',
@@ -1209,8 +1209,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
                   style={{
                     padding: '8px 12px',
                     borderRadius: '8px',
-                    border: !carModel ? '1px solid #3b82f6' : '1px solid #e2e8f0',
-                    background: !carModel ? '#3b82f6' : 'white',
+                    border: !carModel ? '1px solid var(--accent, #CE1126)' : '1px solid #e2e8f0',
+                    background: !carModel ? 'var(--accent, #CE1126)' : 'white',
                     color: !carModel ? 'white' : '#475569',
                     fontWeight: '600',
                     fontSize: '14px',
@@ -1228,8 +1228,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
                     style={{
                       padding: '8px 12px',
                       borderRadius: '8px',
-                      border: carModel === k ? '1px solid #3b82f6' : '1px solid #e2e8f0',
-                      background: carModel === k ? '#3b82f6' : 'white',
+                      border: carModel === k ? '1px solid var(--accent, #CE1126)' : '1px solid #e2e8f0',
+                      background: carModel === k ? 'var(--accent, #CE1126)' : 'white',
                       color: carModel === k ? 'white' : '#475569',
                       fontWeight: '600',
                       fontSize: '14px',
@@ -1258,8 +1258,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
               style={{
                 padding: '8px 12px',
                 borderRadius: '8px',
-                border: !phoneBrand ? '1px solid #3b82f6' : '1px solid #e2e8f0',
-                background: !phoneBrand ? '#3b82f6' : 'white',
+                border: !phoneBrand ? '1px solid var(--accent, #CE1126)' : '1px solid #e2e8f0',
+                background: !phoneBrand ? 'var(--accent, #CE1126)' : 'white',
                 color: !phoneBrand ? 'white' : '#475569',
                 fontWeight: '600',
                 fontSize: '14px',
@@ -1277,8 +1277,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
                 style={{
                   padding: '8px 12px',
                   borderRadius: '8px',
-                  border: phoneBrand === k ? '1px solid #3b82f6' : '1px solid #e2e8f0',
-                  background: phoneBrand === k ? '#3b82f6' : 'white',
+                  border: phoneBrand === k ? '1px solid var(--accent, #CE1126)' : '1px solid #e2e8f0',
+                  background: phoneBrand === k ? 'var(--accent, #CE1126)' : 'white',
                   color: phoneBrand === k ? 'white' : '#475569',
                   fontWeight: '600',
                   fontSize: '14px',
@@ -1309,8 +1309,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
                 style={{
                   padding: '8px 12px',
                   borderRadius: '8px',
-                  border: !dealType ? '1px solid #3b82f6' : '1px solid #e2e8f0',
-                  background: !dealType ? '#3b82f6' : 'white',
+                  border: !dealType ? '1px solid var(--accent, #CE1126)' : '1px solid #e2e8f0',
+                  background: !dealType ? 'var(--accent, #CE1126)' : 'white',
                   color: !dealType ? 'white' : '#475569',
                   fontWeight: '600',
                   fontSize: '14px',
@@ -1331,8 +1331,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
                   style={{
                     padding: '8px 12px',
                     borderRadius: '8px',
-                    border: dealType === k ? '1px solid #3b82f6' : '1px solid #e2e8f0',
-                    background: dealType === k ? '#3b82f6' : 'white',
+                    border: dealType === k ? '1px solid var(--accent, #CE1126)' : '1px solid #e2e8f0',
+                    background: dealType === k ? 'var(--accent, #CE1126)' : 'white',
                     color: dealType === k ? 'white' : '#475569',
                     fontWeight: '600',
                     fontSize: '14px',
@@ -1356,8 +1356,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
                   style={{
                     padding: '8px 12px',
                     borderRadius: '8px',
-                    border: !propertyType ? '1px solid #3b82f6' : '1px solid #e2e8f0',
-                    background: !propertyType ? '#3b82f6' : 'white',
+                    border: !propertyType ? '1px solid var(--accent, #CE1126)' : '1px solid #e2e8f0',
+                    background: !propertyType ? 'var(--accent, #CE1126)' : 'white',
                     color: !propertyType ? 'white' : '#475569',
                     fontWeight: '600',
                     fontSize: '14px',
@@ -1375,8 +1375,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
                     style={{
                       padding: '8px 12px',
                       borderRadius: '8px',
-                      border: propertyType === k ? '1px solid #3b82f6' : '1px solid #e2e8f0',
-                      background: propertyType === k ? '#3b82f6' : 'white',
+                      border: propertyType === k ? '1px solid var(--accent, #CE1126)' : '1px solid #e2e8f0',
+                      background: propertyType === k ? 'var(--accent, #CE1126)' : 'white',
                       color: propertyType === k ? 'white' : '#475569',
                       fontWeight: '600',
                       fontSize: '14px',
@@ -1404,8 +1404,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
             style={{
               padding: '8px 12px',
               borderRadius: '8px',
-              border: !state ? '1px solid #3b82f6' : '1px solid #e2e8f0',
-              background: !state ? '#3b82f6' : 'white',
+              border: !state ? '1px solid var(--accent, #CE1126)' : '1px solid #e2e8f0',
+              background: !state ? 'var(--accent, #CE1126)' : 'white',
               color: !state ? 'white' : '#475569',
               fontWeight: '600',
               fontSize: '14px',
@@ -1423,8 +1423,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
               style={{
                 padding: '8px 12px',
                 borderRadius: '8px',
-                border: state === k ? '1px solid #3b82f6' : '1px solid #e2e8f0',
-                background: state === k ? '#3b82f6' : 'white',
+                border: state === k ? '1px solid var(--accent, #CE1126)' : '1px solid #e2e8f0',
+                background: state === k ? 'var(--accent, #CE1126)' : 'white',
                 color: state === k ? 'white' : '#475569',
                 fontWeight: '600',
                 fontSize: '14px',
@@ -1618,9 +1618,9 @@ export default function CategoryListings({ category, initialListings = [] }) {
           alignItems: 'center',
           justifyContent: 'center',
           padding: '60px 20px',
-          background: 'white',
+          background: 'var(--surface, #fff)',
           borderRadius: '12px',
-          border: '1px solid #e2e8f0',
+          border: '1px solid var(--border, #e2e8f0)',
         }}
       >
         <div
@@ -1628,16 +1628,16 @@ export default function CategoryListings({ category, initialListings = [] }) {
             width: '48px',
             height: '48px',
             border: '4px solid #f1f5f9',
-            borderTopColor: '#3b82f6',
+            borderTopColor: 'var(--accent, #CE1126)',
             borderRadius: '50%',
             animation: 'spin 1s linear infinite',
             marginBottom: '16px',
           }}
         />
-        <div style={{ fontWeight: '900', fontSize: '16px', marginBottom: '8px', color: '#1e293b' }}>
+        <div style={{ fontWeight: '900', fontSize: '16px', marginBottom: '8px', color: 'var(--text, #1e293b)' }}>
           جاري تحميل إعلانات القسم...
         </div>
-        <div style={{ fontSize: '14px', color: '#64748b' }}>
+        <div style={{ fontSize: '14px', color: 'var(--muted, #64748b)' }}>
           {initialListings.length > 0 ? 'جاري تحديث القائمة' : 'جاري تحميل الإعلانات'}
         </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -1659,14 +1659,14 @@ export default function CategoryListings({ category, initialListings = [] }) {
       >
         <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
         <div style={{ fontWeight: '900', fontSize: '18px', color: '#991b1b', marginBottom: '8px' }}>حدث خطأ</div>
-        <div style={{ fontSize: '15px', color: '#64748b', marginBottom: '16px' }}>{err}</div>
+        <div style={{ fontSize: '15px', color: 'var(--muted, #64748b)', marginBottom: '16px' }}>{err}</div>
         <button
           onClick={() => window.location.reload()}
           style={{
             padding: '10px 20px',
             borderRadius: '10px',
             border: 'none',
-            background: '#3b82f6',
+            background: 'var(--accent, #CE1126)',
             color: 'white',
             fontWeight: '900',
             fontSize: '14px',
@@ -1750,8 +1750,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
             padding: '16px',
             marginBottom: '20px',
             borderRadius: '14px',
-            border: '1px solid #e2e8f0',
-            background: 'white',
+            border: '1px solid var(--border, #e2e8f0)',
+            background: 'var(--surface, #fff)',
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1761,10 +1761,10 @@ export default function CategoryListings({ category, initialListings = [] }) {
                 style={{
                   display: 'flex',
                   gap: '8px',
-                  background: '#f8fafc',
+                  background: 'var(--soft-bg, #f8fafc)',
                   padding: '6px',
                   borderRadius: '10px',
-                  border: '1px solid #e2e8f0',
+                  border: '1px solid var(--border, #e2e8f0)',
                   flex: 1,
                   minWidth: 220,
                 }}
@@ -1776,7 +1776,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
                     padding: '8px 16px',
                     borderRadius: '8px',
                     border: 'none',
-                    background: view === 'grid' ? '#3b82f6' : 'transparent',
+                    background: view === 'grid' ? 'var(--accent, #CE1126)' : 'transparent',
                     color: view === 'grid' ? 'white' : '#475569',
                     fontWeight: '900',
                     fontSize: '14px',
@@ -1800,7 +1800,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
                     padding: '8px 16px',
                     borderRadius: '8px',
                     border: 'none',
-                    background: view === 'list' ? '#3b82f6' : 'transparent',
+                    background: view === 'list' ? 'var(--accent, #CE1126)' : 'transparent',
                     color: view === 'list' ? 'white' : '#475569',
                     fontWeight: '900',
                     fontSize: '14px',
@@ -1824,7 +1824,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
                     padding: '8px 16px',
                     borderRadius: '8px',
                     border: 'none',
-                    background: view === 'map' ? '#3b82f6' : 'transparent',
+                    background: view === 'map' ? 'var(--accent, #CE1126)' : 'transparent',
                     color: view === 'map' ? 'white' : '#475569',
                     fontWeight: '900',
                     fontSize: '14px',
@@ -1848,9 +1848,9 @@ export default function CategoryListings({ category, initialListings = [] }) {
                 style={{
                   padding: '10px 18px',
                   borderRadius: '10px',
-                  border: '1px solid #e2e8f0',
-                  background: '#fff',
-                  color: '#475569',
+                  border: '1px solid var(--border, #e2e8f0)',
+                  background: 'var(--surface, #fff)',
+                  color: 'var(--muted, #475569)',
                   fontWeight: '900',
                   fontSize: '14px',
                   cursor: 'pointer',
@@ -1873,9 +1873,9 @@ export default function CategoryListings({ category, initialListings = [] }) {
                   width: '100%',
                   padding: '12px 16px 12px 44px',
                   borderRadius: '10px',
-                  border: '1px solid #e2e8f0',
+                  border: '1px solid var(--border, #e2e8f0)',
                   fontSize: '15px',
-                  background: '#f8fafc',
+                  background: 'var(--soft-bg, #f8fafc)',
                   transition: 'all 0.2s ease',
                 }}
                 value={q}
@@ -1908,14 +1908,14 @@ export default function CategoryListings({ category, initialListings = [] }) {
                 gap: '8px',
               }}
             >
-              <div style={{ fontSize: '14px', color: '#64748b' }}>
-                <span style={{ fontWeight: '900', color: '#3b82f6' }}>
+              <div style={{ fontSize: '14px', color: 'var(--muted, #64748b)' }}>
+                <span style={{ fontWeight: '900', color: 'var(--accent, #CE1126)' }}>
                   {sortedListings.length.toLocaleString('ar-YE')}
                 </span>{' '}
                 إعلان متاح
               </div>
 
-              <div style={{ fontSize: '13px', color: '#64748b' }}>
+              <div style={{ fontSize: '13px', color: 'var(--muted, #64748b)' }}>
                 {q && (
                   <span>
                     نتائج البحث عن: "<strong>{q}</strong>"
@@ -2008,14 +2008,14 @@ export default function CategoryListings({ category, initialListings = [] }) {
             style={{
               padding: '40px 20px',
               textAlign: 'center',
-              background: 'white',
+              background: 'var(--surface, #fff)',
               borderRadius: '12px',
-              border: '1px solid #e2e8f0',
+              border: '1px solid var(--border, #e2e8f0)',
             }}
           >
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
             <div style={{ fontWeight: '900', fontSize: '18px', marginBottom: '8px' }}>لا توجد نتائج مطابقة</div>
-            <div style={{ fontSize: '15px', color: '#64748b', marginBottom: '24px', maxWidth: 400, margin: '0 auto 24px' }}>
+            <div style={{ fontSize: '15px', color: 'var(--muted, #64748b)', marginBottom: '24px', maxWidth: 400, margin: '0 auto 24px' }}>
               {q ? `لم نعثر على إعلانات تطابق "${q}"` : 'لا توجد إعلانات متاحة حالياً'}
             </div>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -2024,9 +2024,9 @@ export default function CategoryListings({ category, initialListings = [] }) {
                 style={{
                   padding: '10px 20px',
                   borderRadius: '10px',
-                  border: '1px solid #e2e8f0',
-                  background: 'white',
-                  color: '#475569',
+                  border: '1px solid var(--border, #e2e8f0)',
+                  background: 'var(--surface, #fff)',
+                  color: 'var(--muted, #475569)',
                   fontWeight: '900',
                   fontSize: '14px',
                   cursor: 'pointer',
@@ -2040,7 +2040,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
                   padding: '10px 20px',
                   borderRadius: '10px',
                   border: 'none',
-                  background: '#3b82f6',
+                  background: 'var(--accent, #CE1126)',
                   color: 'white',
                   fontWeight: '900',
                   fontSize: '14px',
@@ -2085,9 +2085,9 @@ export default function CategoryListings({ category, initialListings = [] }) {
         }
 
         .card {
-          background: white;
+          background: var(--surface, #fff);
           border-radius: 12px;
-          border: 1px solid #e2e8f0;
+          border: 1px solid var(--border, #e2e8f0);
           overflow: hidden;
         }
 
@@ -2107,8 +2107,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          border: 1px solid #cbd5e1;
-          background: white;
+          border: 1px solid var(--border, #cbd5e1);
+          background: var(--surface, #fff);
           border-radius: 20px;
           padding: 8px 16px;
           cursor: pointer;
@@ -2117,8 +2117,8 @@ export default function CategoryListings({ category, initialListings = [] }) {
           font-size: 14px;
         }
         .sooq-tag:hover {
-          border-color: #3b82f6;
-          background: #eff6ff;
+          border-color: var(--accent, #CE1126);
+          background: rgba(59,130,246,0.08);
           transform: translateY(-2px);
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
@@ -2167,7 +2167,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
           border-bottom: 1px solid #f1f5f9;
         }
         .mSheetClose {
-          border: 1px solid #e2e8f0;
+          border: 1px solid var(--border, #e2e8f0);
           background: #fff;
           border-radius: 10px;
           padding: 6px 10px;
@@ -2191,7 +2191,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
           width: 100%;
           padding: 12px 12px;
           border-radius: 12px;
-          border: 1px solid #e2e8f0;
+          border: 1px solid var(--border, #e2e8f0);
           background: #fff;
           font-size: 15px;
         }
@@ -2204,7 +2204,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
         .mBtn {
           padding: 12px;
           border-radius: 12px;
-          border: 1px solid #e2e8f0;
+          border: 1px solid var(--border, #e2e8f0);
           background: #fff;
           color: #334155;
           font-weight: 900;
@@ -2214,7 +2214,7 @@ export default function CategoryListings({ category, initialListings = [] }) {
           padding: 12px;
           border-radius: 12px;
           border: none;
-          background: #3b82f6;
+          background: var(--accent, #CE1126);
           color: #fff;
           font-weight: 1000;
           cursor: pointer;
@@ -2254,7 +2254,40 @@ export default function CategoryListings({ category, initialListings = [] }) {
             justify-content: center;
           }
         }
-      `}</style>
+      
+
+        /* ====== Dark mode fixes (scoped) ====== */
+        @media (prefers-color-scheme: dark) {
+          .card {
+            background: var(--surface, #0b1220);
+            border-color: var(--border, rgba(148, 163, 184, 0.18));
+          }
+
+          .sooq-hashtagsBox {
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.85) 0%, rgba(30, 41, 59, 0.85) 100%);
+            border-color: rgba(148, 163, 184, 0.22);
+          }
+
+          .sooq-tag {
+            background: var(--surface, #0b1220);
+            border-color: rgba(148, 163, 184, 0.22);
+            color: var(--text, #f8fafc);
+          }
+          .sooq-tag:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: var(--accent, #CE1126);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+          }
+          .sooq-tagCount {
+            color: var(--muted, #cbd5e1);
+            border-left-color: rgba(148, 163, 184, 0.22);
+          }
+
+          .mSheetBackdrop {
+            background: rgba(0, 0, 0, 0.6);
+          }
+        }
+`}</style>
     </div>
   );
 }
