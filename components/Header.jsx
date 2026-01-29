@@ -142,7 +142,7 @@ export default function Header() {
       />
       <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.05 }}>
         <span style={{ fontWeight: 900, fontSize: 16 }}>سوق اليمن</span>
-        <span className="muted" style={{ fontSize: 12 }}>السوق الشامل</span>
+        <span className="muted" style={{ fontSize: 12 }}>بيع وشراء كل شئ </span>
       </span>
     </span>
   );
