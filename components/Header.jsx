@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useUserProfile } from '@/lib/useUserProfile';
 
-// إشعارات فورية + عدّادات (الجرس + رسائل)
+// إشعارات فورية + عدّادات (Popup + صوت + عدّادات للإشعارات/الرسائل)
 import RealtimeAlerts from '@/components/Notifications/RealtimeAlerts';
 
 // إيميلات المدراء
@@ -26,11 +26,7 @@ export default function Header() {
   const [notifUnread, setNotifUnread] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
 
-  const [bellOpen, setBellOpen] = useState(false);
-
   const closeTimerRef = useRef(null);
-  const bellRefMobile = useRef(null);
-  const bellRefDesktop = useRef(null);
 
   const isAdmin = user?.email && ADMIN_EMAILS.includes(String(user.email).toLowerCase());
   const uid = user?.uid ? String(user.uid) : '';
@@ -59,7 +55,6 @@ export default function Header() {
 
   useEffect(() => {
     if (menuMounted) closeMenu(true);
-    setBellOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
@@ -84,24 +79,6 @@ export default function Header() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [menuOpen]);
-
-  useEffect(() => {
-    if (!bellOpen) return;
-    const onDown = (e) => {
-      const elM = bellRefMobile.current;
-      const elD = bellRefDesktop.current;
-      const t = e.target;
-      if (elM && elM.contains(t)) return;
-      if (elD && elD.contains(t)) return;
-      setBellOpen(false);
-    };
-    window.addEventListener('mousedown', onDown);
-    window.addEventListener('touchstart', onDown);
-    return () => {
-      window.removeEventListener('mousedown', onDown);
-      window.removeEventListener('touchstart', onDown);
-    };
-  }, [bellOpen]);
 
   const openMenu = () => {
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
@@ -179,8 +156,6 @@ export default function Header() {
   );
 };
 
-  const bellCount = Math.max(0, Number(notifUnread || 0)) + Math.max(0, Number(chatUnread || 0));
-
   const formatBadge = (n) => {
     const v = Number(n || 0);
     if (!v) return '';
@@ -211,33 +186,6 @@ export default function Header() {
             <Link href="/" className="site-title" aria-label="الذهاب للرئيسية">
               <Logo variant="mobile" />
             </Link>
-
-            {user ? (
-              <div className="bell-wrap" ref={bellRefMobile}>
-                <button
-                  type="button"
-                  className="bell-btn"
-                  aria-label="الإشعارات"
-                  onClick={() => setBellOpen((v) => !v)}
-                >
-                  🔔
-                  {bellCount > 0 ? <span className="bell-badge">{formatBadge(bellCount)}</span> : null}
-                </button>
-
-                {bellOpen ? (
-                  <div className="bell-menu" role="menu" aria-label="قائمة الإشعارات">
-                    <Link href="/notifications" className="bell-item" onClick={() => setBellOpen(false)}>
-                      <span>الإشعارات</span>
-                      {notifUnread > 0 ? <span className="pill">{formatBadge(notifUnread)}</span> : <span className="muted">0</span>}
-                    </Link>
-                    <Link href="/my-chats" className="bell-item" onClick={() => setBellOpen(false)}>
-                      <span>الرسائل</span>
-                      {chatUnread > 0 ? <span className="pill">{formatBadge(chatUnread)}</span> : <span className="muted">0</span>}
-                    </Link>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
 
             <Link href="/add" className="add-btn-mobile" aria-label="أضف إعلان جديد">
               + إعلان
@@ -271,31 +219,6 @@ export default function Header() {
                 <div className="loading-text">جاري التحميل…</div>
               ) : user ? (
                 <>
-                  <div className="bell-wrap" ref={bellRefDesktop}>
-                    <button
-                      type="button"
-                      className="bell-btn"
-                      aria-label="الإشعارات"
-                      onClick={() => setBellOpen((v) => !v)}
-                    >
-                      🔔
-                      {bellCount > 0 ? <span className="bell-badge">{formatBadge(bellCount)}</span> : null}
-                    </button>
-
-                    {bellOpen ? (
-                      <div className="bell-menu" role="menu" aria-label="قائمة الإشعارات">
-                        <Link href="/notifications" className="bell-item" onClick={() => setBellOpen(false)}>
-                          <span>الإشعارات</span>
-                          {notifUnread > 0 ? <span className="pill">{formatBadge(notifUnread)}</span> : <span className="muted">0</span>}
-                        </Link>
-                        <Link href="/my-chats" className="bell-item" onClick={() => setBellOpen(false)}>
-                          <span>الرسائل</span>
-                          {chatUnread > 0 ? <span className="pill">{formatBadge(chatUnread)}</span> : <span className="muted">0</span>}
-                        </Link>
-                      </div>
-                    ) : null}
-                  </div>
-
                   <Link href="/add" className="add-btn-desktop">
                     + أضف إعلان
                   </Link>
