@@ -58,20 +58,20 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           padding: '12px',
           borderRadius: '10px',
           marginBottom: '8px',
-          background: 'white',
-          border: '1px solid #e2e8f0',
+          background: 'var(--surface, #fff)',
+          border: '1px solid var(--border, #e2e8f0)',
           transition: 'all 0.2s ease',
           minHeight: '100px',
           boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-          e.currentTarget.style.borderColor = '#3b82f6';
+          e.currentTarget.style.borderColor = 'var(--accent, #CE1126)';
           e.currentTarget.style.transform = 'translateY(-1px)';
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
-          e.currentTarget.style.borderColor = '#e2e8f0';
+          e.currentTarget.style.borderColor = 'var(--border, #e2e8f0)';
           e.currentTarget.style.transform = 'translateY(0)';
         }}
       >
@@ -83,8 +83,8 @@ export default function ListingCard({ listing, variant = 'grid' }) {
             height: '85px',
             borderRadius: '8px',
             overflow: 'hidden',
-            border: '1px solid #f1f5f9',
-            background: '#f8fafc',
+            border: '1px solid var(--border, #e2e8f0)',
+            background: 'var(--soft-bg, #f8fafc)',
             flexShrink: 0,
             position: 'relative',
           }}
@@ -105,7 +105,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#94a3b8',
+              color: 'var(--muted-2, #94a3b8)',
               fontSize: '11px',
               fontWeight: '600',
             }}>
@@ -132,7 +132,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
             WebkitBoxOrient: 'vertical',
             overflow: 'hidden',
             marginBottom: '6px',
-            color: '#1e293b'
+            color: 'var(--text, #1e293b)'
           }}>
             {truncateText(listing?.title || 'بدون عنوان', 50)}
           </div>
@@ -146,7 +146,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           }}>
             <span style={{ 
               fontSize: '12px',
-              color: '#64748b',
+              color: 'var(--muted, #64748b)',
               display: 'flex',
               alignItems: 'center',
               gap: '4px'
@@ -154,7 +154,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
               <span style={{ fontSize: '11px' }}>📍</span>
               {city ? truncateText(city, 18) : '—'}
             </span>
-            <span style={{ fontSize: '12px', color: '#64748b' }}>
+            <span style={{ fontSize: '12px', color: 'var(--muted, #64748b)' }}>
               👁️ {Number(listing?.views || 0).toLocaleString('ar-YE')}
             </span>
           </div>
@@ -169,8 +169,8 @@ export default function ListingCard({ listing, variant = 'grid' }) {
             <span style={{
               padding: '4px 10px',
               borderRadius: '12px',
-              background: '#f1f5f9',
-              color: '#475569',
+              background: 'var(--chip-bg, #f1f5f9)',
+              color: 'var(--muted, #475569)',
               fontSize: '11px',
               fontWeight: '600',
               whiteSpace: 'nowrap',
@@ -202,20 +202,20 @@ export default function ListingCard({ listing, variant = 'grid' }) {
         textDecoration: 'none',
         borderRadius: '12px',
         overflow: 'hidden',
-        background: 'white',
-        border: '1px solid #e2e8f0',
+        background: 'var(--surface, #fff)',
+        border: '1px solid var(--border, #e2e8f0)',
         transition: 'all 0.2s ease',
         height: '100%',
         boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.1)';
-        e.currentTarget.style.borderColor = '#3b82f6';
+        e.currentTarget.style.borderColor = 'var(--accent, #CE1126)';
         e.currentTarget.style.transform = 'translateY(-3px)';
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
-        e.currentTarget.style.borderColor = '#e2e8f0';
+        e.currentTarget.style.borderColor = 'var(--border, #e2e8f0)';
         e.currentTarget.style.transform = 'translateY(0)';
       }}
     >
@@ -225,7 +225,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
         width: '100%',
         height: '140px',
         overflow: 'hidden',
-        background: '#f8fafc',
+        background: 'var(--soft-bg, #f8fafc)',
       }}>
         {img ? (
           <Image
@@ -243,7 +243,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#94a3b8',
+            color: 'var(--muted-2, #94a3b8)',
             fontSize: '13px',
             fontWeight: '600',
           }}>
@@ -282,7 +282,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           fontSize: '14px',
           lineHeight: '1.3',
           margin: '0 0 10px 0',
-          color: '#1e293b',
+          color: 'var(--text, #1e293b)',
           display: '-webkit-box',
           WebkitLineClamp: 2,
           WebkitBoxOrient: 'vertical',
@@ -299,14 +299,14 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           alignItems: 'center',
           marginBottom: '12px',
           paddingBottom: '10px',
-          borderBottom: '1px solid #f1f5f9'
+          borderBottom: '1px solid var(--border, #e2e8f0)'
         }}>
           <div style={{ 
             display: 'flex', 
             alignItems: 'center', 
             gap: '5px',
             fontSize: '12px',
-            color: '#64748b'
+            color: 'var(--muted, #64748b)'
           }}>
             <span style={{ fontSize: '11px' }}>📍</span>
             <span style={{ fontWeight: '500' }}>
@@ -315,7 +315,7 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           </div>
           <div style={{ 
             fontSize: '12px', 
-            color: '#64748b',
+            color: 'var(--muted, #64748b)',
             display: 'flex',
             alignItems: 'center',
             gap: '4px'
@@ -338,14 +338,14 @@ export default function ListingCard({ listing, variant = 'grid' }) {
           <div style={{
             marginTop: '10px',
             fontSize: '12px',
-            color: '#64748b',
+            color: 'var(--muted, #64748b)',
             lineHeight: '1.4',
             display: '-webkit-box',
             WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical',
             overflow: 'hidden',
             paddingTop: '8px',
-            borderTop: '1px solid #f1f5f9'
+            borderTop: '1px solid var(--border, #e2e8f0)'
           }}>
             {shortDesc}
           </div>
