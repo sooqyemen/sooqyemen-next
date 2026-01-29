@@ -3,12 +3,14 @@
 
 .listing-details-page {
   min-height: 100vh;
-  background: #f8fafc;
+  background: var(--bg, #f8fafc);
+  color: var(--text, #0f172a);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
   /* Performance optimizations */
   contain: layout style paint;
   content-visibility: auto;
 }
+
 
 /* Container */
 .container {
@@ -23,7 +25,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 1.5rem 0;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--border, #e2e8f0);
   margin-bottom: 1.5rem;
 }
 
@@ -31,11 +33,11 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: white;
-  border: 1px solid #e2e8f0;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e2e8f0);
   border-radius: 8px;
   padding: 0.75rem 1.25rem;
-  color: #475569;
+  color: var(--muted, #475569);
   text-decoration: none;
   font-weight: 500;
   font-size: 0.875rem;
@@ -46,23 +48,23 @@
 }
 
 .back-button:hover {
-  border-color: #3b82f6;
-  color: #3b82f6;
+  border-color: var(--accent, #CE1126);
+  color: var(--accent, #CE1126);
   text-decoration: none;
 }
 
 .back-button:focus {
-  outline: 2px solid #3b82f6;
+  outline: 2px solid var(--accent, #CE1126);
   outline-offset: 2px;
-  border-color: #3b82f6;
+  border-color: var(--accent, #CE1126);
 }
 
 .views-badge {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--surface, #f1f5f9);
+  color: var(--muted, #64748b);
   padding: 0.5rem 1rem;
   border-radius: 8px;
   font-size: 0.875rem;
@@ -90,11 +92,11 @@
 
 /* Main Card */
 .main-card {
-  background: white;
+  background: var(--surface, #fff);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e2e8f0;
+  box-shadow: var(--shadow, 0 4px 12px rgba(0, 0, 0, 0.05));
+  border: 1px solid var(--border, #e2e8f0);
   /* Performance optimizations */
   contain: layout style paint;
 }
@@ -118,7 +120,7 @@
 .listing-title {
   font-size: 1.75rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--text, #0f172a);
   margin: 0;
   line-height: 1.3;
   flex: 1;
@@ -128,8 +130,8 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  background: #f1f5f9;
-  color: #475569;
+  background: var(--surface, #f1f5f9);
+  color: var(--muted, #475569);
   padding: 0.375rem 0.75rem;
   border-radius: 50px;
   font-size: 0.75rem;
@@ -140,14 +142,14 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: #64748b;
+  color: var(--muted, #64748b);
   font-size: 0.875rem;
 }
 
 .listing-meta {
   display: flex;
   gap: 1rem;
-  color: #64748b;
+  color: var(--muted, #64748b);
   font-size: 0.875rem;
   margin-top: 0.5rem;
   flex-wrap: wrap;
@@ -163,14 +165,14 @@
 .price-section {
   margin: 1.5rem 0;
   padding: 1rem;
-  background: #f8fafc;
+  background: var(--bg, #f8fafc);
   border-radius: 8px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border, #e2e8f0);
 }
 
 .price-title {
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--muted, #64748b);
   margin-bottom: 0.5rem;
 }
 
@@ -188,14 +190,14 @@
 .section-title {
   font-size: 1.125rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--text, #0f172a);
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
-  border-bottom: 2px solid #e2e8f0;
+  border-bottom: 2px solid var(--border, #e2e8f0);
 }
 
 .listing-description {
-  color: #334155;
+  color: var(--text, #334155);
   line-height: 1.7;
   white-space: pre-wrap;
   font-size: 0.95rem;
@@ -293,7 +295,7 @@
 
 /* زر المحادثة */
 .contact-button.chat {
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  background: linear-gradient(135deg, var(--brand, #0F172A) 0%, var(--accent, #CE1126) 100%);
   color: white;
 }
 
@@ -359,11 +361,11 @@
 }
 
 .sidebar-card {
-  background: white;
+  background: var(--surface, #fff);
   border-radius: 12px;
   padding: 1.5rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e2e8f0;
+  box-shadow: var(--shadow, 0 4px 12px rgba(0, 0, 0, 0.05));
+  border: 1px solid var(--border, #e2e8f0);
 }
 
 /* Seller Info */
@@ -382,7 +384,7 @@
   width: 50px;
   height: 50px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  background: linear-gradient(135deg, var(--brand, #0F172A) 0%, var(--accent, #CE1126) 100%);
   color: white;
   display: flex;
   align-items: center;
@@ -397,13 +399,13 @@
 
 .seller-name {
   font-weight: 600;
-  color: #0f172a;
+  color: var(--text, #0f172a);
   margin: 0;
   font-size: 1rem;
 }
 
 .seller-email {
-  color: #64748b;
+  color: var(--muted, #64748b);
   font-size: 0.875rem;
   margin: 0.25rem 0 0;
 }
@@ -434,7 +436,7 @@
 
 .user-badge.admin {
   background: #eff6ff;
-  color: #3b82f6;
+  color: var(--accent, #CE1126);
   border: 1px solid #bfdbfe;
 }
 
@@ -447,7 +449,7 @@
   height: 250px;
   border-radius: 10px;
   overflow: hidden;
-  background: #f1f5f9;
+  background: var(--surface, #f1f5f9);
   margin-top: 0.5rem;
 }
 
@@ -457,7 +459,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #64748b;
+  color: var(--muted, #64748b);
   font-size: 0.875rem;
 }
 
@@ -484,8 +486,8 @@
 .spinner {
   width: 50px;
   height: 50px;
-  border: 3px solid #f1f5f9;
-  border-top: 3px solid #3b82f6;
+  border: 3px solid var(--border, #e2e8f0);
+  border-top: 3px solid var(--accent, #CE1126);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 1.5rem;
@@ -505,19 +507,19 @@
 .state-title {
   font-size: 1.5rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--text, #0f172a);
   margin-bottom: 0.5rem;
 }
 
 .state-message {
-  color: #64748b;
+  color: var(--muted, #64748b);
   margin-bottom: 1.5rem;
   max-width: 400px;
   line-height: 1.6;
 }
 
 .retry-button {
-  background: #3b82f6;
+  background: var(--accent, #CE1126);
   color: white;
   border: none;
   border-radius: 8px;
@@ -532,13 +534,13 @@
 }
 
 .retry-button:hover {
-  background: #2563eb;
+  filter: brightness(0.92);
   text-decoration: none;
   color: white;
 }
 
 .retry-button:focus {
-  outline: 2px solid #3b82f6;
+  outline: 2px solid var(--accent, #CE1126);
   outline-offset: 2px;
 }
 
@@ -546,7 +548,7 @@
 .comments-section {
   margin-top: 3rem;
   padding-top: 2rem;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--border, #e2e8f0);
 }
 
 /* ====== أزرار خرائط جوجل ====== */
@@ -583,7 +585,7 @@
 }
 
 .google-maps-button:focus {
-  outline: 2px solid #3b82f6;
+  outline: 2px solid var(--accent, #CE1126);
   outline-offset: 2px;
 }
 
@@ -695,8 +697,24 @@
   align-items: center;
   justify-content: center;
   padding: 2rem;
-  background: #f8fafc;
+  background: var(--surface, #fff);
   border-radius: 12px;
-  color: #64748b;
+  border: 1px solid var(--border, #e2e8f0);
+  color: var(--muted, #64748b);
   font-size: 0.875rem;
+}
+
+
+/* Dark mode tweaks (fallback for fixed-color elements) */
+@media (prefers-color-scheme: dark) {
+  .hidden-alert {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.28);
+    color: #fecaca;
+  }
+  .main-card,
+  .sidebar-card {
+    /* shadows in dark should be softer */
+    box-shadow: var(--shadow, 0 6px 18px rgba(0, 0, 0, 0.35));
+  }
 }
