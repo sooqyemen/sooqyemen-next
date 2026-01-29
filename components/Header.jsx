@@ -424,17 +424,30 @@ export default function Header() {
     
       <style jsx>{`
         :global(:root) {
+          /* ✅ ألوان الهوية (Light/Dark) */
           --sy-navy: #0f2a44;
           --sy-navy-2: #0b2238;
-          --sy-red: #d11f2b;
-          --sy-surface: #ffffff;
+          --sy-red: #ce1126;
         }
 
-        /* Header */
+        /* ============================
+           Header (Light by default)
+           - الهدف: ما يكون "أسود" في الوضع الفاتح
+           - الشعار الشفاف يندمج طبيعي بدون مربع أبيض
+           ============================ */
         .header {
-          background: radial-gradient(900px circle at 85% -30%, rgba(255,255,255,0.10), transparent 55%),
-                      linear-gradient(180deg, var(--sy-navy), var(--sy-navy-2));
+          /* ✅ نخلي الهيدر فاتح (أبيض/رمادي لطيف) حتى في وضع الدارك
+             عشان الشعار الشفاف يندمج وما يبان كأنه ملصق */
+          background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98));
           border-bottom: 3px solid var(--sy-red);
+          box-shadow: 0 10px 30px rgba(2, 6, 23, 0.08);
+        }
+
+        @supports ((-webkit-backdrop-filter: blur(10px)) or (backdrop-filter: blur(10px))) {
+          .header {
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+          }
         }
 
         .header-inner {
@@ -457,29 +470,30 @@ export default function Header() {
           align-items: center;
           padding: 6px 10px;
           border-radius: 14px;
+          background: rgba(255, 255, 255, 0.55);
+          border: 1px solid rgba(15, 23, 42, 0.08);
           overflow: hidden;
-          background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,255,255,0.88));
-          border: 1px solid rgba(255,255,255,0.22);
-          box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
         }
 
         .site-title,
         .user-greeting,
         .loading-text {
-          color: rgba(255, 255, 255, 0.95);
+          color: #0f172a;
         }
 
         :global(.desktop-nav .nav-link),
         :global(.mobile-nav .nav-link) {
-          color: rgba(255, 255, 255, 0.9);
-          font-weight: 800;
+          color: #0f172a;
+          font-weight: 900;
           position: relative;
-          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+          text-shadow: none;
+          opacity: 0.92;
         }
 
         :global(.desktop-nav .nav-link:hover),
         :global(.mobile-nav .nav-link:hover) {
-          color: #ffffff;
+          color: #0f172a;
+          opacity: 1;
           text-decoration: none;
         }
 
@@ -508,7 +522,7 @@ export default function Header() {
           border: none !important;
           border-radius: 14px !important;
           font-weight: 900 !important;
-          box-shadow: 0 10px 20px rgba(0, 0, 0, 0.22);
+          box-shadow: 0 10px 20px rgba(2, 6, 23, 0.12);
         }
 
         :global(.add-btn-desktop:hover),
@@ -517,27 +531,25 @@ export default function Header() {
         }
 
         :global(.auth-buttons .login-btn) {
-          border: 1px solid rgba(255, 255, 255, 0.35);
-          color: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.18);
+          color: #0f172a;
           border-radius: 14px;
-          overflow: hidden;
-          font-weight: 800;
+          font-weight: 900;
+          background: rgba(255, 255, 255, 0.7);
         }
 
         :global(.auth-buttons .register-btn) {
-          background: #ffffff;
-          color: var(--sy-navy);
+          background: #0f172a;
+          color: #ffffff;
           border-radius: 14px;
-          overflow: hidden;
           font-weight: 900;
         }
 
         .menu-btn {
-          background: rgba(255, 255, 255, 0.12);
-          border: 1px solid rgba(255, 255, 255, 0.18);
-          color: #ffffff;
+          background: rgba(15, 23, 42, 0.06);
+          border: 1px solid rgba(15, 23, 42, 0.12);
+          color: #0f172a;
           border-radius: 14px;
-          overflow: hidden;
         }
 
         .unread-dot {
@@ -568,6 +580,9 @@ export default function Header() {
           color: #ffffff;
         }
 
+        /* ملاحظة: خلّينا الهيدر ثابت على الخلفية الفاتحة حتى في الوضع الداكن
+           عشان يحل مشكلة "يظهر أسود" ولأن الشعار نصه داكن */
+
         .side-menu .section-title {
           color: rgba(255, 255, 255, 0.8);
         }
@@ -575,7 +590,6 @@ export default function Header() {
         :global(.side-menu .menu-item) {
           color: #ffffff;
           border-radius: 14px;
-          overflow: hidden;
         }
 
         :global(.side-menu .menu-item:hover) {
