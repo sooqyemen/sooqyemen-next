@@ -101,8 +101,8 @@ export default function NotificationsPage() {
       const { db } = await loadFirebaseClient();
       await db.collection('notifications').doc(id).set(
         {
+          // ✅ حسب قواعدك: التعديل مسموح فقط على حقل read
           read: true,
-          readAt: new Date(),
         },
         { merge: true }
       );
@@ -123,7 +123,8 @@ export default function NotificationsPage() {
       const batch = db.batch();
       unread.forEach((n) => {
         const ref = db.collection('notifications').doc(n.id);
-        batch.set(ref, { read: true, readAt: new Date() }, { merge: true });
+        // ✅ حسب قواعدك: التعديل مسموح فقط على حقل read
+        batch.set(ref, { read: true }, { merge: true });
       });
       await batch.commit();
     } catch (e) {
