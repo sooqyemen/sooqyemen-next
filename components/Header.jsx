@@ -456,7 +456,12 @@ export default function Header() {
           align-items: center;
           padding: 6px 10px;
           border-radius: 14px;
-          background: rgba(255, 255, 255, 0.92);
+
+          /* ✅ كبسولة مدمجة: تمنع شكل "ملصق" وتقص أطراف الشعار ليتوافق مع الانحناءات */
+          background: rgba(255, 255, 255, 0.88);
+          border: 1px solid rgba(15, 23, 42, 0.10);
+          overflow: hidden;
+
           box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
         }
 
