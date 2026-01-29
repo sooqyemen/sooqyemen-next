@@ -5,11 +5,27 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { db, firebase } from '@/lib/firebaseClient';
 import { useAuth } from '@/lib/useAuth';
+import { ensureChatDoc } from '@/lib/chatService';
 
 function safeName(user) {
   if (user?.displayName) return user.displayName;
   if (user?.email) return String(user.email).split('@')[0];
   return 'مستخدم';
+}
+
+// chatId formats:
+// - listingId__uidA__uidB
+// - uidA__uidB
+function parseChatId(cid) {
+  const raw = String(cid || '').trim();
+  const parts = raw ? raw.split('__').filter(Boolean) : [];
+  if (parts.length === 3) {
+    return { listingId: parts[0], uidA: parts[1], uidB: parts[2] };
+  }
+  if (parts.length === 2) {
+    return { listingId: null, uidA: parts[0], uidB: parts[1] };
+  }
+  return { listingId: null, uidA: '', uidB: '' };
 }
 
 export default function ChatPage() {
@@ -18,6 +34,16 @@ export default function ChatPage() {
 
   const { user } = useAuth();
   const uid = user?.uid ? String(user.uid) : '';
+
+  const parsed = useMemo(() => parseChatId(chatId), [chatId]);
+  const otherUidFromId = useMemo(() => {
+    const a = String(parsed.uidA || '');
+    const b = String(parsed.uidB || '');
+    if (!uid || !a || !b) return '';
+    if (uid === a) return b;
+    if (uid === b) return a;
+    return '';
+  }, [uid, parsed.uidA, parsed.uidB]);
 
   const [text, setText] = useState('');
   const [msgs, setMsgs] = useState([]);
@@ -48,18 +74,35 @@ export default function ChatPage() {
 
     (async () => {
       try {
-        const snap = await chatRef.get();
-        if (!snap.exists) {
-          setErrorMsg('المحادثة غير موجودة أو الرابط غير صحيح.');
+        // Ensure chat doc exists even if the user opened a shared link directly.
+        // We only auto-create if the logged-in user is one of the two UIDs encoded in chatId.
+        const needUids = !parsed.uidA || !parsed.uidB;
+        if (needUids) {
+          setErrorMsg('الرابط غير صحيح (chatId غير صالح).');
           setLoading(false);
           return;
+        }
+
+        const isParticipant = !!uid && (uid === String(parsed.uidA) || uid === String(parsed.uidB));
+        const snap = await chatRef.get();
+
+        if (!snap.exists) {
+          if (!isParticipant) {
+            setErrorMsg('هذه المحادثة غير متاحة لهذا الحساب.');
+            setLoading(false);
+            return;
+          }
+
+          await ensureChatDoc(chatId, parsed.uidA, parsed.uidB, {
+            listingId: parsed.listingId || null,
+          });
         }
 
         if (uid) {
           await chatRef.set(
             {
               updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-              unread: { [uid]: 0 },
+              [`unread.${uid}`]: 0,
             },
             { merge: true }
           );
@@ -73,7 +116,7 @@ export default function ChatPage() {
         setLoading(false);
       }
     })();
-  }, [chatId, chatRef, uid, user]);
+  }, [chatId, chatRef, uid, user, parsed.uidA, parsed.uidB, parsed.listingId]);
 
   // 2) استماع للرسائل
   useEffect(() => {
@@ -133,31 +176,32 @@ export default function ChatPage() {
     setText('');
 
     try {
+      // If the chat doc doesn't exist (shared link), create it first.
+      if (uid && parsed.uidA && parsed.uidB && (uid === String(parsed.uidA) || uid === String(parsed.uidB))) {
+        await ensureChatDoc(chatId, parsed.uidA, parsed.uidB, {
+          listingId: parsed.listingId || null,
+        });
+      }
+
       // أضف الرسالة (نستخدم from لتوافق موحد)
       await messagesRef.add({
         text: t,
         from: uid,
+        fromName: safeName(user),
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       });
 
-      // تحديث الشات: unread للطرف الآخر إن وجد
-      const snap = await chatRef.get();
-      const data = snap.data() || {};
-      const participants = Array.isArray(data.participants) ? data.participants.map(String) : [];
-      const otherUid = participants.find((p) => p !== uid) || '';
+      // تحديث الشات: آخر رسالة + unread للطرف الآخر
+      const otherUid = otherUidFromId || '';
+      const patch = {
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        lastMessageText: t,
+        lastMessageBy: uid,
+        [`unread.${uid}`]: 0,
+      };
+      if (otherUid) patch[`unread.${otherUid}`] = firebase.firestore.FieldValue.increment(1);
 
-      await chatRef.set(
-        {
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          lastMessageText: t,
-          lastMessageBy: uid,
-          unread: {
-            ...(otherUid ? { [otherUid]: firebase.firestore.FieldValue.increment(1) } : {}),
-            [uid]: 0,
-          },
-        },
-        { merge: true }
-      );
+      await chatRef.set(patch, { merge: true });
 
       setErrorMsg('');
     } catch (e2) {
