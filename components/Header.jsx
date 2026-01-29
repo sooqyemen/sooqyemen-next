@@ -142,7 +142,7 @@ export default function Header() {
       />
       <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.05 }}>
         <span style={{ fontWeight: 900, fontSize: 16 }}>سوق اليمن</span>
-        <span className="muted" style={{ fontSize: 12 }}>بيع وشراء كل شئ </span>
+        <span className="muted" style={{ fontSize: 12 }}>السوق الشامل</span>
       </span>
     </span>
   );
@@ -424,15 +424,16 @@ export default function Header() {
     
       <style jsx>{`
         :global(:root) {
-          --sy-navy: #0b1a2a;
-          --sy-navy-2: #081423;
+          --sy-navy: #0f2a44;
+          --sy-navy-2: #0b2238;
           --sy-red: #d11f2b;
           --sy-surface: #ffffff;
         }
 
         /* Header */
         .header {
-          background: linear-gradient(180deg, var(--sy-navy), var(--sy-navy-2));
+          background: radial-gradient(900px circle at 85% -30%, rgba(255,255,255,0.10), transparent 55%),
+                      linear-gradient(180deg, var(--sy-navy), var(--sy-navy-2));
           border-bottom: 3px solid var(--sy-red);
         }
 
@@ -456,12 +457,9 @@ export default function Header() {
           align-items: center;
           padding: 6px 10px;
           border-radius: 14px;
-
-          /* ✅ كبسولة مدمجة: تمنع شكل "ملصق" وتقص أطراف الشعار ليتوافق مع الانحناءات */
-          background: rgba(255, 255, 255, 0.88);
-          border: 1px solid rgba(15, 23, 42, 0.10);
           overflow: hidden;
-
+          background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,255,255,0.88));
+          border: 1px solid rgba(255,255,255,0.22);
           box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
         }
 
@@ -522,6 +520,7 @@ export default function Header() {
           border: 1px solid rgba(255, 255, 255, 0.35);
           color: #ffffff;
           border-radius: 14px;
+          overflow: hidden;
           font-weight: 800;
         }
 
@@ -529,6 +528,7 @@ export default function Header() {
           background: #ffffff;
           color: var(--sy-navy);
           border-radius: 14px;
+          overflow: hidden;
           font-weight: 900;
         }
 
@@ -537,6 +537,7 @@ export default function Header() {
           border: 1px solid rgba(255, 255, 255, 0.18);
           color: #ffffff;
           border-radius: 14px;
+          overflow: hidden;
         }
 
         .unread-dot {
@@ -574,6 +575,7 @@ export default function Header() {
         :global(.side-menu .menu-item) {
           color: #ffffff;
           border-radius: 14px;
+          overflow: hidden;
         }
 
         :global(.side-menu .menu-item:hover) {
