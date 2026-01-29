@@ -241,8 +241,8 @@ export default function CategoriesPage() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    background: '#f1f5f9',
-                    border: '1px solid rgba(0,0,0,0.06)',
+                    background: 'var(--chip-bg, #f1f5f9)',
+                    border: '1px solid var(--border, rgba(0,0,0,0.06))',
                     fontSize: 20,
                     flexShrink: 0,
                   }}
