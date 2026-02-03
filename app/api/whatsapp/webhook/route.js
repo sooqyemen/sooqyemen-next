@@ -1,8 +1,13 @@
 // app/api/whatsapp/webhook/route.js
 import { NextResponse } from 'next/server';
 
-// ✅ حط نفس التوكن اللي بتحطه في Meta (Verify Token)
-const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'sooqyemen_whatsapp_verify_2026';
+// ✅ لازم يكون نفس Verify Token اللي تكتبه في Meta Webhook
+// نقرأ من Vercel: WA_VERIFY_TOKEN (حسب متغيراتك الحالية)
+// وندعم WHATSAPP_VERIFY_TOKEN احتياط لو غيرت الاسم لاحقًا
+const VERIFY_TOKEN =
+  process.env.WA_VERIFY_TOKEN ||
+  process.env.WHATSAPP_VERIFY_TOKEN ||
+  'Mansour05010032573';
 
 // Meta Webhook Verification (GET)
 export async function GET(request) {
@@ -14,7 +19,7 @@ export async function GET(request) {
     const challenge = searchParams.get('hub.challenge');
 
     if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-      // لازم نرجّع challenge كـ نص
+      // لازم نرجّع challenge كنص
       return new NextResponse(challenge || '', {
         status: 200,
         headers: { 'Content-Type': 'text/plain' },
@@ -36,13 +41,12 @@ export async function GET(request) {
 // Receive Messages/Events (POST)
 export async function POST(request) {
   try {
-    const body = await request.json().catch(() => ({}));
+    // مهم: نقرأ البودي حتى ما يعتبرها فشل، لكن نرجع 200 بسرعة
+    await request.json().catch(() => ({}));
 
-    // 👇 هنا لاحقًا بنفك البيانات ونرد/نخزن… الخ
-    // حاليًا أهم شيء نرجع 200 بسرعة عشان Meta ما تعتبره فشل
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (e) {
-    // حتى لو صار خطأ، الأفضل نرجع 200 أحيانًا لتجنب إعادة الإرسال
+    // حتى لو صار خطأ، رجّع 200 لتجنب إعادة الإرسال المستمر من Meta
     return NextResponse.json({ ok: true, warning: 'parse_error' }, { status: 200 });
   }
 }
