@@ -47,6 +47,9 @@ export async function POST(request) {
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (e) {
     // حتى لو صار خطأ، رجّع 200 لتجنب إعادة الإرسال المستمر من Meta
-    return NextResponse.json({ ok: true, warning: 'parse_error' }, { status: 200 });
+    return NextResponse.json(
+      { ok: true, warning: 'parse_error' },
+      { status: 200 }
+    );
   }
 }
